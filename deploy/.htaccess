@@ -2,11 +2,3 @@
 <Files "deploy.log">
     Require all denied
 </Files>
-
-# Only allow POST to webhook.php
-<Files "webhook.php">
-    <Limit GET HEAD PUT DELETE PATCH>
-        Require all denied
-    </Limit>
-</Files>
-
