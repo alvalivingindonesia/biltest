@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Build in Lombok — the directory connecting foreign investors and builders with trusted contractors, architects, developers, and projects across Lombok, Indonesia.">
+  <title>Build in Lombok — Find Builders, Specialists &amp; Investment Projects</title>
+
+  <!-- Google Fonts: Instrument Serif + Work Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="./base.css">
+  <link rel="stylesheet" href="./style.css">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Build in Lombok">
+  <meta property="og:description" content="Connect with trusted builders, tukangs, architects, developers, and projects in Lombok, Indonesia.">
+  <meta property="og:type" content="website">
+
+  <!-- Favicon (inline SVG as data URI) -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230c7c84'/><text x='50%' y='56%' dominant-baseline='middle' text-anchor='middle' fill='white' font-family='Georgia,serif' font-size='18'>B</text></svg>">
+</head>
+<body>
+
+  <!-- Skip to content -->
+  <a href="#main-content" class="skip-link">Skip to content</a>
+
+  <!-- ===================== HEADER ===================== -->
+  <header class="site-header" role="banner">
+    <nav class="container nav-inner" aria-label="Main navigation">
+
+      <!-- Logo -->
+      <a href="#home" class="nav-logo" onclick="navigate('home');return false;" aria-label="Build in Lombok — home">
+        <div class="nav-logo-mark" aria-hidden="true">B</div>
+        <div class="nav-brand">
+          Build in Lombok
+          <span>Lombok Directory</span>
+        </div>
+      </a>
+
+      <!-- Desktop nav links -->
+      <ul class="nav-links" role="list">
+        <li><a href="#directory" onclick="navigate('directory');return false;">Builders & Specialists</a></li>
+        <li><a href="#developers" onclick="navigate('developers');return false;">Developers</a></li>
+        <li><a href="#projects" onclick="navigate('projects');return false;">Projects</a></li>
+        <li><a href="#guides" onclick="navigate('guides');return false;">Guides</a></li>
+      </ul>
+
+      <!-- Search -->
+      <div class="nav-search" role="search">
+        <div class="nav-search-wrapper">
+          <span class="nav-search-icon" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </span>
+          <input
+            type="search"
+            class="nav-search-input"
+            placeholder="Search providers, projects…"
+            aria-label="Search the directory"
+            autocomplete="off"
+          >
+        </div>
+      </div>
+
+      <!-- Actions: theme toggle + hamburger -->
+      <div class="nav-actions">
+        <button
+          class="btn-icon"
+          data-theme-toggle
+          aria-label="Toggle dark mode"
+          title="Toggle dark/light mode"
+        >
+          <!-- Icon injected by JS -->
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+
+        <button
+          class="btn-icon hamburger"
+          id="hamburger-btn"
+          aria-label="Open navigation menu"
+          aria-expanded="false"
+          aria-controls="mobile-menu"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+    </nav>
+  </header>
+
+  <!-- Mobile Menu -->
+  <nav id="mobile-menu" class="mobile-menu" aria-label="Mobile navigation">
+    <div class="mobile-search-wrap" style="padding-bottom:var(--space-4);border-bottom:1px solid var(--color-border);margin-bottom:var(--space-2);">
+      <input type="search" id="mobile-search" class="nav-search-input" placeholder="Search providers, projects..." autocomplete="off" style="width:100%;padding-left:var(--space-4);">
+    </div>
+    <a href="#home" onclick="navigate('home');return false;">Home</a>
+    <a href="#directory" onclick="navigate('directory');return false;">Builders &amp; Specialists</a>
+    <a href="#developers" onclick="navigate('developers');return false;">Developers</a>
+    <a href="#projects" onclick="navigate('projects');return false;">Projects</a>
+    <a href="#guides" onclick="navigate('guides');return false;">Guides</a>
+    <div style="margin-top:auto;padding-top:var(--space-8);">
+      <a href="https://wa.me/628123456789" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--full" style="display:flex;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="flex-shrink:0"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        Get Help on WhatsApp
+      </a>
+    </div>
+  </nav>
+
+  <!-- ===================== MAIN CONTENT ===================== -->
+  <main id="main-content" role="main">
+    <!-- Content injected by router -->
+    <div style="min-height:60vh;display:flex;align-items:center;justify-content:center;">
+      <p style="color:var(--color-text-faint);font-size:var(--text-sm);">Loading…</p>
+    </div>
+  </main>
+
+  <!-- ===================== FOOTER ===================== -->
+  <footer class="site-footer" role="contentinfo">
+    <div class="container">
+      <div class="footer-grid">
+        <!-- Brand -->
+        <div>
+          <div class="footer-brand-name">Build in Lombok</div>
+          <p class="footer-brand-desc">
+            A directory connecting foreign investors and builders with trusted local contractors, architects, engineers, developers, and investment projects across Lombok, Indonesia.
+          </p>
+          <a href="https://wa.me/628123456789" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--sm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+            WhatsApp
+          </a>
+        </div>
+
+        <!-- Directory links -->
+        <div>
+          <div class="footer-heading">Directory</div>
+          <ul class="footer-links" role="list">
+            <li><a href="#directory" onclick="navigate('directory');return false;">All Providers</a></li>
+            <li><a href="#directory?group=builder_tukang" onclick="navigate('directory?group=builder_tukang');return false;">Builders &amp; Tukangs</a></li>
+            <li><a href="#directory?group=professional_service" onclick="navigate('directory?group=professional_service');return false;">Professionals</a></li>
+            <li><a href="#directory?group=specialist_supplier" onclick="navigate('directory?group=specialist_supplier');return false;">Specialists</a></li>
+            <li><a href="#developers" onclick="navigate('developers');return false;">Developers</a></li>
+            <li><a href="#projects" onclick="navigate('projects');return false;">Projects</a></li>
+          </ul>
+        </div>
+
+        <!-- Resources links -->
+        <div>
+          <div class="footer-heading">Resources</div>
+          <ul class="footer-links" role="list">
+            <li><a href="#guides" onclick="navigate('guides');return false;">All Guides</a></li>
+            <li><a href="#guide/how-to-build-in-lombok" onclick="navigate('guide/how-to-build-in-lombok');return false;">How to Build</a></li>
+            <li><a href="#guide/understanding-land-titles-lombok" onclick="navigate('guide/understanding-land-titles-lombok');return false;">Land Titles</a></li>
+            <li><a href="#guide/lombok-investment-yields-guide" onclick="navigate('guide/lombok-investment-yields-guide');return false;">Investment Yields</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Footer bottom -->
+      <div class="footer-bottom">
+        <p class="footer-copyright">
+          &copy; 2026 Build in Lombok. Information provided for general guidance only — always seek independent legal and financial advice.
+        </p>
+        <div style="display:flex;align-items:center;gap:var(--space-4);">
+          <button
+            data-theme-toggle
+            class="btn-icon"
+            aria-label="Toggle dark mode"
+            title="Toggle dark/light mode"
+            style="color:var(--color-text-faint);"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ===================== APP SCRIPT ===================== -->
+  <script src="./app.js"></script>
+
+</body>
+</html>

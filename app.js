@@ -1,0 +1,2514 @@
+/* app.js — Build in Lombok: routing, data, filtering, rendering */
+
+'use strict';
+
+// =====================================================
+// THEME TOGGLE
+// =====================================================
+
+(function() {
+  const root = document.documentElement;
+  let theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  root.setAttribute('data-theme', theme);
+
+  window.__setTheme = function(t) {
+    theme = t;
+    root.setAttribute('data-theme', theme);
+    document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
+      btn.innerHTML = getThemeIcon(theme);
+      btn.setAttribute('aria-label', `Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`);
+    });
+  };
+
+  window.__toggleTheme = function() {
+    window.__setTheme(theme === 'dark' ? 'light' : 'dark');
+  };
+
+  window.__getCurrentTheme = function() { return theme; };
+
+  function getThemeIcon(t) {
+    if (t === 'dark') {
+      return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>`;
+    }
+    return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
+  }
+})();
+
+
+// =====================================================
+// DATA LAYER — API-powered (MySQL via PHP)
+// =====================================================
+
+const DataLayer = (() => {
+  const API_BASE = '/api';
+  const cache = new Map();
+
+  async function apiFetch(endpoint, params = {}) {
+    const url = new URL(API_BASE + '/' + endpoint, window.location.origin);
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, v);
+    });
+    const key = url.toString();
+    if (cache.has(key)) return cache.get(key);
+
+    const res = await fetch(key);
+    if (!res.ok) throw new Error(`API error ${res.status}`);
+    const data = await res.json();
+    cache.set(key, data);
+    return data;
+  }
+
+  function mapProvider(row) {
+    return {
+      ...row,
+      group: row.group_key || row.group,
+      category: row.category_key || row.category,
+      categories: (row.categories || []).map(c => typeof c === 'object' ? c : {key: c, label: c}),
+      area: row.area_key || row.area,
+      short_description_en: row.short_description || row.short_description_en || '',
+      description_en: row.description || row.description_en || '',
+      tags: row.tags || [],
+      google_rating: row.google_rating ? parseFloat(row.google_rating) : null,
+      google_review_count: row.google_review_count ? parseInt(row.google_review_count) : 0,
+      google_maps_url: row.google_maps_url || '',
+      whatsapp_number: row.whatsapp_number || '',
+      website_url: row.website_url || '',
+      languages: row.languages || 'Bahasa only',
+    };
+  }
+
+  function mapDeveloper(row) {
+    return {
+      ...row,
+      short_description_en: row.short_description || row.short_description_en || '',
+      description_en: row.description || row.description_en || '',
+      areas_focus: row.areas ? row.areas.map(a => a.key || a) : (row.areas_focus || []),
+      categories: (row.categories || []).map(c => typeof c === 'object' ? c : {key: c, label: c}),
+      project_types: row.project_types ? row.project_types.map(pt => pt.key || pt) : (row.project_types || []),
+      tags: row.tags || [],
+      google_rating: row.google_rating ? parseFloat(row.google_rating) : null,
+      google_review_count: row.google_review_count ? parseInt(row.google_review_count) : 0,
+      languages: row.languages || 'Bahasa only',
+      min_ticket_usd: row.min_ticket_usd ? parseInt(row.min_ticket_usd) : null,
+    };
+  }
+
+  function mapProject(row) {
+    return {
+      ...row,
+      location_area: row.area_key || row.location_area,
+      project_type: row.project_type_key || row.project_type,
+      status: row.status_key || row.status,
+      short_description_en: row.short_description || row.short_description_en || '',
+      description_en: row.description || row.description_en || '',
+      tags: row.tags || [],
+      min_investment_usd: row.min_investment_usd ? parseInt(row.min_investment_usd) : null,
+    };
+  }
+
+  return {
+    async getProviders(filters = {}) {
+      const res = await apiFetch('providers', filters);
+      return { data: (res.data || []).map(mapProvider), meta: res.meta || { total: 0 } };
+    },
+
+    async getProvider(slug) {
+      const res = await apiFetch('providers/' + slug);
+      return mapProvider(res.data);
+    },
+
+    async getDevelopers(filters = {}) {
+      const res = await apiFetch('developers', filters);
+      return { data: (res.data || []).map(mapDeveloper), meta: res.meta || { total: 0 } };
+    },
+
+    async getDeveloper(slug) {
+      const res = await apiFetch('developers/' + slug);
+      return mapDeveloper(res.data);
+    },
+
+    async getProjects(filters = {}) {
+      const res = await apiFetch('projects', filters);
+      return { data: (res.data || []).map(mapProject), meta: res.meta || { total: 0 } };
+    },
+
+    async getProject(slug) {
+      const res = await apiFetch('projects/' + slug);
+      return mapProject(res.data);
+    },
+
+    async getGuides() {
+      const res = await apiFetch('guides');
+      return res.data || [];
+    },
+
+    async getGuide(slug) {
+      const res = await apiFetch('guides/' + slug);
+      return res.data;
+    },
+
+    async search(q) {
+      const res = await apiFetch('search', { q });
+      return res.data || [];
+    },
+
+    async getFilters() {
+      return await apiFetch('filters');
+    },
+
+    clearCache() { cache.clear(); },
+  };
+})();
+
+
+
+// =====================================================
+// UTILITY FUNCTIONS
+// =====================================================
+
+function formatUSD(amount) {
+  if (!amount) return "TBC";
+  if (amount >= 1000000) return `$${(amount / 1000000).toFixed(1)}M`;
+  if (amount >= 1000) return `$${(amount / 1000).toFixed(0)}k`;
+  return `$${amount}`;
+}
+
+function formatAreaLabel(area) {
+  const labels = {
+    kuta: "Kuta", senggigi: "Senggigi", mataram: "Mataram",
+    selong_belanak: "Selong Belanak", ekas: "Ekas", other_lombok: "Other Lombok"
+  };
+  return labels[area] || area;
+}
+
+function formatGroupLabel(group) {
+  const labels = {
+    builders_trades: "Builders & Trades",
+    professional_services: "Professional Services",
+    specialist_contractors: "Specialist Contractors",
+    suppliers_materials: "Suppliers & Materials"
+  };
+  return labels[group] || group;
+}
+
+function formatCategoryLabel(cat) {
+  const labels = {
+    // Builders & Trades
+    general_contractor: "General Contractor", carpenter: "Carpenter / Joiner",
+    mason: "Mason / Concrete", roofer: "Roofer", plumber: "Plumber",
+    electrician: "Electrician", painter: "Painter / Finisher", tiler: "Tiler",
+    // Professional Services
+    architect: "Architect", interior_designer: "Interior Designer",
+    structural_engineer: "Structural Engineer", mep_engineer: "MEP Engineer",
+    civil_engineer: "Civil Engineer", quantity_surveyor: "Quantity Surveyor",
+    project_manager: "Project Manager",
+    // Specialist Contractors
+    pool_contractor: "Pool Contractor", solar_installer: "Solar / PV Installer",
+    waterproofing: "Waterproofing", glazing_contractor: "Windows & Doors",
+    metalwork_contractor: "Metalwork / Welding", hvac_contractor: "HVAC / AC",
+    landscaping_contractor: "Landscaping",
+    // Suppliers & Materials
+    building_materials_store: "Building Materials Store",
+    timber_workshop: "Timber Workshop", tiles_stone_supplier: "Tiles & Stone",
+    sanitary_supplier: "Sanitary Ware", lighting_supplier: "Lighting & Electrical",
+    sand_supplier: "Sand Supplier", gravel_supplier: "Gravel & Riverstone",
+    aggregate_supplier: "Crushed Stone / Aggregate",
+    earth_fill_supplier: "Earth Fill", topsoil_supplier: "Topsoil & Landscaping"
+  };
+  return labels[cat] || cat;
+}
+
+function formatProjectType(type) {
+  const labels = {
+    villa_complex: "Villa Complex", apartment: "Apartment",
+    land_subdivision: "Land Plot", mixed_use: "Mixed-Use", other: "Other"
+  };
+  return labels[type] || type;
+}
+
+function formatProjectStatus(status) {
+  const labels = {
+    planning: "Planning", under_construction: "Under Construction", completed: "Completed"
+  };
+  return labels[status] || status;
+}
+
+function getStatusBadgeClass(status) {
+  if (status === "completed") return "badge--status-completed";
+  if (status === "under_construction") return "badge--status-construction";
+  return "badge--status-planning";
+}
+
+function getGroupBadgeClass(group) {
+  if (group === "builders_trades") return "badge--group-builder";
+  if (group === "professional_services") return "badge--group-professional";
+  if (group === "specialist_contractors") return "badge--group-specialist";
+  if (group === "suppliers_materials") return "badge--group-supplier";
+  return "badge--group-specialist";
+}
+
+function confidenceScore(rating, count) {
+  if (!rating || !count) return 0;
+  return rating * Math.log(Math.max(count, 1) + 1);
+}
+
+// ---- Render Stars ----
+function renderStars(rating) {
+  if (!rating) return '';
+  const full = Math.floor(rating);
+  const half = (rating - full) >= 0.5 ? 1 : 0;
+  const empty = 5 - full - half;
+  let html = '<div class="stars" aria-hidden="true">';
+  for (let i = 0; i < full; i++) {
+    html += `<svg class="star-svg" viewBox="0 0 24 24" fill="#f59e0b"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>`;
+  }
+  if (half) {
+    html += `<svg class="star-svg" viewBox="0 0 24 24"><defs><linearGradient id="hg"><stop offset="50%" stop-color="#f59e0b"/><stop offset="50%" stop-color="var(--color-border)"/></linearGradient></defs><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" fill="url(#hg)"/></svg>`;
+  }
+  for (let i = 0; i < empty; i++) {
+    html += `<svg class="star-svg" viewBox="0 0 24 24" fill="var(--color-border)"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderGoogleRating(rating, count, size = 'card') {
+  rating = rating ? parseFloat(rating) : null;
+  count = count ? parseInt(count) : 0;
+  if (!rating) {
+    return `<div class="google-rating"><span class="rating-na">No Google reviews yet</span></div>`;
+  }
+  const cls = size === 'detail' ? 'detail-google-rating' : 'google-rating';
+  const numCls = size === 'detail' ? 'detail-rating-number' : 'rating-number';
+  return `
+    <div class="${cls}">
+      <span class="google-rating-logo">
+        <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+        Google
+      </span>
+      ${renderStars(rating)}
+      <span class="${numCls}">${rating.toFixed(1)}</span>
+      <span class="rating-count">(${count.toLocaleString()})</span>
+    </div>
+  `;
+}
+
+// WhatsApp icon
+function iconWhatsApp() {
+  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>`;
+}
+
+function iconMapPin() {
+  return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`;
+}
+
+function iconPhone() {
+  return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.26h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.88a16 16 0 0 0 6.06 6.06l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.7 16.4l.22.52z"/></svg>`;
+}
+
+function iconGlobe() {
+  return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
+}
+
+function iconLang() {
+  return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 8l6 6M4 14l6-6 2-3"/><path d="M2 5h12M7 2v3"/><path d="M22 22l-5-10-5 10M14 18h6"/></svg>`;
+}
+
+function iconArrowRight() {
+  return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`;
+}
+
+function iconExternalLink() {
+  return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`;
+}
+
+function iconSearch() {
+  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`;
+}
+
+// =====================================================
+// ROUTING
+// =====================================================
+
+let currentRoute = { page: 'home', params: {} };
+
+function getHashParts() {
+  const hash = window.location.hash.slice(1) || 'home';
+  const [pathPart, queryPart] = hash.split('?');
+  const segments = pathPart.split('/').filter(Boolean);
+  const params = {};
+  if (queryPart) {
+    queryPart.split('&').forEach(p => {
+      const [k, v] = p.split('=');
+      if (k) params[decodeURIComponent(k)] = decodeURIComponent(v || '');
+    });
+  }
+  return { segments, params };
+}
+
+function navigate(hash) {
+  window.location.hash = hash;
+}
+
+function buildHash(page, params = {}) {
+  const query = Object.entries(params)
+    .filter(([, v]) => v !== '' && v !== null && v !== undefined)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join('&');
+  return query ? `${page}?${query}` : page;
+}
+
+async function router() {
+  const { segments, params } = getHashParts();
+  const page = segments[0] || 'home';
+  currentRoute = { page, segments, params };
+
+  // Update nav active states
+  document.querySelectorAll('.nav-links a, .mobile-menu a').forEach(a => {
+    a.classList.remove('active');
+    const href = a.getAttribute('href')?.replace('#', '');
+    if (href && (page === href || page.startsWith(href + '/') || (href === 'directory' && (page === 'directory' || page === 'provider')))) {
+      a.classList.add('active');
+    }
+    if (href === 'developers' && (page === 'developers' || page === 'developer')) {
+      a.classList.add('active');
+    }
+    if (href === 'projects' && page === 'projects') {
+      a.classList.add('active');
+    }
+    if (href === 'guides' && (page === 'guides' || page === 'guide')) {
+      a.classList.add('active');
+    }
+    if (href === 'home' && page === 'home') {
+      a.classList.add('active');
+    }
+  });
+
+  // Render
+  const main = document.getElementById('main-content');
+  if (!main) return;
+
+  main.innerHTML = '';
+  const view = document.createElement('div');
+  view.className = 'page-view';
+
+  switch (page) {
+    case 'home': await renderHome(view); break;
+    case 'directory': await renderDirectory(view, params); break;
+    case 'provider': await renderProviderDetail(view, segments[1]); break;
+    case 'developers': await renderDevelopers(view, params); break;
+    case 'developer': await renderDeveloperDetail(view, segments[1]); break;
+    case 'projects': await renderProjects(view, params); break;
+    case 'project': await renderProjectDetail(view, segments[1]); break;
+    case 'guides': await renderGuides(view); break;
+    case 'guide': await renderGuideDetail(view, segments[1]); break;
+    case 'account': await renderAccount(view, params); break;
+    case 'submit-listing': await renderSubmitListing(view); break;
+    case 'verify-result': renderVerifyResult(view, params); break;
+    case 'reset-password': renderResetPassword(view, params); break;
+    default: await renderHome(view);
+  }
+
+  main.appendChild(view);
+  window.scrollTo({ top: 0, behavior: 'instant' });
+}
+
+// =====================================================
+// RENDER: HOME
+// =====================================================
+
+async function renderHome(el) {
+  let featured = [], featuredProjects = [], homeGuides = [];
+  let totalProviders = 0, totalDevelopers = 0, totalProjects = 0;
+  try {
+    const [provRes, devRes, projRes, guidesData] = await Promise.all([
+      DataLayer.getProviders({ featured: '1', per_page: 6 }),
+      DataLayer.getDevelopers({ per_page: 1 }),
+      DataLayer.getProjects({ featured: '1', per_page: 4 }),
+      DataLayer.getGuides(),
+    ]);
+    featured = provRes.data;
+    totalProviders = provRes.meta.total || featured.length;
+    totalDevelopers = devRes.meta.total || 0;
+    featuredProjects = projRes.data;
+    totalProjects = projRes.meta.total || featuredProjects.length;
+    homeGuides = guidesData || [];
+  } catch(e) { console.error('Failed to load home data:', e); }
+
+  el.innerHTML = `
+    <!-- HERO -->
+    <section class="hero">
+      <div class="container">
+        <div class="hero-eyebrow">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>
+          Lombok, Indonesia
+        </div>
+        <h1 class="hero-title">Build in <em>Lombok</em></h1>
+        <p class="hero-subtitle">Connect with trusted builders, tukangs, specialists, developers, and projects across the island.</p>
+        <p class="hero-trust">Every listing shows real <strong>Google ratings and review counts</strong> — the trust signal that matters when you're making six-figure decisions.</p>
+        <div class="hero-ctas">
+          <a href="#directory" class="hero-cta-card" onclick="navigate('directory'); return false;">
+            <div class="hero-cta-icon hero-cta-icon--teal">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <div class="hero-cta-title">Find Builders & Specialists</div>
+            <div class="hero-cta-desc">Browse ${totalProviders} contractors, architects, engineers, and trade specialists.</div>
+            <div class="hero-cta-arrow">Browse directory ${iconArrowRight()}</div>
+          </a>
+          <a href="#developers" class="hero-cta-card" onclick="navigate('developers'); return false;">
+            <div class="hero-cta-icon hero-cta-icon--coral">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+            </div>
+            <div class="hero-cta-title">Developers & Projects</div>
+            <div class="hero-cta-desc">Explore ${totalDevelopers} active developers and ${totalProjects} investment projects.</div>
+            <div class="hero-cta-arrow">View projects ${iconArrowRight()}</div>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <hr class="section-divider">
+
+    <!-- FEATURED PROVIDERS -->
+    <section class="section">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-label">Featured Partners</div>
+          <h2 class="section-title">Trusted by Investors & Builders</h2>
+          <p class="section-desc">Highlighted listings with strong Google ratings and verified track records on Lombok.</p>
+        </div>
+        <div class="card-grid">
+          ${featured.map((b, i) => renderProviderCard(b, i)).join('')}
+        </div>
+        <div style="margin-top: var(--space-6); text-align: center;">
+          <a href="#directory" class="btn btn--ghost" onclick="navigate('directory'); return false;">
+            View all ${totalProviders} providers ${iconArrowRight()}
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <hr class="section-divider">
+
+    <!-- FEATURED PROJECTS -->
+    <section class="section">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-label">Investment Projects</div>
+          <h2 class="section-title">Featured Projects</h2>
+          <p class="section-desc">Curated active developments from verified Lombok developers.</p>
+        </div>
+        <div class="card-grid">
+          ${featuredProjects.map((p, i) => renderProjectCard(p, i)).join('')}
+        </div>
+        <div style="margin-top: var(--space-6); text-align: center;">
+          <a href="#projects" class="btn btn--ghost" onclick="navigate('projects'); return false;">
+            View all ${totalProjects} projects ${iconArrowRight()}
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <hr class="section-divider">
+
+    <!-- HOW IT WORKS -->
+    <section class="section how-it-works">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-label">How It Works</div>
+          <h2 class="section-title">Why Build in Lombok</h2>
+        </div>
+        <div class="how-steps">
+          <div class="how-step">
+            <div class="how-step-number">1</div>
+            <div class="how-step-title">Browse with confidence</div>
+            <p class="how-step-desc">Every listing shows real Google ratings and review counts — so you can compare providers on a shared, independent trust signal.</p>
+          </div>
+          <div class="how-step">
+            <div class="how-step-number">2</div>
+            <div class="how-step-title">Filter by what matters</div>
+            <p class="how-step-desc">Filter by area, speciality, language ability, and minimum rating. Find who you need, where you need them, before you make a call.</p>
+          </div>
+          <div class="how-step">
+            <div class="how-step-number">3</div>
+            <div class="how-step-title">Connect directly</div>
+            <p class="how-step-desc">One-tap WhatsApp links on every listing. No middleman, no commission — just direct contact with the people who can build your project.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="section-divider">
+
+    <!-- GUIDES TEASER -->
+    <section class="section">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-label">Guides</div>
+          <h2 class="section-title">Before You Build</h2>
+          <p class="section-desc">Practical guides covering land titles, permits, construction, and investment fundamentals for Lombok.</p>
+        </div>
+        <div class="card-grid">
+          ${homeGuides.slice(0, 3).map((g, i) => renderGuideCard(g, i)).join('')}
+        </div>
+        <div style="margin-top: var(--space-6); text-align: center;">
+          <a href="#guides" class="btn btn--ghost" onclick="navigate('guides'); return false;">
+            All guides ${iconArrowRight()}
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <hr class="section-divider">
+
+    <!-- HELP CTA -->
+    <section class="section">
+      <div class="container container--narrow">
+        <div class="help-cta">
+          <div class="help-cta-icon">
+            ${iconWhatsApp()}
+          </div>
+          <h2 class="help-cta-title">Need Help With Your Project?</h2>
+          <p class="help-cta-desc">Not sure where to start? We're building a curated advisor network. Drop your details via WhatsApp and we'll point you in the right direction.</p>
+          <a href="https://wa.me/628123456789" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp">
+            ${iconWhatsApp()} Get in Touch on WhatsApp
+          </a>
+        </div>
+      </div>
+    </section>
+  `;
+
+  // Animate cards
+  requestAnimationFrame(() => animateCards(el));
+}
+
+// =====================================================
+// RENDER: PROVIDER CARD
+// =====================================================
+
+function renderProviderCard(b, index = 0) {
+  const waBtn = b.whatsapp_number
+    ? `<a href="https://wa.me/${b.whatsapp_number}" target="_blank" rel="noopener noreferrer" class="card-wa-btn" aria-label="WhatsApp ${b.name}">${iconWhatsApp()}</a>`
+    : '';
+
+  const badge = b.badge
+    ? `<span class="card-badge">${b.badge}</span>`
+    : '';
+
+  const langShort = b.languages.replace('Bahasa + ', '').replace('Bahasa only', 'Bahasa').replace(' + Other', '+');
+  const ratingInline = b.google_rating
+    ? `<span class="card-rating-inline"><span class="card-rating-star">★</span> ${b.google_rating.toFixed(1)} <span class="card-rating-count">(${b.google_review_count})</span></span>`
+    : '';
+
+  return `
+    <article class="card card-animate" style="animation-delay: ${index * 50}ms" data-id="${b.id}">
+      <div class="card-top">
+        <div class="card-top-left">
+          <span class="card-category-label">${(b.categories && b.categories.length > 0) ? b.categories.map(c => formatCategoryLabel(c.key || c)).join(' · ') : formatCategoryLabel(b.category)}</span>
+          ${badge}
+        </div>
+        ${ratingInline}
+      </div>
+      <h3 class="card-name"><a href="#provider/${b.slug}" onclick="navigate('provider/${b.slug}');return false;">${b.name}</a></h3>
+      <p class="card-desc">${b.short_description_en}</p>
+      <div class="card-meta-line">
+        <span class="card-meta-item">${iconMapPin()} ${formatAreaLabel(b.area)}</span>
+        <span class="card-meta-sep"></span>
+        <span class="card-meta-item">${langShort}</span>
+      </div>
+      <div class="card-tags-line">
+        ${b.tags.slice(0, 3).map(t => `<span class="card-tag">${t}</span>`).join('<span class="card-tag-dot">·</span>')}
+      </div>
+      <div class="card-footer">
+        <button class="card-view-btn" onclick="navigate('provider/${b.slug}')">
+          View details ${iconArrowRight()}
+        </button>
+        <div class="card-footer-right">${renderFavBtn('provider', b.id)}${waBtn}</div>
+      </div>
+    </article>
+  `;
+}
+
+// =====================================================
+// RENDER: DIRECTORY PAGE
+// =====================================================
+
+async function renderDirectory(el, params = {}) {
+  const filters = {
+    area: params.area || '',
+    group: params.group || '',
+    category: params.category || '',
+    languages: params.languages || '',
+    min_rating: params.min_rating || '',
+    sort: params.sort || 'confidence',
+    search: params.search || ''
+  };
+
+  async function applyFiltersAndRender() {
+    const grid = el.querySelector('#provider-grid');
+    const countEl = el.querySelector('#results-count');
+    if (!grid) return;
+
+    // Build API params
+    const apiParams = {};
+    if (filters.area) apiParams.area = filters.area;
+    if (filters.group) apiParams.group = filters.group;
+    if (filters.category) apiParams.category = filters.category;
+    if (filters.search) apiParams.q = filters.search;
+    if (filters.sort === 'rating') { apiParams.sort = 'google_rating'; apiParams.dir = 'DESC'; }
+    else if (filters.sort === 'alpha') { apiParams.sort = 'name'; }
+    else { apiParams.sort = 'google_rating'; apiParams.dir = 'DESC'; }
+    apiParams.per_page = 100;
+
+    try {
+      const res = await DataLayer.getProviders(apiParams);
+      let results = res.data;
+
+      // Client-side filters the API doesn't handle
+      if (filters.languages === 'english') {
+        results = results.filter(b => (b.languages || '').includes('English'));
+      }
+      if (filters.min_rating) {
+        const minR = parseFloat(filters.min_rating);
+        results = results.filter(b => b.google_rating && b.google_rating >= minR);
+      }
+      // Re-sort by confidence if default
+      if (!filters.sort || filters.sort === 'confidence') {
+        results.sort((a, b_) => {
+          if (b_.is_featured && !a.is_featured) return 1;
+          if (a.is_featured && !b_.is_featured) return -1;
+          return confidenceScore(b_.google_rating, b_.google_review_count) - confidenceScore(a.google_rating, a.google_review_count);
+        });
+      } else if (filters.sort === 'review_count') {
+        results.sort((a, b_) => (b_.google_review_count || 0) - (a.google_review_count || 0));
+      }
+
+      if (countEl) countEl.innerHTML = `<strong>${results.length}</strong> provider${results.length !== 1 ? 's' : ''} found`;
+
+      if (results.length === 0) {
+        grid.innerHTML = `
+          <div class="empty-state" style="grid-column: 1/-1;">
+            <div class="empty-state-icon">${iconSearch()}</div>
+            <h3 class="empty-state-title">No providers found</h3>
+            <p class="empty-state-desc">Try adjusting your filters or search terms.</p>
+            <button class="btn btn--secondary btn--sm" onclick="clearDirectoryFilters()">Clear all filters</button>
+          </div>
+        `;
+      } else {
+        grid.innerHTML = results.map((b, i) => renderProviderCard(b, i)).join('');
+      }
+    } catch(e) {
+      console.error('Failed to load providers:', e);
+      grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><p>Unable to load providers. Please try again.</p></div>';
+    }
+    requestAnimationFrame(() => animateCards(el));
+
+    // Update URL
+    navigate(buildHash('directory', Object.fromEntries(Object.entries(filters).filter(([,v]) => v !== '' && v !== 'confidence'))));
+  }
+
+  window.clearDirectoryFilters = function() {
+    filters.area = ''; filters.group = ''; filters.category = '';
+    filters.languages = ''; filters.min_rating = ''; filters.search = '';
+    el.querySelectorAll('.filter-select').forEach(s => s.value = '');
+    applyFiltersAndRender();
+  };
+
+  const categoryTree = {
+    builders_trades: [
+      { key: 'general_contractor', label: 'General Contractor' },
+      { key: 'carpenter', label: 'Carpenter / Joiner' },
+      { key: 'mason', label: 'Mason / Concrete Worker' },
+      { key: 'roofer', label: 'Roofer' },
+      { key: 'plumber', label: 'Plumber' },
+      { key: 'electrician', label: 'Electrician' },
+      { key: 'painter', label: 'Painter / Finisher' },
+      { key: 'tiler', label: 'Tiler' },
+    ],
+    professional_services: [
+      { key: 'architect', label: 'Architect' },
+      { key: 'interior_designer', label: 'Interior Designer' },
+      { key: 'structural_engineer', label: 'Structural Engineer' },
+      { key: 'mep_engineer', label: 'MEP Engineer' },
+      { key: 'civil_engineer', label: 'Civil Engineer' },
+      { key: 'quantity_surveyor', label: 'Quantity Surveyor' },
+      { key: 'project_manager', label: 'Project / Construction Manager' },
+    ],
+    specialist_contractors: [
+      { key: 'pool_contractor', label: 'Pool Builder' },
+      { key: 'solar_installer', label: 'Solar / PV Installer' },
+      { key: 'waterproofing', label: 'Waterproofing' },
+      { key: 'glazing_contractor', label: 'Windows & Doors' },
+      { key: 'metalwork_contractor', label: 'Steel / Welding / Metalwork' },
+      { key: 'hvac_contractor', label: 'AC / HVAC' },
+      { key: 'landscaping_contractor', label: 'Landscaping' },
+    ],
+    suppliers_materials: [
+      { key: 'building_materials_store', label: 'General Building Materials' },
+      { key: 'timber_workshop', label: 'Timber & Carpentry Workshop' },
+      { key: 'tiles_stone_supplier', label: 'Tiles & Stone Finishes' },
+      { key: 'sanitary_supplier', label: 'Sanitary Ware & Plumbing Fixtures' },
+      { key: 'lighting_supplier', label: 'Lighting & Electrical Fixtures' },
+      { key: 'sand_supplier', label: 'Sand Supplier' },
+      { key: 'gravel_supplier', label: 'Gravel & Riverstone' },
+      { key: 'aggregate_supplier', label: 'Crushed Stone / Aggregate' },
+      { key: 'earth_fill_supplier', label: 'Earth Fill / Compacted Fill' },
+      { key: 'topsoil_supplier', label: 'Topsoil & Landscaping Materials' },
+    ],
+  };
+
+  const activeCount = Object.entries(filters).filter(([k, v]) => k !== 'sort' && v !== '').length;
+
+  el.innerHTML = `
+    <div class="page-header">
+      <div class="container">
+        <div class="page-header-breadcrumb">
+          <a href="#home" onclick="navigate('home');return false;">Home</a>
+          <span>/</span>
+          <span>Directory</span>
+        </div>
+        <h1 class="page-title">Builders, Specialists & Professionals</h1>
+        <p class="page-desc">Find trusted contractors, architects, engineers, and specialist suppliers across Lombok.</p>
+      </div>
+    </div>
+    <div class="section">
+      <div class="container">
+        <!-- Filters -->
+        <div class="filters-bar">
+          <button class="filters-toggle-btn" onclick="this.closest('.filters-bar').querySelector('.filters-body').classList.toggle('open')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            Filters ${activeCount > 0 ? `<span class="badge badge--verified">${activeCount}</span>` : ''}
+          </button>
+          <div class="filters-body ${activeCount > 0 ? 'open' : ''}">
+            <div class="filters-grid">
+              <div class="filter-group">
+                <label class="filter-label" for="f-area">Area</label>
+                <select id="f-area" class="filter-select" onchange="updateDirectoryFilter('area', this.value)">
+                  <option value="">All areas</option>
+                  <option value="kuta" ${filters.area === 'kuta' ? 'selected' : ''}>Kuta</option>
+                  <option value="senggigi" ${filters.area === 'senggigi' ? 'selected' : ''}>Senggigi</option>
+                  <option value="mataram" ${filters.area === 'mataram' ? 'selected' : ''}>Mataram</option>
+                  <option value="selong_belanak" ${filters.area === 'selong_belanak' ? 'selected' : ''}>Selong Belanak</option>
+                  <option value="ekas" ${filters.area === 'ekas' ? 'selected' : ''}>Ekas</option>
+                  <option value="other_lombok" ${filters.area === 'other_lombok' ? 'selected' : ''}>Other Lombok</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label class="filter-label" for="f-group">Group</label>
+                <select id="f-group" class="filter-select" onchange="updateGroupFilter(this.value)">
+                  <option value="">All groups</option>
+                  <option value="builders_trades" ${filters.group === 'builders_trades' ? 'selected' : ''}>Builders & Trades</option>
+                  <option value="professional_services" ${filters.group === 'professional_services' ? 'selected' : ''}>Professional Services</option>
+                  <option value="specialist_contractors" ${filters.group === 'specialist_contractors' ? 'selected' : ''}>Specialist Contractors</option>
+                  <option value="suppliers_materials" ${filters.group === 'suppliers_materials' ? 'selected' : ''}>Suppliers & Materials</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label class="filter-label" for="f-category">Specialty</label>
+                <select id="f-category" class="filter-select" onchange="updateDirectoryFilter('category', this.value)">
+                  <option value="">All specialties</option>
+                  ${filters.group && categoryTree[filters.group]
+                    ? categoryTree[filters.group].map(c =>
+                        `<option value="${c.key}" ${filters.category === c.key ? 'selected' : ''}>${c.label}</option>`
+                      ).join('')
+                    : Object.values(categoryTree).flat().map(c =>
+                        `<option value="${c.key}" ${filters.category === c.key ? 'selected' : ''}>${c.label}</option>`
+                      ).join('')
+                  }
+                </select>
+              </div>
+              <div class="filter-group">
+                <label class="filter-label" for="f-lang">Language</label>
+                <select id="f-lang" class="filter-select" onchange="updateDirectoryFilter('languages', this.value)">
+                  <option value="">Any language</option>
+                  <option value="english" ${filters.languages === 'english' ? 'selected' : ''}>English-speaking</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label class="filter-label" for="f-rating">Min Rating</label>
+                <select id="f-rating" class="filter-select" onchange="updateDirectoryFilter('min_rating', this.value)">
+                  <option value="">Any rating</option>
+                  <option value="4.0" ${filters.min_rating === '4.0' ? 'selected' : ''}>4.0+ stars</option>
+                  <option value="4.5" ${filters.min_rating === '4.5' ? 'selected' : ''}>4.5+ stars</option>
+                  <option value="4.8" ${filters.min_rating === '4.8' ? 'selected' : ''}>4.8+ stars</option>
+                </select>
+              </div>
+            </div>
+            <div class="filters-footer">
+              <p class="filters-active-count">
+                ${activeCount > 0 ? `<strong>${activeCount}</strong> filter${activeCount !== 1 ? 's' : ''} active` : 'No filters active'}
+              </p>
+              <div class="sort-group">
+                <span class="sort-label">Sort:</span>
+                <select class="filter-select" style="min-height:36px;padding-top:var(--space-1);padding-bottom:var(--space-1);" onchange="updateDirectoryFilter('sort', this.value)">
+                  <option value="confidence" ${filters.sort === 'confidence' ? 'selected' : ''}>Most Trusted</option>
+                  <option value="rating" ${filters.sort === 'rating' ? 'selected' : ''}>Highest Rated</option>
+                  <option value="review_count" ${filters.sort === 'review_count' ? 'selected' : ''}>Most Reviewed</option>
+                  <option value="alpha" ${filters.sort === 'alpha' ? 'selected' : ''}>A–Z</option>
+                </select>
+              </div>
+              ${activeCount > 0 ? `<button class="btn btn--secondary btn--sm" onclick="clearDirectoryFilters()">Clear all</button>` : ''}
+            </div>
+          </div>
+        </div>
+
+        <p class="results-count" id="results-count"></p>
+        <div class="card-grid" id="provider-grid"></div>
+      </div>
+    </div>
+  `;
+
+  window.updateDirectoryFilter = function(key, value) {
+    filters[key] = value;
+    applyFiltersAndRender();
+  };
+
+  window.updateGroupFilter = function(value) {
+    filters.group = value;
+    filters.category = ''; // reset category when group changes
+    // Re-render the full page to update the cascading category dropdown
+    renderDirectory(el, filters);
+  };
+
+  applyFiltersAndRender();
+}
+
+// =====================================================
+// RENDER: PROVIDER DETAIL
+// =====================================================
+
+async function renderProviderDetail(el, slug) {
+  let b;
+  try {
+    b = await DataLayer.getProvider(slug);
+  } catch(e) {
+    console.error('Failed to load provider:', e);
+  }
+  if (!b) {
+    el.innerHTML = renderNotFound('Provider');
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="page-header">
+      <div class="container">
+        <div class="page-header-breadcrumb">
+          <a href="#home" onclick="navigate('home');return false;">Home</a>
+          <span>/</span>
+          <a href="#directory" onclick="navigate('directory');return false;">Directory</a>
+          <span>/</span>
+          <span>${b.name}</span>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:var(--space-4);flex-wrap:wrap;">
+          <div style="flex:1;min-width:0;">
+            <div class="card-meta mb-3">
+              <span class="badge ${getGroupBadgeClass(b.group)}">${formatGroupLabel(b.group)}</span>
+              <span class="badge badge--project-type">${formatCategoryLabel(b.category)}</span>
+              ${b.badge ? `<span class="badge badge--featured">${b.badge}</span>` : ''}
+            </div>
+            <h1 class="page-title">${b.name}</h1>
+            <div class="card-meta mt-auto">
+              <span class="meta-chip">${iconMapPin()} ${formatAreaLabel(b.area)}</span>
+              <span class="meta-chip">${iconLang()} ${b.languages}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="container">
+        <div class="detail-layout">
+          <div class="detail-main">
+            <div class="detail-rating-row">
+              ${renderGoogleRating(b.google_rating, b.google_review_count, 'detail')}
+              ${b.google_maps_url ? `<a href="${b.google_maps_url}" target="_blank" rel="noopener noreferrer" class="btn btn--secondary btn--sm" style="margin-left:var(--space-3);">${iconMapPin()} View on Google Maps ${iconExternalLink()}</a>` : ''}
+            </div>
+
+            <h2 class="detail-section-title">About</h2>
+            <p class="detail-description">${b.description_en}</p>
+
+            <h2 class="detail-section-title">Specialties</h2>
+            <div class="detail-tags mb-6">
+              ${b.tags.map(t => `<span class="tag">${t}</span>`).join('')}
+            </div>
+
+            <h2 class="detail-section-title">Contact</h2>
+            <div class="info-list mb-6">
+              ${b.address ? `<div class="info-row"><span class="info-icon">${iconMapPin()}</span><span class="info-label">Address</span><span class="info-value">${b.address}</span></div>` : ''}
+              ${b.phone ? `<div class="info-row"><span class="info-icon">${iconPhone()}</span><span class="info-label">Phone</span><span class="info-value"><a href="tel:${b.phone}">${b.phone}</a></span></div>` : ''}
+              ${b.website_url ? `<div class="info-row"><span class="info-icon">${iconGlobe()}</span><span class="info-label">Website</span><span class="info-value"><a href="${b.website_url}" target="_blank" rel="noopener noreferrer">Visit website ${iconExternalLink()}</a></span></div>` : ''}
+            </div>
+
+            <div class="card-actions">
+              ${b.whatsapp_number ? `<a href="https://wa.me/${b.whatsapp_number}" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp">${iconWhatsApp()} WhatsApp</a>` : ''}
+              ${b.phone ? `<a href="tel:${b.phone}" class="btn btn--secondary">${iconPhone()} Call</a>` : ''}
+              ${b.google_maps_url ? `<a href="${b.google_maps_url}" target="_blank" rel="noopener noreferrer" class="btn btn--secondary">${iconMapPin()} Map</a>` : ''}
+              ${renderFavBtn('provider', b.id)}
+            </div>
+
+            ${renderGoogleReviewBtn(b.google_maps_url)}
+          </div>
+
+          <div class="detail-sidebar">
+            <div class="detail-card">
+              <div class="detail-card-title">Quick Info</div>
+              <div class="info-list">
+                <div class="info-row">
+                  <span class="info-label">Type</span>
+                  <span class="info-value">${formatGroupLabel(b.group)}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Speciality</span>
+                  <span class="info-value">${(b.categories && b.categories.length > 0) ? b.categories.map(c => formatCategoryLabel(c.key || c)).join(', ') : formatCategoryLabel(b.category)}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Area</span>
+                  <span class="info-value">${formatAreaLabel(b.area)}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">Languages</span>
+                  <span class="info-value">${b.languages}</span>
+                </div>
+              </div>
+            </div>
+            <div class="detail-card claim-cta-card">
+              <div class="detail-card-title">Is this your business?</div>
+              <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:0 0 var(--space-3) 0;">Claim this listing to update your information, respond to inquiries, and manage your profile.</p>
+              <button class="btn btn--primary btn--sm" onclick="${`UserAuth.user ? showClaimModal(${b.id}, '${b.name.replace(/'/g, "\\'")}'`) : showAuthModal('login')}">Claim this listing</button>
+            </div>
+            <div class="help-cta" style="padding:var(--space-5);">
+              <h3 class="help-cta-title" style="font-size:var(--text-base);">Not sure who to hire?</h3>
+              <p class="help-cta-desc" style="font-size:var(--text-xs);">Our advisor network can help match you with the right specialist for your project.</p>
+              <a href="https://wa.me/628123456789" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--sm">${iconWhatsApp()} Get advice</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// =====================================================
+// RENDER: DEVELOPERS
+// =====================================================
+
+function renderDeveloperCard(dev, index = 0) {
+  const badge = dev.badge ? `<span class="card-badge">${dev.badge}</span>` : '';
+  const ratingInline = dev.google_rating
+    ? `<span class="card-rating-inline"><span class="card-rating-star">★</span> ${dev.google_rating.toFixed(1)} <span class="card-rating-count">(${dev.google_review_count})</span></span>`
+    : '';
+  const areas = dev.areas_focus.map(a => formatAreaLabel(a)).join(', ');
+  return `
+    <article class="card card-animate" style="animation-delay:${index * 50}ms">
+      <div class="card-top">
+        <div class="card-top-left">
+          <span class="card-category-label">${(dev.categories && dev.categories.length > 0) ? dev.categories.map(c => formatCategoryLabel(c.key || c)).join(' · ') : 'Developer'}</span>
+          ${badge}
+        </div>
+        ${ratingInline}
+      </div>
+      <h3 class="card-name"><a href="#developer/${dev.slug}" onclick="navigate('developer/${dev.slug}');return false;">${dev.name}</a></h3>
+      <p class="card-desc">${dev.short_description_en}</p>
+      <div class="card-meta-line">
+        <span class="card-meta-item">${iconMapPin()} ${areas}</span>
+      </div>
+      <div class="card-tags-line">
+        ${dev.project_types.map(t => `<span class="card-tag">${formatProjectType(t)}</span>`).join('<span class="card-tag-dot">·</span>')}
+        ${dev.min_ticket_usd ? `<span class="card-tag-dot">·</span><span class="card-tag">From ${formatUSD(dev.min_ticket_usd)}</span>` : ''}
+      </div>
+      <div class="card-footer">
+        <button class="card-view-btn" onclick="navigate('developer/${dev.slug}')">
+          View developer ${iconArrowRight()}
+        </button>
+        <div class="card-footer-right">${renderFavBtn('developer', dev.id)}${dev.whatsapp_number ? `<a href="https://wa.me/${dev.whatsapp_number}" target="_blank" rel="noopener noreferrer" class="card-wa-btn" aria-label="WhatsApp ${dev.name}">${iconWhatsApp()}</a>` : ''}</div>
+      </div>
+    </article>
+  `;
+}
+
+async function renderDevelopers(el, params = {}) {
+  let devs = [];
+  try {
+    const res = await DataLayer.getDevelopers({ per_page: 100 });
+    devs = res.data;
+  } catch(e) { console.error('Failed to load developers:', e); }
+
+  el.innerHTML = `
+    <div class="page-header">
+      <div class="container">
+        <div class="page-header-breadcrumb">
+          <a href="#home" onclick="navigate('home');return false;">Home</a>
+          <span>/</span>
+          <span>Developers</span>
+        </div>
+        <h1 class="page-title">Property Developers</h1>
+        <p class="page-desc">Active developers building villas, apartments, and land projects across Lombok.</p>
+      </div>
+    </div>
+    <div class="section">
+      <div class="container">
+        <p class="results-count"><strong>${devs.length}</strong> developer${devs.length !== 1 ? 's' : ''} listed</p>
+        <div class="card-grid">
+          ${devs.map((d, i) => renderDeveloperCard(d, i)).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+  requestAnimationFrame(() => animateCards(el));
+}
+
+async function renderDeveloperDetail(el, slug) {
+  let dev;
+  try {
+    dev = await DataLayer.getDeveloper(slug);
+  } catch(e) { console.error('Failed to load developer:', e); }
+  if (!dev) { el.innerHTML = renderNotFound('Developer'); return; }
+
+  const devProjects = dev.projects || [];
+
+  el.innerHTML = `
+    <div class="page-header">
+      <div class="container">
+        <div class="page-header-breadcrumb">
+          <a href="#home" onclick="navigate('home');return false;">Home</a>
+          <span>/</span>
+          <a href="#developers" onclick="navigate('developers');return false;">Developers</a>
+          <span>/</span>
+          <span>${dev.name}</span>
+        </div>
+        <div class="card-meta mb-3">
+          ${dev.badge ? `<span class="badge badge--featured">${dev.badge}</span>` : ''}
+          ${dev.project_types.map(t => `<span class="badge badge--project-type">${formatProjectType(t)}</span>`).join('')}
+        </div>
+        <h1 class="page-title">${dev.name}</h1>
+        <div class="card-meta">
+          ${dev.areas_focus.map(a => `<span class="meta-chip">${iconMapPin()} ${formatAreaLabel(a)}</span>`).join('')}
+          <span class="meta-chip">${iconLang()} ${dev.languages.replace('Bahasa + ', '').replace(' + Other', '+')}</span>
+          ${dev.min_ticket_usd ? `<span class="meta-chip">From ${formatUSD(dev.min_ticket_usd)}</span>` : ''}
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="container">
+        <div class="detail-layout">
+          <div class="detail-main">
+            <div class="detail-rating-row">
+              ${renderGoogleRating(dev.google_rating, dev.google_review_count, 'detail')}
+            </div>
+            <h2 class="detail-section-title">About</h2>
+            <p class="detail-description">${dev.description_en}</p>
+
+            <h2 class="detail-section-title">Focus Areas</h2>
+            <div class="detail-tags mb-6">
+              ${dev.areas_focus.map(a => `<span class="tag">${formatAreaLabel(a)}</span>`).join('')}
+              ${dev.tags.map(t => `<span class="tag">${t}</span>`).join('')}
+            </div>
+
+            <h2 class="detail-section-title" style="margin-bottom:var(--space-5);">Projects by ${dev.name}</h2>
+            ${devProjects.length > 0
+              ? `<div class="card-grid card-grid--2col">${devProjects.map((p, i) => renderProjectCard(p, i)).join('')}</div>`
+              : `<p class="text-muted">No active projects listed yet.</p>`
+            }
+          </div>
+          <div class="detail-sidebar">
+            <div class="detail-card">
+              <div class="detail-card-title">Contact</div>
+              <div class="info-list mb-4">
+                ${dev.phone ? `<div class="info-row"><span class="info-icon">${iconPhone()}</span><span class="info-value"><a href="tel:${dev.phone}">${dev.phone}</a></span></div>` : ''}
+                ${dev.website_url ? `<div class="info-row"><span class="info-icon">${iconGlobe()}</span><span class="info-value"><a href="${dev.website_url}" target="_blank" rel="noopener noreferrer">Website ${iconExternalLink()}</a></span></div>` : ''}
+              </div>
+              ${dev.whatsapp_number ? `<a href="https://wa.me/${dev.whatsapp_number}" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--full">${iconWhatsApp()} WhatsApp</a>` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  requestAnimationFrame(() => animateCards(el));
+}
+
+// =====================================================
+// RENDER: PROJECT CARD
+// =====================================================
+
+function renderProjectCard(p, index = 0) {
+  const dev = developers.find(d => d.id === p.developer_id);
+  const badge = p.badge ? `<span class="card-badge">${p.badge}</span>` : '';
+  const statusLabel = formatProjectStatus(p.status);
+
+  return `
+    <article class="card card-animate" style="animation-delay:${index * 50}ms">
+      <div class="card-top">
+        <div class="card-top-left">
+          <span class="card-category-label">${formatProjectType(p.project_type)}</span>
+          ${badge}
+        </div>
+        <span class="card-status card-status--${p.status}">${statusLabel}</span>
+      </div>
+      <h3 class="card-name"><a href="#project/${p.slug}" onclick="navigate('project/${p.slug}');return false;">${p.name}</a></h3>
+      <p class="card-desc">${p.short_description_en}</p>
+      <div class="card-meta-line">
+        <span class="card-meta-item">${iconMapPin()} ${formatAreaLabel(p.location_area)}</span>
+      </div>
+      <div class="card-facts-row">
+        <div class="card-fact">
+          <span class="card-fact-label">From</span>
+          <span class="card-fact-value">${formatUSD(p.min_investment_usd)}</span>
+        </div>
+        <div class="card-fact">
+          <span class="card-fact-label">Yield</span>
+          <span class="card-fact-value">${p.expected_yield_range}</span>
+        </div>
+      </div>
+      ${dev ? `
+        <div class="card-developer-line">
+          <span>by</span>
+          <button onclick="navigate('developer/${dev.slug}')" class="card-developer-link">${dev.name}</button>
+          ${dev.google_rating ? `<span class="card-rating-inline card-rating-inline--sm"><span class="card-rating-star">★</span> ${dev.google_rating.toFixed(1)}</span>` : ''}
+        </div>
+      ` : ''}
+      <div class="card-footer">
+        <button class="card-view-btn" onclick="navigate('project/${p.slug}')">
+          View project ${iconArrowRight()}
+        </button>
+        <div class="card-footer-right">${renderFavBtn('project', p.id)}${p.info_contact_whatsapp ? `<a href="https://wa.me/${p.info_contact_whatsapp}" target="_blank" rel="noopener noreferrer" class="card-wa-btn" aria-label="Request info">${iconWhatsApp()}</a>` : ''}</div>
+      </div>
+    </article>
+  `;
+}
+
+// =====================================================
+// RENDER: PROJECTS PAGE
+// =====================================================
+
+async function renderProjects(el, params = {}) {
+  const filters = {
+    area: params.area || '',
+    project_type: params.project_type || '',
+    status: params.status || '',
+    sort: params.sort || 'featured'
+  };
+
+  async function applyAndRender() {
+    const grid = el.querySelector('#project-grid');
+    const countEl = el.querySelector('#proj-count');
+    if (!grid) return;
+
+    const apiParams = { per_page: 100 };
+    if (filters.area) apiParams.area = filters.area;
+    if (filters.project_type) apiParams.type = filters.project_type;
+    if (filters.status) apiParams.status = filters.status;
+    if (filters.sort === 'investment_low') { apiParams.sort = 'min_investment_usd'; apiParams.dir = 'ASC'; }
+    else if (filters.sort === 'investment_high') { apiParams.sort = 'min_investment_usd'; apiParams.dir = 'DESC'; }
+
+    try {
+      const res = await DataLayer.getProjects(apiParams);
+      const results = res.data;
+
+      if (countEl) countEl.innerHTML = `<strong>${results.length}</strong> project${results.length !== 1 ? 's' : ''} found`;
+
+      if (results.length === 0) {
+        grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-icon">${iconSearch()}</div><h3 class="empty-state-title">No projects match your filters</h3><p class="empty-state-desc">Try widening your criteria.</p><button class="btn btn--secondary btn--sm" onclick="clearProjectFilters()">Clear filters</button></div>`;
+      } else {
+        grid.innerHTML = results.map((p, i) => renderProjectCard(p, i)).join('');
+      }
+    } catch(e) {
+      console.error('Failed to load projects:', e);
+      grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><p>Unable to load projects.</p></div>';
+    }
+    requestAnimationFrame(() => animateCards(el));
+    navigate(buildHash('projects', Object.fromEntries(Object.entries(filters).filter(([,v]) => v !== '' && v !== 'featured'))));
+  }
+
+  window.clearProjectFilters = function() {
+    filters.area = ''; filters.project_type = ''; filters.status = '';
+    el.querySelectorAll('.filter-select').forEach(s => s.value = '');
+    applyAndRender();
+  };
+
+  const activeCount = Object.entries(filters).filter(([k, v]) => k !== 'sort' && v !== '').length;
+
+  el.innerHTML = `
+    <div class="page-header">
+      <div class="container">
+        <div class="page-header-breadcrumb">
+          <a href="#home" onclick="navigate('home');return false;">Home</a>
+          <span>/</span>
+          <span>Projects</span>
+        </div>
+        <h1 class="page-title">Investment Projects</h1>
+        <p class="page-desc">Active villa, apartment, land, and mixed-use developments from verified Lombok developers.</p>
+      </div>
+    </div>
+    <div class="section">
+      <div class="container">
+        <div class="filters-bar">
+          <button class="filters-toggle-btn" onclick="this.closest('.filters-bar').querySelector('.filters-body').classList.toggle('open')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            Filters ${activeCount > 0 ? `<span class="badge badge--verified">${activeCount}</span>` : ''}
+          </button>
+          <div class="filters-body ${activeCount > 0 ? 'open' : ''}">
+            <div class="filters-grid">
+              <div class="filter-group">
+                <label class="filter-label" for="pf-area">Area</label>
+                <select id="pf-area" class="filter-select" onchange="updateProjectFilter('area', this.value)">
+                  <option value="">All areas</option>
+                  <option value="kuta" ${filters.area === 'kuta' ? 'selected' : ''}>Kuta</option>
+                  <option value="selong_belanak" ${filters.area === 'selong_belanak' ? 'selected' : ''}>Selong Belanak</option>
+                  <option value="senggigi" ${filters.area === 'senggigi' ? 'selected' : ''}>Senggigi</option>
+                  <option value="ekas" ${filters.area === 'ekas' ? 'selected' : ''}>Ekas</option>
+                  <option value="mataram" ${filters.area === 'mataram' ? 'selected' : ''}>Mataram</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label class="filter-label" for="pf-type">Type</label>
+                <select id="pf-type" class="filter-select" onchange="updateProjectFilter('project_type', this.value)">
+                  <option value="">All types</option>
+                  <option value="villa_complex" ${filters.project_type === 'villa_complex' ? 'selected' : ''}>Villa Complex</option>
+                  <option value="apartment" ${filters.project_type === 'apartment' ? 'selected' : ''}>Apartment</option>
+                  <option value="land_subdivision" ${filters.project_type === 'land_subdivision' ? 'selected' : ''}>Land Plot</option>
+                  <option value="mixed_use" ${filters.project_type === 'mixed_use' ? 'selected' : ''}>Mixed-Use</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label class="filter-label" for="pf-status">Status</label>
+                <select id="pf-status" class="filter-select" onchange="updateProjectFilter('status', this.value)">
+                  <option value="">Any status</option>
+                  <option value="planning" ${filters.status === 'planning' ? 'selected' : ''}>Planning</option>
+                  <option value="under_construction" ${filters.status === 'under_construction' ? 'selected' : ''}>Under Construction</option>
+                  <option value="completed" ${filters.status === 'completed' ? 'selected' : ''}>Completed</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label class="filter-label" for="pf-sort">Sort by</label>
+                <select id="pf-sort" class="filter-select" onchange="updateProjectFilter('sort', this.value)">
+                  <option value="featured" ${filters.sort === 'featured' ? 'selected' : ''}>Featured first</option>
+                  <option value="investment_low" ${filters.sort === 'investment_low' ? 'selected' : ''}>Lowest investment</option>
+                  <option value="investment_high" ${filters.sort === 'investment_high' ? 'selected' : ''}>Highest investment</option>
+                </select>
+              </div>
+            </div>
+            <div class="filters-footer">
+              <p class="filters-active-count">${activeCount > 0 ? `<strong>${activeCount}</strong> filter${activeCount !== 1 ? 's' : ''} active` : 'No filters active'}</p>
+              ${activeCount > 0 ? `<button class="btn btn--secondary btn--sm" onclick="clearProjectFilters()">Clear all</button>` : ''}
+            </div>
+          </div>
+        </div>
+        <p class="results-count" id="proj-count"></p>
+        <div class="card-grid" id="project-grid"></div>
+      </div>
+    </div>
+  `;
+
+  window.updateProjectFilter = function(key, value) {
+    filters[key] = value;
+    applyAndRender();
+  };
+
+  applyAndRender();
+}
+
+// =====================================================
+// RENDER: PROJECT DETAIL
+// =====================================================
+
+async function renderProjectDetail(el, slug) {
+  let p;
+  try {
+    p = await DataLayer.getProject(slug);
+  } catch(e) { console.error('Failed to load project:', e); }
+  if (!p) { el.innerHTML = renderNotFound('Project'); return; }
+  const dev = p.developer_name ? { name: p.developer_name, slug: p.developer_slug } : null;
+
+  el.innerHTML = `
+    <div class="page-header">
+      <div class="container">
+        <div class="page-header-breadcrumb">
+          <a href="#home" onclick="navigate('home');return false;">Home</a>
+          <span>/</span>
+          <a href="#projects" onclick="navigate('projects');return false;">Projects</a>
+          <span>/</span>
+          <span>${p.name}</span>
+        </div>
+        <div class="card-meta mb-3">
+          <span class="badge ${getStatusBadgeClass(p.status)}">${formatProjectStatus(p.status)}</span>
+          <span class="badge badge--project-type">${formatProjectType(p.project_type)}</span>
+          ${p.badge ? `<span class="badge badge--new">${p.badge}</span>` : ''}
+        </div>
+        <h1 class="page-title">${p.name}</h1>
+        <div class="card-meta">
+          <span class="meta-chip">${iconMapPin()} ${formatAreaLabel(p.location_area)}</span>
+          ${dev ? `<span class="meta-chip">by <button onclick="navigate('developer/${dev.slug}')" style="color:var(--color-primary);font-weight:600;background:none;border:none;cursor:pointer;padding:0;font-size:inherit;">${dev.name}</button></span>` : ''}
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="container">
+        <div class="key-facts" style="margin-bottom:var(--space-8);">
+          <div class="key-fact">
+            <div class="key-fact-label">Min Investment</div>
+            <div class="key-fact-value">${formatUSD(p.min_investment_usd)}</div>
+          </div>
+          <div class="key-fact">
+            <div class="key-fact-label">Expected Yield</div>
+            <div class="key-fact-value" style="font-size:var(--text-base);">${p.expected_yield_range}</div>
+          </div>
+          <div class="key-fact">
+            <div class="key-fact-label">Timeline</div>
+            <div class="key-fact-value" style="font-size:var(--text-base);">${p.timeline_summary}</div>
+          </div>
+          <div class="key-fact">
+            <div class="key-fact-label">Type</div>
+            <div class="key-fact-value" style="font-size:var(--text-base);">${formatProjectType(p.project_type)}</div>
+          </div>
+          <div class="key-fact">
+            <div class="key-fact-label">Location</div>
+            <div class="key-fact-value" style="font-size:var(--text-base);">${formatAreaLabel(p.location_area)}</div>
+          </div>
+          <div class="key-fact">
+            <div class="key-fact-label">Status</div>
+            <div class="key-fact-value" style="font-size:var(--text-base);">${formatProjectStatus(p.status)}</div>
+          </div>
+        </div>
+
+        <div class="detail-layout">
+          <div class="detail-main">
+            <h2 class="detail-section-title">About This Project</h2>
+            <p class="detail-description">${p.description_en}</p>
+
+            <h2 class="detail-section-title">Tags</h2>
+            <div class="detail-tags mb-6">
+              ${p.tags.map(t => `<span class="tag">${t}</span>`).join('')}
+            </div>
+
+            ${dev ? `
+              <h2 class="detail-section-title">Developer</h2>
+              <div class="card" style="max-width:480px;margin-bottom:var(--space-6);">
+                <div class="card-header">
+                  <h3 class="card-name">${dev.name}</h3>
+                  ${dev.badge ? `<span class="badge badge--featured">${dev.badge}</span>` : ''}
+                </div>
+                ${renderGoogleRating(dev.google_rating, dev.google_review_count)}
+                <p class="card-desc">${dev.short_description_en}</p>
+                <div class="card-actions">
+                  <button class="btn btn--secondary btn--sm" onclick="navigate('developer/${dev.slug}')">View Developer</button>
+                </div>
+              </div>
+            ` : ''}
+          </div>
+
+          <div class="detail-sidebar">
+            <div class="detail-card">
+              <div class="detail-card-title">Request Information</div>
+              <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4);max-width:none;">Get full project details, floor plans, and pricing direct from the developer.</p>
+              ${p.info_contact_whatsapp ? `<a href="https://wa.me/${p.info_contact_whatsapp}" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--full">${iconWhatsApp()} Request Info via WhatsApp</a>` : ''}
+              ${p.website_url ? `<a href="${p.website_url}" target="_blank" rel="noopener noreferrer" class="btn btn--secondary btn--full" style="margin-top:var(--space-2);">${iconGlobe()} Project Website ${iconExternalLink()}</a>` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// =====================================================
+// RENDER: GUIDES
+// =====================================================
+
+function renderGuideCard(g, index = 0) {
+  return `
+    <article class="guide-card card-animate" style="animation-delay:${index * 50}ms" onclick="navigate('guide/${g.slug}')" tabindex="0" role="button" aria-label="Read: ${g.title}" onkeydown="if(event.key==='Enter')navigate('guide/${g.slug}')">
+      <div class="guide-category">${g.category}</div>
+      <h3 class="guide-title">${g.title}</h3>
+      <p class="guide-excerpt">${g.excerpt}</p>
+      <div class="guide-meta">
+        <span>${g.read_time}</span>
+        <span style="margin-left:auto;color:var(--color-primary);font-weight:500;display:flex;align-items:center;gap:var(--space-1);">Read ${iconArrowRight()}</span>
+      </div>
+    </article>
+  `;
+}
+
+async function renderGuides(el) {
+  let guides = [];
+  try {
+    guides = await DataLayer.getGuides();
+  } catch(e) { console.error('Failed to load guides:', e); }
+
+  el.innerHTML = `
+    <div class="page-header">
+      <div class="container">
+        <div class="page-header-breadcrumb">
+          <a href="#home" onclick="navigate('home');return false;">Home</a>
+          <span>/</span>
+          <span>Guides</span>
+        </div>
+        <h1 class="page-title">Building & Investment Guides</h1>
+        <p class="page-desc">Practical guidance for foreign investors and builders navigating Lombok's property and construction landscape.</p>
+      </div>
+    </div>
+    <div class="section">
+      <div class="container">
+        <div class="card-grid">
+          ${guides.map((g, i) => renderGuideCard(g, i)).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+  requestAnimationFrame(() => animateCards(el));
+}
+
+async function renderGuideDetail(el, slug) {
+  let g;
+  try {
+    g = await DataLayer.getGuide(slug);
+  } catch(e) { console.error('Failed to load guide:', e); }
+  if (!g) { el.innerHTML = renderNotFound('Guide'); return; }
+
+  let otherGuides = [];
+  try {
+    const all = await DataLayer.getGuides();
+    otherGuides = all.filter(og => og.slug !== g.slug);
+  } catch(e) {}
+
+  el.innerHTML = `
+    <div class="page-header">
+      <div class="container">
+        <div class="page-header-breadcrumb">
+          <a href="#home" onclick="navigate('home');return false;">Home</a>
+          <span>/</span>
+          <a href="#guides" onclick="navigate('guides');return false;">Guides</a>
+          <span>/</span>
+          <span>${g.category}</span>
+        </div>
+        <div class="guide-category mb-3">${g.category} · ${g.read_time}</div>
+        <h1 class="page-title">${g.title}</h1>
+      </div>
+    </div>
+    <div class="section">
+      <div class="container">
+        <div class="detail-layout">
+          <article class="guide-article">
+            ${g.content}
+          </article>
+          <div class="detail-sidebar">
+            <div class="detail-card">
+              <div class="detail-card-title">More Guides</div>
+              <div style="display:flex;flex-direction:column;gap:var(--space-3);">
+                ${otherGuides.map(og => `
+                  <button onclick="navigate('guide/${og.slug}')" style="text-align:left;padding:var(--space-3);border-radius:var(--radius-md);background:var(--color-surface-offset);border:1px solid var(--color-border);cursor:pointer;transition:background var(--transition-interactive);" onmouseover="this.style.background='var(--color-surface-dynamic)'" onmouseout="this.style.background='var(--color-surface-offset)'">
+                    <div style="font-size:var(--text-xs);color:var(--color-primary);font-weight:600;margin-bottom:var(--space-1);">${og.category}</div>
+                    <div style="font-size:var(--text-sm);font-family:var(--font-display);color:var(--color-text);line-height:1.3;">${og.title}</div>
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+            <div class="help-cta" style="padding:var(--space-5);">
+              <h3 class="help-cta-title" style="font-size:var(--text-base);">Find the right builder</h3>
+              <p class="help-cta-desc" style="font-size:var(--text-xs);">Browse our directory of verified contractors, architects, and specialists.</p>
+              <button onclick="navigate('directory')" class="btn btn--primary btn--sm">Browse Directory</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// =====================================================
+// UTILITY RENDERS
+// =====================================================
+
+function renderNotFound(type) {
+  return `
+    <div class="section">
+      <div class="container">
+        <div class="empty-state">
+          <div class="empty-state-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </div>
+          <h2 class="empty-state-title">${type} not found</h2>
+          <p class="empty-state-desc">The page you're looking for doesn't exist or has been removed.</p>
+          <button onclick="navigate('home')" class="btn btn--primary">Back to home</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function animateCards(container) {
+  container.querySelectorAll('.card-animate').forEach((card, i) => {
+    card.style.animationDelay = `${i * 45}ms`;
+    card.classList.remove('card-animate');
+    void card.offsetWidth;
+    card.classList.add('card-animate');
+  });
+}
+
+// =====================================================
+// GLOBAL SEARCH
+// =====================================================
+
+function initSearch() {
+  const inputs = document.querySelectorAll('.nav-search-input, #hero-search');
+  const wrapper = document.querySelector('.nav-search-wrapper');
+  if (!wrapper) return;
+
+  let dropdown = wrapper.querySelector('.search-dropdown');
+  if (!dropdown) {
+    dropdown = document.createElement('div');
+    dropdown.className = 'search-dropdown';
+    wrapper.appendChild(dropdown);
+  }
+
+  inputs.forEach(input => {
+    input.addEventListener('input', async () => {
+      const q = input.value.trim().toLowerCase();
+      if (q.length < 2) { dropdown.classList.remove('visible'); return; }
+
+      let provMatches = [], devMatches = [], projMatches = [];
+      try {
+        const results = await DataLayer.search(q);
+        provMatches = results.filter(r => r.type === 'provider').slice(0, 3);
+        devMatches = results.filter(r => r.type === 'developer').slice(0, 2);
+        projMatches = results.filter(r => r.type === 'project').slice(0, 2);
+      } catch(e) { console.error('Search error:', e); }
+
+      const total = provMatches.length + devMatches.length + projMatches.length;
+
+      if (total === 0) {
+        dropdown.innerHTML = `<div class="search-no-results">No results for "<strong>${q}</strong>"</div>`;
+      } else {
+        let html = '';
+        if (provMatches.length) {
+          html += `<div class="search-group-label">Providers</div>`;
+          html += provMatches.map(b => `
+            <div class="search-result-item" data-nav="provider/${b.slug}" tabindex="0">
+              <div>
+                <div class="search-result-item-name">${b.name}</div>
+                <div class="search-result-item-meta">${b.excerpt || ''}</div>
+              </div>
+            </div>
+          `).join('');
+        }
+        if (devMatches.length) {
+          html += `<div class="search-group-label">Developers</div>`;
+          html += devMatches.map(d => `
+            <div class="search-result-item" data-nav="developer/${d.slug}" tabindex="0">
+              <div>
+                <div class="search-result-item-name">${d.name}</div>
+                <div class="search-result-item-meta">${d.excerpt || ''}</div>
+              </div>
+            </div>
+          `).join('');
+        }
+        if (projMatches.length) {
+          html += `<div class="search-group-label">Projects</div>`;
+          html += projMatches.map(p => `
+            <div class="search-result-item" data-nav="project/${p.slug}" tabindex="0">
+              <div>
+                <div class="search-result-item-name">${p.name}</div>
+                <div class="search-result-item-meta">${p.excerpt || ''}</div>
+              </div>
+            </div>
+          `).join('');
+        }
+        dropdown.innerHTML = html;
+      }
+
+      // Fix onclick references
+      dropdown.querySelectorAll('.search-result-item').forEach(item => {
+        item.addEventListener('click', function() {
+          const nav = this.getAttribute('data-nav');
+          if (nav) navigate(nav);
+          inputs.forEach(i => i.value = '');
+          if (dropdown) dropdown.classList.remove('visible');
+        });
+      });
+
+      dropdown.classList.add('visible');
+    });
+
+    input.addEventListener('blur', () => {
+      setTimeout(() => dropdown.classList.remove('visible'), 200);
+    });
+  });
+
+  document.addEventListener('click', e => {
+    if (!wrapper.contains(e.target)) dropdown.classList.remove('visible');
+  });
+
+  // Mobile search: Enter key navigates to directory with search
+  const mobileSearch = document.getElementById('mobile-search');
+  if (mobileSearch) {
+    mobileSearch.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const q = mobileSearch.value.trim();
+        if (q.length >= 2) {
+          // Close mobile menu
+          const mobileMenu = document.getElementById('mobile-menu');
+          const hamburger = document.getElementById('hamburger-btn');
+          if (mobileMenu) mobileMenu.classList.remove('open');
+          if (hamburger) hamburger.setAttribute('aria-expanded', 'false');
+          // Navigate to directory with search
+          window.location.hash = 'directory?search=' + encodeURIComponent(q);
+          mobileSearch.value = '';
+        }
+      }
+    });
+  }
+}
+
+// =====================================================
+// USER AUTH LAYER
+// =====================================================
+
+const UserAuth = (() => {
+  const API = '/api/user.php';
+  let currentUser = null;
+  let userFavs = new Set(); // 'provider:5', 'developer:3', etc.
+
+  async function apiCall(action, data = null) {
+    const url = `${API}?action=${action}`;
+    const opts = { credentials: 'include' };
+    if (data) {
+      opts.method = 'POST';
+      opts.headers = { 'Content-Type': 'application/json' };
+      opts.body = JSON.stringify(data);
+    }
+    const res = await fetch(url, opts);
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Request failed');
+    return json;
+  }
+
+  async function checkSession() {
+    try {
+      const res = await apiCall('me');
+      currentUser = res.user;
+      if (currentUser) await loadFavorites();
+      updateUI();
+    } catch(e) { currentUser = null; updateUI(); }
+  }
+
+  async function loadFavorites() {
+    if (!currentUser) return;
+    try {
+      const res = await apiCall('favorites');
+      userFavs.clear();
+      (res.data || []).forEach(f => userFavs.add(`${f.entity_type}:${f.entity_id}`));
+    } catch(e) { /* silent */ }
+  }
+
+  function isFavorited(type, id) {
+    return userFavs.has(`${type}:${id}`);
+  }
+
+  async function toggleFavorite(type, id) {
+    if (!currentUser) { showAuthModal('login'); return; }
+    try {
+      const res = await apiCall('toggle_fav', { entity_type: type, entity_id: id });
+      if (res.favorited) { userFavs.add(`${type}:${id}`); }
+      else { userFavs.delete(`${type}:${id}`); }
+      // Update any visible fav buttons
+      document.querySelectorAll(`[data-fav="${type}:${id}"]`).forEach(btn => {
+        btn.classList.toggle('favorited', res.favorited);
+        btn.innerHTML = res.favorited ? iconHeartFilled() : iconHeartOutline();
+      });
+    } catch(e) { alert(e.message); }
+  }
+
+  function updateUI() {
+    const navActions = document.querySelector('.nav-actions');
+    if (!navActions) return;
+    // Remove existing user elements
+    navActions.querySelectorAll('.user-menu-wrap, .login-btn').forEach(el => el.remove());
+
+    if (currentUser) {
+      const initials = currentUser.display_name.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+      const wrap = document.createElement('div');
+      wrap.className = 'user-menu-wrap';
+      wrap.innerHTML = `
+        <button class="user-avatar-btn" aria-label="User menu">${initials}</button>
+        <div class="user-dropdown" id="user-dropdown">
+          <div class="user-dropdown-header">
+            <div class="user-dropdown-name">${currentUser.display_name}</div>
+            <div class="user-dropdown-email">${currentUser.email}</div>
+          </div>
+          <button class="user-dropdown-item" onclick="navigate('account');document.getElementById('user-dropdown').classList.remove('open');">My Account</button>
+          <button class="user-dropdown-item" onclick="navigate('account?tab=favorites');document.getElementById('user-dropdown').classList.remove('open');">My Favorites</button>
+          <button class="user-dropdown-item" onclick="navigate('submit-listing');document.getElementById('user-dropdown').classList.remove('open');">Submit a Listing</button>
+          <button class="user-dropdown-item user-dropdown-item--danger" onclick="UserAuth.logout()">Log Out</button>
+        </div>
+      `;
+      navActions.insertBefore(wrap, navActions.firstChild);
+      // Toggle dropdown
+      wrap.querySelector('.user-avatar-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        document.getElementById('user-dropdown').classList.toggle('open');
+      });
+      document.addEventListener('click', () => {
+        const dd = document.getElementById('user-dropdown');
+        if (dd) dd.classList.remove('open');
+      });
+    } else {
+      const btn = document.createElement('button');
+      btn.className = 'btn-icon login-btn';
+      btn.setAttribute('aria-label', 'Sign in');
+      btn.title = 'Sign in';
+      btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+      btn.addEventListener('click', () => showAuthModal('login'));
+      navActions.insertBefore(btn, navActions.firstChild);
+    }
+
+    // Update mobile menu
+    const mobileMenu = document.getElementById('mobile-menu');
+    if (mobileMenu) {
+      mobileMenu.querySelectorAll('.mobile-auth-link').forEach(el => el.remove());
+      const lastDiv = mobileMenu.querySelector('div[style*="margin-top:auto"]');
+      if (currentUser) {
+        const links = document.createElement('div');
+        links.className = 'mobile-auth-link';
+        links.innerHTML = `
+          <a href="#account" onclick="navigate('account');return false;">My Account</a>
+          <a href="#account?tab=favorites" onclick="navigate('account?tab=favorites');return false;">My Favorites</a>
+          <a href="#submit-listing" onclick="navigate('submit-listing');return false;">Submit a Listing</a>
+        `;
+        if (lastDiv) mobileMenu.insertBefore(links, lastDiv);
+      } else {
+        const link = document.createElement('div');
+        link.className = 'mobile-auth-link';
+        link.innerHTML = `<a href="#" onclick="showAuthModal('login');return false;">Sign In / Register</a>`;
+        if (lastDiv) mobileMenu.insertBefore(link, lastDiv);
+      }
+    }
+  }
+
+  return {
+    get user() { return currentUser; },
+    checkSession,
+    loadFavorites,
+    isFavorited,
+    toggleFavorite,
+    apiCall,
+    updateUI,
+    async login(email, password) {
+      const res = await apiCall('login', { email, password });
+      currentUser = res.user;
+      await loadFavorites();
+      updateUI();
+      return res;
+    },
+    async register(email, password, display_name) {
+      return await apiCall('register', { email, password, display_name });
+    },
+    async logout() {
+      try { await apiCall('logout'); } catch(e) {}
+      currentUser = null;
+      userFavs.clear();
+      updateUI();
+      navigate('home');
+    },
+    async forgotPassword(email) {
+      return await apiCall('forgot_password', { email });
+    },
+    async resetPassword(token, password) {
+      return await apiCall('reset_password', { token, password });
+    },
+  };
+})();
+
+// Icons for favorites
+function iconHeartOutline() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>`;
+}
+function iconHeartFilled() {
+  return `<svg viewBox="0 0 24 24" fill="#ef4444" stroke="#ef4444" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>`;
+}
+
+// =====================================================
+// AUTH MODAL
+// =====================================================
+
+function showAuthModal(mode = 'login') {
+  // Remove existing
+  document.querySelectorAll('.auth-overlay').forEach(el => el.remove());
+
+  const overlay = document.createElement('div');
+  overlay.className = 'auth-overlay';
+
+  function renderLogin() {
+    overlay.innerHTML = `
+      <div class="auth-modal">
+        <button class="auth-modal-close" onclick="this.closest('.auth-overlay').classList.remove('visible');setTimeout(()=>this.closest('.auth-overlay').remove(),200)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <h2>Sign In</h2>
+        <p class="auth-subtitle">Access your favorites, claim listings, and more.</p>
+        <div class="auth-error" id="auth-error"></div>
+        <form class="auth-form" id="auth-form">
+          <div class="auth-field">
+            <label for="auth-email">Email</label>
+            <input type="email" id="auth-email" required autocomplete="email">
+          </div>
+          <div class="auth-field">
+            <label for="auth-pass">Password</label>
+            <input type="password" id="auth-pass" required autocomplete="current-password">
+          </div>
+          <button type="submit" class="auth-submit">Sign In</button>
+        </form>
+        <div style="text-align:center;margin-top:var(--space-3)">
+          <button onclick="authForgotPassword()" style="background:none;border:none;color:var(--color-primary);font-size:var(--text-xs);cursor:pointer;font-family:var(--font-body)">Forgot password?</button>
+        </div>
+        <div class="auth-switch">Don't have an account? <button onclick="authSwitchToRegister()">Create one</button></div>
+      </div>
+    `;
+    overlay.querySelector('#auth-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errEl = overlay.querySelector('#auth-error');
+      const btn = overlay.querySelector('.auth-submit');
+      btn.disabled = true; btn.textContent = 'Signing in...';
+      errEl.classList.remove('visible');
+      try {
+        await UserAuth.login(
+          overlay.querySelector('#auth-email').value,
+          overlay.querySelector('#auth-pass').value
+        );
+        overlay.classList.remove('visible');
+        setTimeout(() => overlay.remove(), 200);
+        // Refresh current page to show favorites, etc.
+        router();
+      } catch(err) {
+        errEl.textContent = err.message;
+        errEl.classList.add('visible');
+        btn.disabled = false; btn.textContent = 'Sign In';
+      }
+    });
+  }
+
+  function renderRegister() {
+    overlay.innerHTML = `
+      <div class="auth-modal">
+        <button class="auth-modal-close" onclick="this.closest('.auth-overlay').classList.remove('visible');setTimeout(()=>this.closest('.auth-overlay').remove(),200)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <h2>Create Account</h2>
+        <p class="auth-subtitle">Join Build in Lombok to save favorites and manage listings.</p>
+        <div class="auth-error" id="auth-error"></div>
+        <div class="auth-success" id="auth-success"></div>
+        <form class="auth-form" id="auth-form">
+          <div class="auth-field">
+            <label for="auth-name">Display Name</label>
+            <input type="text" id="auth-name" required minlength="2" autocomplete="name">
+          </div>
+          <div class="auth-field">
+            <label for="auth-email">Email</label>
+            <input type="email" id="auth-email" required autocomplete="email">
+          </div>
+          <div class="auth-field">
+            <label for="auth-pass">Password</label>
+            <input type="password" id="auth-pass" required minlength="8" autocomplete="new-password">
+          </div>
+          <button type="submit" class="auth-submit">Create Account</button>
+        </form>
+        <div class="auth-switch">Already have an account? <button onclick="authSwitchToLogin()">Sign in</button></div>
+      </div>
+    `;
+    overlay.querySelector('#auth-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errEl = overlay.querySelector('#auth-error');
+      const sucEl = overlay.querySelector('#auth-success');
+      const btn = overlay.querySelector('.auth-submit');
+      btn.disabled = true; btn.textContent = 'Creating...';
+      errEl.classList.remove('visible'); sucEl.classList.remove('visible');
+      try {
+        const res = await UserAuth.register(
+          overlay.querySelector('#auth-email').value,
+          overlay.querySelector('#auth-pass').value,
+          overlay.querySelector('#auth-name').value
+        );
+        sucEl.textContent = res.message;
+        sucEl.classList.add('visible');
+        overlay.querySelector('#auth-form').style.display = 'none';
+      } catch(err) {
+        errEl.textContent = err.message;
+        errEl.classList.add('visible');
+        btn.disabled = false; btn.textContent = 'Create Account';
+      }
+    });
+  }
+
+  window.authSwitchToRegister = function() { renderRegister(); };
+  window.authSwitchToLogin = function() { renderLogin(); };
+  window.authForgotPassword = function() {
+    overlay.innerHTML = `
+      <div class="auth-modal">
+        <button class="auth-modal-close" onclick="this.closest('.auth-overlay').classList.remove('visible');setTimeout(()=>this.closest('.auth-overlay').remove(),200)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <h2>Reset Password</h2>
+        <p class="auth-subtitle">Enter your email and we'll send a reset link.</p>
+        <div class="auth-error" id="auth-error"></div>
+        <div class="auth-success" id="auth-success"></div>
+        <form class="auth-form" id="auth-form">
+          <div class="auth-field">
+            <label for="auth-email">Email</label>
+            <input type="email" id="auth-email" required autocomplete="email">
+          </div>
+          <button type="submit" class="auth-submit">Send Reset Link</button>
+        </form>
+        <div class="auth-switch"><button onclick="authSwitchToLogin()">Back to sign in</button></div>
+      </div>
+    `;
+    overlay.querySelector('#auth-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = overlay.querySelector('.auth-submit');
+      const sucEl = overlay.querySelector('#auth-success');
+      btn.disabled = true;
+      try {
+        const res = await UserAuth.forgotPassword(overlay.querySelector('#auth-email').value);
+        sucEl.textContent = res.message;
+        sucEl.classList.add('visible');
+        overlay.querySelector('#auth-form').style.display = 'none';
+      } catch(err) {
+        overlay.querySelector('#auth-error').textContent = err.message;
+        overlay.querySelector('#auth-error').classList.add('visible');
+        btn.disabled = false;
+      }
+    });
+  };
+
+  if (mode === 'register') renderRegister();
+  else renderLogin();
+
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('visible'));
+
+  // Close on overlay click
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      overlay.classList.remove('visible');
+      setTimeout(() => overlay.remove(), 200);
+    }
+  });
+}
+
+// =====================================================
+// FAVORITE BUTTON HELPER
+// =====================================================
+
+function renderFavBtn(entityType, entityId) {
+  const faved = UserAuth.isFavorited(entityType, entityId);
+  return `<button class="fav-btn ${faved ? 'favorited' : ''}" data-fav="${entityType}:${entityId}" onclick="UserAuth.toggleFavorite('${entityType}', ${entityId})" aria-label="${faved ? 'Remove from' : 'Add to'} favorites" title="${faved ? 'Remove from' : 'Add to'} favorites">${faved ? iconHeartFilled() : iconHeartOutline()}</button>`;
+}
+
+// Google Review link helper
+function renderGoogleReviewBtn(google_maps_url) {
+  if (!google_maps_url) return '';
+  // Google review URL: append /review to the maps URL or use direct link
+  const reviewUrl = google_maps_url;
+  return `<a href="${reviewUrl}" target="_blank" rel="noopener noreferrer" class="review-google-btn">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>
+    Write a Review on Google
+  </a>`;
+}
+
+
+// =====================================================
+// RENDER: MY ACCOUNT PAGE
+// =====================================================
+
+async function renderAccount(el, params = {}) {
+  if (!UserAuth.user) {
+    showAuthModal('login');
+    navigate('home');
+    return;
+  }
+  const user = UserAuth.user;
+  const activeTab = params.tab || 'favorites';
+
+  let favsHtml = '<p style="color:var(--color-text-muted);font-size:var(--text-sm)">Loading...</p>';
+  let claimsHtml = favsHtml;
+  let subsHtml = favsHtml;
+
+  el.innerHTML = `
+    <div class="page-header">
+      <div class="container">
+        <div class="page-header-breadcrumb">
+          <a href="#home" onclick="navigate('home');return false;">Home</a>
+          <span>/</span>
+          <span>My Account</span>
+        </div>
+        <h1 class="page-title">Welcome, ${user.display_name}</h1>
+      </div>
+    </div>
+    <div class="section">
+      <div class="container">
+        <div class="account-tabs">
+          <button class="account-tab ${activeTab==='favorites'?'active':''}" onclick="switchAccountTab('favorites')">Favorites</button>
+          <button class="account-tab ${activeTab==='claims'?'active':''}" onclick="switchAccountTab('claims')">My Claims</button>
+          <button class="account-tab ${activeTab==='submissions'?'active':''}" onclick="switchAccountTab('submissions')">My Submissions</button>
+          <button class="account-tab ${activeTab==='profile'?'active':''}" onclick="switchAccountTab('profile')">Profile</button>
+        </div>
+        <div class="account-section ${activeTab==='favorites'?'active':''}" id="tab-favorites"></div>
+        <div class="account-section ${activeTab==='claims'?'active':''}" id="tab-claims"></div>
+        <div class="account-section ${activeTab==='submissions'?'active':''}" id="tab-submissions"></div>
+        <div class="account-section ${activeTab==='profile'?'active':''}" id="tab-profile">
+          <div class="card" style="max-width:480px;">
+            <h3 style="font-family:var(--font-display);margin-bottom:var(--space-4)">Profile</h3>
+            <div class="info-list">
+              <div class="info-row"><span class="info-label">Email</span><span class="info-value">${user.email}</span></div>
+              <div class="info-row"><span class="info-label">Name</span><span class="info-value">${user.display_name}</span></div>
+              <div class="info-row"><span class="info-label">Member since</span><span class="info-value">${new Date(user.created_at).toLocaleDateString()}</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  window.switchAccountTab = function(tab) {
+    el.querySelectorAll('.account-tab').forEach(t => t.classList.toggle('active', t.textContent.toLowerCase().includes(tab)));
+    el.querySelectorAll('.account-section').forEach(s => s.classList.remove('active'));
+    const target = document.getElementById('tab-' + tab);
+    if (target) target.classList.add('active');
+  };
+
+  // Load favorites
+  try {
+    const res = await UserAuth.apiCall('favorites');
+    const favs = res.data || [];
+    const favEl = document.getElementById('tab-favorites');
+    if (favEl) {
+      if (favs.length === 0) {
+        favEl.innerHTML = `<div class="empty-state"><div class="empty-state-icon">${iconHeartOutline()}</div><h3 class="empty-state-title">No favorites yet</h3><p class="empty-state-desc">Browse the directory and tap the heart icon to save listings.</p><button class="btn btn--primary btn--sm" onclick="navigate('directory')">Browse Directory</button></div>`;
+      } else {
+        favEl.innerHTML = favs.map(f => {
+          const route = f.entity_type === 'provider' ? 'provider' : f.entity_type === 'developer' ? 'developer' : 'project';
+          return `<div class="fav-list-item">
+            <span class="fav-type">${f.entity_type}</span>
+            <a href="#${route}/${f.entity_slug}" onclick="navigate('${route}/${f.entity_slug}');return false;" style="flex:1;font-weight:500">${f.entity_name || 'Unknown'}</a>
+            <button class="fav-btn favorited" onclick="UserAuth.toggleFavorite('${f.entity_type}', ${f.entity_id});this.closest('.fav-list-item').remove();" title="Remove">${iconHeartFilled()}</button>
+          </div>`;
+        }).join('');
+      }
+    }
+  } catch(e) { /* silent */ }
+
+  // Load claims
+  try {
+    const res = await UserAuth.apiCall('my_claims');
+    const claims = res.data || [];
+    const clEl = document.getElementById('tab-claims');
+    if (clEl) {
+      if (claims.length === 0) {
+        clEl.innerHTML = '<p style="color:var(--color-text-muted);font-size:var(--text-sm)">You haven\'t claimed any listings yet. Visit a provider page to claim it.</p>';
+      } else {
+        clEl.innerHTML = claims.map(c => `
+          <div class="card" style="margin-bottom:var(--space-3)">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <strong>${c.provider_name}</strong>
+              <span class="claim-status claim-status--${c.status}">${c.status}</span>
+            </div>
+            <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin-top:var(--space-1)">Submitted: ${new Date(c.created_at).toLocaleDateString()} &middot; Role: ${c.business_role}</p>
+            ${c.admin_notes ? `<p style="font-size:var(--text-xs);margin-top:var(--space-1)"><strong>Admin:</strong> ${c.admin_notes}</p>` : ''}
+          </div>
+        `).join('');
+      }
+    }
+  } catch(e) { /* silent */ }
+
+  // Load submissions
+  try {
+    const res = await UserAuth.apiCall('my_submissions');
+    const subs = res.data || [];
+    const subEl = document.getElementById('tab-submissions');
+    if (subEl) {
+      if (subs.length === 0) {
+        subEl.innerHTML = `<p style="color:var(--color-text-muted);font-size:var(--text-sm)">No submissions yet. <button onclick="navigate('submit-listing')" style="color:var(--color-primary);font-weight:600;background:none;border:none;cursor:pointer;font-size:inherit;font-family:inherit">Submit a new listing</button></p>`;
+      } else {
+        subEl.innerHTML = subs.map(s => `
+          <div class="card" style="margin-bottom:var(--space-3)">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <strong>${s.business_name}</strong>
+              <span class="claim-status claim-status--${s.status}">${s.status}</span>
+            </div>
+            <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin-top:var(--space-1)">Submitted: ${new Date(s.created_at).toLocaleDateString()}</p>
+            ${s.admin_notes ? `<p style="font-size:var(--text-xs);margin-top:var(--space-1)"><strong>Admin:</strong> ${s.admin_notes}</p>` : ''}
+          </div>
+        `).join('');
+      }
+    }
+  } catch(e) { /* silent */ }
+}
+
+// =====================================================
+// RENDER: SUBMIT LISTING PAGE
+// =====================================================
+
+async function renderSubmitListing(el) {
+  if (!UserAuth.user) {
+    showAuthModal('login');
+    navigate('home');
+    return;
+  }
+
+  const categoryTree = {
+    builders_trades: [
+      { key: 'general_contractor', label: 'General Contractor' },
+      { key: 'carpenter', label: 'Carpenter / Joiner' },
+      { key: 'mason', label: 'Mason / Concrete Worker' },
+      { key: 'plumber', label: 'Plumber' },
+      { key: 'electrician', label: 'Electrician' },
+      { key: 'painter', label: 'Painter / Finisher' },
+      { key: 'tiler', label: 'Tiler' },
+      { key: 'roofer', label: 'Roofer' },
+    ],
+    professional_services: [
+      { key: 'architect', label: 'Architect' },
+      { key: 'interior_designer', label: 'Interior Designer' },
+      { key: 'structural_engineer', label: 'Structural Engineer' },
+      { key: 'project_manager', label: 'Project Manager' },
+    ],
+    specialist_contractors: [
+      { key: 'pool_contractor', label: 'Pool Builder' },
+      { key: 'solar_installer', label: 'Solar Installer' },
+      { key: 'waterproofing', label: 'Waterproofing' },
+      { key: 'landscaping_contractor', label: 'Landscaping' },
+    ],
+    suppliers_materials: [
+      { key: 'building_materials_store', label: 'Building Materials' },
+      { key: 'timber_workshop', label: 'Timber Workshop' },
+    ],
+  };
+
+  el.innerHTML = `
+    <div class="page-header">
+      <div class="container">
+        <div class="page-header-breadcrumb">
+          <a href="#home" onclick="navigate('home');return false;">Home</a>
+          <span>/</span>
+          <span>Submit a Listing</span>
+        </div>
+        <h1 class="page-title">Submit Your Business</h1>
+        <p class="page-desc">Add your company to the Build in Lombok directory. Submissions are reviewed before going live.</p>
+      </div>
+    </div>
+    <div class="section">
+      <div class="container container--narrow">
+        <div class="auth-error" id="submit-error"></div>
+        <div class="auth-success" id="submit-success"></div>
+        <form class="submit-form" id="submit-form">
+          <div class="auth-field">
+            <label>Business Name *</label>
+            <input type="text" name="business_name" required>
+          </div>
+          <div class="form-row">
+            <div class="auth-field">
+              <label>Group *</label>
+              <select name="group_key" id="sl-group" required>
+                <option value="">Select group...</option>
+                <option value="builders_trades">Builders & Trades</option>
+                <option value="professional_services">Professional Services</option>
+                <option value="specialist_contractors">Specialist Contractors</option>
+                <option value="suppliers_materials">Suppliers & Materials</option>
+              </select>
+            </div>
+            <div class="auth-field">
+              <label>Area *</label>
+              <select name="area_key" required>
+                <option value="">Select area...</option>
+                <option value="kuta">Kuta / Mandalika</option>
+                <option value="selong_belanak">Selong Belanak</option>
+                <option value="senggigi">Senggigi</option>
+                <option value="ekas">Ekas Bay</option>
+                <option value="mataram">Mataram</option>
+                <option value="other_lombok">Other Lombok</option>
+              </select>
+            </div>
+          </div>
+          <div class="auth-field">
+            <label>Specialties * (hold Ctrl/Cmd for multiple)</label>
+            <select name="category_keys" id="sl-cats" multiple required style="min-height:120px"></select>
+          </div>
+          <div class="auth-field">
+            <label>Short Description *</label>
+            <textarea name="short_description" required maxlength="500" placeholder="Briefly describe what your business does..."></textarea>
+          </div>
+          <div class="form-row">
+            <div class="auth-field">
+              <label>Phone</label>
+              <input type="text" name="phone" placeholder="+62...">
+            </div>
+            <div class="auth-field">
+              <label>WhatsApp Number</label>
+              <input type="text" name="whatsapp_number" placeholder="628...">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="auth-field">
+              <label>Website</label>
+              <input type="url" name="website_url" placeholder="https://...">
+            </div>
+            <div class="auth-field">
+              <label>Google Maps Link</label>
+              <input type="url" name="google_maps_url" placeholder="https://maps.google.com/...">
+            </div>
+          </div>
+          <div class="auth-field">
+            <label>Address</label>
+            <input type="text" name="address" placeholder="Street address...">
+          </div>
+          <div class="auth-field">
+            <label>Languages</label>
+            <select name="languages">
+              <option value="Bahasa only">Bahasa only</option>
+              <option value="Bahasa + English">Bahasa + English</option>
+              <option value="Bahasa + English + Other">Bahasa + English + Other</option>
+            </select>
+          </div>
+          <button type="submit" class="auth-submit" style="align-self:flex-start">Submit Listing for Review</button>
+        </form>
+      </div>
+    </div>
+  `;
+
+  // Cascading category dropdown
+  const groupSel = el.querySelector('#sl-group');
+  const catSel = el.querySelector('#sl-cats');
+  function updateCats() {
+    const group = groupSel.value;
+    catSel.innerHTML = '';
+    const cats = group && categoryTree[group] ? categoryTree[group] : Object.values(categoryTree).flat();
+    cats.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.key; opt.textContent = c.label;
+      catSel.appendChild(opt);
+    });
+  }
+  groupSel.addEventListener('change', updateCats);
+  updateCats();
+
+  // Submit
+  el.querySelector('#submit-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const btn = form.querySelector('.auth-submit');
+    const errEl = document.getElementById('submit-error');
+    const sucEl = document.getElementById('submit-success');
+    btn.disabled = true; btn.textContent = 'Submitting...';
+    errEl.classList.remove('visible'); sucEl.classList.remove('visible');
+
+    const fd = new FormData(form);
+    const data = {};
+    fd.forEach((v, k) => {
+      if (k === 'category_keys') {
+        if (!data[k]) data[k] = [];
+        data[k].push(v);
+      } else {
+        data[k] = v;
+      }
+    });
+    // Get all selected options for multi-select
+    const selectedCats = [...catSel.selectedOptions].map(o => o.value);
+    data.category_keys = selectedCats;
+
+    try {
+      const res = await UserAuth.apiCall('submit_listing', data);
+      sucEl.textContent = res.message;
+      sucEl.classList.add('visible');
+      form.style.display = 'none';
+    } catch(err) {
+      errEl.textContent = err.message;
+      errEl.classList.add('visible');
+      btn.disabled = false; btn.textContent = 'Submit Listing for Review';
+    }
+  });
+}
+
+// =====================================================
+// RENDER: CLAIM LISTING MODAL
+// =====================================================
+
+function showClaimModal(providerId, providerName) {
+  if (!UserAuth.user) { showAuthModal('login'); return; }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'auth-overlay';
+  overlay.innerHTML = `
+    <div class="auth-modal">
+      <button class="auth-modal-close" onclick="this.closest('.auth-overlay').classList.remove('visible');setTimeout(()=>this.closest('.auth-overlay').remove(),200)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <h2>Claim This Listing</h2>
+      <p class="auth-subtitle">Prove you own or manage <strong>${providerName}</strong> to take control of this listing.</p>
+      <div class="auth-error" id="claim-error"></div>
+      <div class="auth-success" id="claim-success"></div>
+      <form class="auth-form" id="claim-form">
+        <div class="auth-field">
+          <label>Your Role at This Business *</label>
+          <input type="text" id="claim-role" required placeholder="e.g. Owner, Manager, Director">
+        </div>
+        <div class="auth-field">
+          <label>How Can You Prove Ownership? *</label>
+          <textarea id="claim-proof" required style="min-height:80px;resize:vertical;padding:var(--space-3) var(--space-4);border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:var(--text-sm);font-family:var(--font-body)" placeholder="e.g. I can provide business registration docs, Google My Business access, etc."></textarea>
+        </div>
+        <div class="auth-field">
+          <label>Contact Phone (optional)</label>
+          <input type="text" id="claim-phone" placeholder="+62...">
+        </div>
+        <button type="submit" class="auth-submit">Submit Claim</button>
+      </form>
+    </div>
+  `;
+
+  overlay.querySelector('#claim-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = overlay.querySelector('.auth-submit');
+    const errEl = overlay.querySelector('#claim-error');
+    const sucEl = overlay.querySelector('#claim-success');
+    btn.disabled = true; btn.textContent = 'Submitting...';
+    errEl.classList.remove('visible');
+    try {
+      const res = await UserAuth.apiCall('claim_listing', {
+        provider_id: providerId,
+        business_role: overlay.querySelector('#claim-role').value,
+        proof_description: overlay.querySelector('#claim-proof').value,
+        contact_phone: overlay.querySelector('#claim-phone').value,
+      });
+      sucEl.textContent = res.message;
+      sucEl.classList.add('visible');
+      overlay.querySelector('#claim-form').style.display = 'none';
+    } catch(err) {
+      errEl.textContent = err.message;
+      errEl.classList.add('visible');
+      btn.disabled = false; btn.textContent = 'Submit Claim';
+    }
+  });
+
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('visible'));
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) { overlay.classList.remove('visible'); setTimeout(() => overlay.remove(), 200); }
+  });
+}
+
+
+// =====================================================
+// RENDER: VERIFY RESULT / RESET PASSWORD PAGES
+// =====================================================
+
+function renderVerifyResult(el, params) {
+  const status = params.status || 'unknown';
+  const messages = {
+    success: { title: 'Email Verified', desc: 'Your email has been verified. You can now sign in.', ok: true },
+    already: { title: 'Already Verified', desc: 'This email was already verified. You can sign in.', ok: true },
+    expired: { title: 'Link Expired', desc: 'The verification link has expired. Please register again or contact support.', ok: false },
+    invalid: { title: 'Invalid Link', desc: 'This verification link is invalid. Please check your email or register again.', ok: false },
+  };
+  const m = messages[status] || { title: 'Verification', desc: 'Unknown status.', ok: false };
+  el.innerHTML = `
+    <div class="section">
+      <div class="container">
+        <div class="empty-state">
+          <div class="empty-state-icon" style="color:${m.ok ? '#16a34a' : '#dc2626'}">
+            ${m.ok ? '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>' : '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>'}
+          </div>
+          <h2 class="empty-state-title">${m.title}</h2>
+          <p class="empty-state-desc">${m.desc}</p>
+          ${m.ok ? '<button onclick="showAuthModal(\'login\')" class="btn btn--primary">Sign In</button>' : '<button onclick="navigate(\'home\')" class="btn btn--primary">Back to Home</button>'}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderResetPassword(el, params) {
+  const token = params.token || '';
+  el.innerHTML = `
+    <div class="section">
+      <div class="container container--narrow">
+        <div class="card" style="max-width:420px;margin:0 auto;padding:var(--space-8)">
+          <h2 style="font-family:var(--font-display);margin-bottom:var(--space-4)">Set New Password</h2>
+          <div class="auth-error" id="rp-error"></div>
+          <div class="auth-success" id="rp-success"></div>
+          <form class="auth-form" id="rp-form">
+            <div class="auth-field">
+              <label>New Password</label>
+              <input type="password" id="rp-pass" required minlength="8">
+            </div>
+            <button type="submit" class="auth-submit">Reset Password</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  `;
+  el.querySelector('#rp-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = el.querySelector('.auth-submit');
+    btn.disabled = true;
+    try {
+      const res = await UserAuth.resetPassword(token, el.querySelector('#rp-pass').value);
+      document.getElementById('rp-success').textContent = res.message;
+      document.getElementById('rp-success').classList.add('visible');
+      el.querySelector('#rp-form').style.display = 'none';
+    } catch(err) {
+      document.getElementById('rp-error').textContent = err.message;
+      document.getElementById('rp-error').classList.add('visible');
+      btn.disabled = false;
+    }
+  });
+}
+
+
+// =====================================================
+// INIT
+// =====================================================
+
+document.addEventListener('DOMContentLoaded', () => {
+  initApp();
+});
+
+// Also handle case where DOMContentLoaded already fired
+if (document.readyState === 'interactive' || document.readyState === 'complete') {
+  initApp();
+}
+
+function initApp() {
+  if (initApp._done) return;
+  initApp._done = true;
+  // Theme toggle
+  document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
+    const t = window.__getCurrentTheme();
+    btn.innerHTML = t === 'dark'
+      ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>`
+      : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
+    btn.addEventListener('click', window.__toggleTheme);
+  });
+
+  // Hamburger
+  const hamburger = document.getElementById('hamburger-btn');
+  const mobileMenu = document.getElementById('mobile-menu');
+  if (hamburger && mobileMenu) {
+    hamburger.addEventListener('click', () => {
+      const open = mobileMenu.classList.toggle('open');
+      hamburger.setAttribute('aria-expanded', open);
+    });
+    mobileMenu.querySelectorAll('a').forEach(a => {
+      a.addEventListener('click', () => {
+        mobileMenu.classList.remove('open');
+        hamburger.setAttribute('aria-expanded', 'false');
+      });
+    });
+  }
+
+  // Search
+  initSearch();
+
+  // Check user session
+  UserAuth.checkSession();
+
+  // Router
+  window.addEventListener('hashchange', router);
+  router();
+}

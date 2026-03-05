@@ -1,0 +1,24 @@
+# Deny directory listing
+Options -Indexes
+
+# Block all common bots/spiders beyond robots.txt
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # Block known bots that ignore robots.txt
+    RewriteCond %{HTTP_USER_AGENT} (bot|crawl|spider|slurp|archive|wget|curl|scrapy|semrush|ahrefs|mj12|dotbot|yandex|bingbot|googlebot) [NC]
+    RewriteRule ^ - [F,L]
+</IfModule>
+
+# Additional security headers
+<IfModule mod_headers.c>
+    Header set X-Robots-Tag "noindex, nofollow, noarchive, nosnippet"
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "DENY"
+</IfModule>
+
+# Prevent PHP files from being directly accessed by their source
+<FilesMatch "\.php$">
+    # Ensure PHP is processed, not served raw
+    SetHandler application/x-httpd-php
+</FilesMatch>

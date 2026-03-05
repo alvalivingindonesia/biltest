@@ -1,0 +1,6 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /api/
+
+# Build in Lombok — public pages only
+Sitemap: https://buildinlombok.com/sitemap.xml
