@@ -925,7 +925,8 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                 $name = trim($item['name']);
                 $slug = slugify($name);
                 $group = $item['group_key'];
-                $category = $item['category_key'];
+                $category_keys = $item['category_keys'] ?? [];
+                $category = $category_keys[0] ?? '';
                 $area = $item['area_key'] ?: 'mataram';
                 $short_desc = trim($item['short_description']);
                 $description = trim($item['description']) ?: $short_desc;
@@ -947,7 +948,7 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                 $profile_desc = trim($item['profile_description'] ?? '');
                 $languages = trim($item['languages'] ?? 'Bahasa only');
 
-                if (!$group || !$category) {
+                if (!$group || empty($category_keys)) {
                     $save_errors[] = "Skipped '{$name}': no category assigned.";
                     continue;
                 }
@@ -976,7 +977,9 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                     ]);
                     // Update junction table
                     $db->prepare("DELETE FROM provider_categories WHERE provider_id=?")->execute([$ex_id]);
-                    $insert_pcat->execute([$ex_id, $category]);
+                    foreach ($category_keys as $ckey) {
+                        if ($ckey) $insert_pcat->execute([$ex_id, $ckey]);
+                    }
                     $updated_count++;
                     continue;
                 }
@@ -1006,8 +1009,10 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
 
                 $provider_id = $db->lastInsertId();
 
-                // Write to junction table
-                $insert_pcat->execute([$provider_id, $category]);
+                // Write to junction table (all selected categories)
+                foreach ($category_keys as $ckey) {
+                    if ($ckey) $insert_pcat->execute([$provider_id, $ckey]);
+                }
 
                 if (!empty($item['gmaps_category'])) {
                     $insert_tag->execute([$provider_id, $item['gmaps_category']]);
@@ -1500,8 +1505,7 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
                 <td><span style="color:#666;font-size:0.8rem;"><?= htmlspecialchars($item['gmaps_category']) ?></span></td>
                 <?php if (($parsed['import_type'] ?? 'provider') === 'provider'): ?>
                 <td>
-                    <select class="small-select" name="items[<?= $idx ?>][category_key]" onchange="updateGroup(this, <?= $idx ?>)">
-                        <option value="">— Select —</option>
+                    <select class="small-select" name="items[<?= $idx ?>][category_keys][]" multiple size="3" style="min-width:180px;min-height:56px;" onchange="updateGroupMulti(this, <?= $idx ?>)">
                         <?php foreach ($flat_cats as $fc): ?>
                             <option value="<?= $fc['cat_key'] ?>"
                                     data-group="<?= $fc['group_key'] ?>"
@@ -1628,6 +1632,11 @@ function toggleAll(checked) {
 function updateGroup(sel, idx) {
     const opt = sel.options[sel.selectedIndex];
     const gk = opt ? opt.getAttribute('data-group') || '' : '';
+    document.getElementById('group_' + idx).value = gk;
+}
+function updateGroupMulti(sel, idx) {
+    const selected = Array.from(sel.selectedOptions);
+    const gk = selected.length ? (selected[0].getAttribute('data-group') || '') : '';
     document.getElementById('group_' + idx).value = gk;
 }
 </script>
