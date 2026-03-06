@@ -638,7 +638,7 @@ function parse_gmaps_html(string $html): array {
         $remaining = array_slice($texts, $field_start);
 
         foreach ($remaining as $idx => $t) {
-            if ($idx === 0 && !preg_match('/^(Jl\.|Gg\.|Jalan|Desa|\d|Open|Closed|·)/', $t)) {
+            if ($idx === 0 && !preg_match('/^(Jl\.|Gg\.|Jalan|Desa|\d|Open|Closed|Buka|Tutup|·)/', $t)) {
                 $gmaps_category = $t;
                 continue;
             }
@@ -660,12 +660,12 @@ function parse_gmaps_html(string $html): array {
 
         // ── Website URL ──
         $website_url = '';
-        // Method 1: "Website" action button (data-value="Website" ... href="...")
-        if (preg_match('/data-value="Website"[^>]*href="([^"]+)"/', $chunk, $ws_m)) {
+        // Method 1: action button (EN: data-value="Website", ID: data-value="Situs Web")
+        if (preg_match('/data-value="(?:Website|Situs Web)"[^>]*href="([^"]+)"/i', $chunk, $ws_m)) {
             $website_url = html_entity_decode($ws_m[1], ENT_QUOTES, 'UTF-8');
         }
-        // Method 2: aria-label visit website
-        if (!$website_url && preg_match('/aria-label="Visit[^"]*website"[^>]*href="([^"]+)"/i', $chunk, $ws_m)) {
+        // Method 2: aria-label visit/kunjungi website/situs
+        if (!$website_url && preg_match('/aria-label="(?:Visit|Kunjungi)[^"]*(?:website|situs)[^"]*"[^>]*href="([^"]+)"/i', $chunk, $ws_m)) {
             $website_url = html_entity_decode($ws_m[1], ENT_QUOTES, 'UTF-8');
         }
         // Method 3: Fallback — text-based domain detection
