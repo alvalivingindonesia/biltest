@@ -1845,7 +1845,7 @@ function beRenderCards() {
         var e = beEntities[i];
         var q = encodeURIComponent(e.name + ' Lombok');
         var existing = '';
-        if (e.website_url) existing += '<b>Website:</b> ' + e.website_url + '<br>';
+
         if (e.google_maps_url) existing += '<b>Maps:</b> <a href="' + e.google_maps_url + '" target="_blank">' + e.google_maps_url.substring(0, 60) + '</a><br>';
         if (e.instagram_url) existing += '<b>Instagram:</b> ' + e.instagram_url + '<br>';
         if (e.facebook_url) existing += '<b>Facebook:</b> ' + e.facebook_url + '<br>';
@@ -1855,7 +1855,8 @@ function beRenderCards() {
         html += '<div class="be-card" id="be-card-' + i + '">';
         html += '<div class="be-header" onclick="beToggle(' + i + ')">';
         html += '<span class="badge b-blue" style="margin-right:6px">' + e.entity_type + '</span>';
-        html += '<span class="be-name">' + (e.name || 'ID ' + e.id) + '</span>';
+        var editSection = e.entity_type === 'provider' ? 'providers' : (e.entity_type === 'developer' ? 'developers' : 'agents');
+        html += '<a class="be-name" href="console.php?s=' + editSection + '&a=edit&id=' + e.id + '" target="_blank" onclick="event.stopPropagation()" style="color:#0c7c84;text-decoration:underline">' + (e.name || 'ID ' + e.id) + '</a>';
         html += '<span class="be-meta"><span>\u2605' + (e.google_rating || '-') + '</span><span>' + (e.google_review_count || 0) + ' reviews</span></span>';
         html += '<span style="font-size:18px;color:#aaa" id="be-arrow-' + i + '">&#9654;</span>';
         html += '</div>';
@@ -1876,6 +1877,7 @@ function beRenderCards() {
         html += '<label>Facebook</label><input type="text" id="be-f-' + i + '-facebook_url" placeholder="https://facebook.com/..." value="' + (e.facebook_url || '') + '">';
         html += '<label>Logo</label><input type="text" id="be-f-' + i + '-logo_url" placeholder="Logo image URL" value="' + (e.logo_url || '') + '">';
         html += '<label>Phone</label><input type="text" id="be-f-' + i + '-phone" placeholder="+62..." value="' + (e.phone || '') + '">';
+        html += '<label>Website</label><input type="text" id="be-f-' + i + '-website_url" placeholder="https://..." value="' + (e.website_url || '') + '">';
         html += '</div>';
         html += '<div class="be-actions">';
         html += '<button class="btn btn-p btn-sm" onclick="beSave(' + i + ')">Save</button>';
@@ -1904,7 +1906,7 @@ function beToggle(idx) {
 function beSave(idx) {
     var e = beEntities[idx];
     var msg = document.getElementById('be-msg-' + idx);
-    var fieldNames = ['profile_photo_url','instagram_url','facebook_url','logo_url','phone'];
+    var fieldNames = ['profile_photo_url','instagram_url','facebook_url','logo_url','phone','website_url'];
     var fields = {};
     var count = 0;
     for (var f = 0; f < fieldNames.length; f++) {
