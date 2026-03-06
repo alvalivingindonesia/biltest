@@ -708,12 +708,12 @@ function parse_gmaps_html(string $html): array {
         // Skip ad entries
         if (stripos($name, 'Why this ad') !== false) continue;
 
-        // ── Rating ── (supports EN: "4.5 stars 12 Reviews" and ID: "4,5 bintang 12 Ulasan")
-        if (!preg_match('/aria-label="([\d]+[.,]\d+)\s+(?:stars|bintang)\s+(\d+)\s+(?:Reviews?|Ulasan)"/i', $chunk, $rm)) {
+        // ── Rating ── (supports EN: "4.5 stars 3,000 Reviews" and ID: "4,5 bintang 3.000 Ulasan")
+        if (!preg_match('/aria-label="([\d]+[.,]\d+)\s+(?:stars|bintang)\s+([\d.,]+)\s+(?:Reviews?|Ulasan)"/i', $chunk, $rm)) {
             continue; // No rating = skip (we need rating for import filters)
         }
         $rating = (float)str_replace(',', '.', $rm[1]);
-        $reviews = (int)$rm[2];
+        $reviews = (int)preg_replace('/[^\d]/', '', $rm[2]); // Strip thousand separators (3,000 or 3.000 → 3000)
 
         // ── Google Maps place URL & coordinates ──
         $gmaps_url = '';
@@ -745,7 +745,7 @@ function parse_gmaps_html(string $html): array {
 
         $field_start = 0;
         foreach ($texts as $idx => $t) {
-            if (preg_match('/^\(\d+\)$/', $t)) {
+            if (preg_match('/^\([\d.,]+\)$/', $t)) {
                 $field_start = $idx + 1;
                 break;
             }
@@ -898,7 +898,7 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                     instagram_url, facebook_url, tiktok_url, youtube_url, linkedin_url,
                     profile_photo_url, profile_description,
                     languages, is_featured, badge, is_active)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, 1)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
                  ON DUPLICATE KEY UPDATE
                     google_rating = VALUES(google_rating),
                     google_review_count = VALUES(google_review_count),
@@ -936,6 +936,7 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                 $profile_photo = trim($item['profile_photo_url'] ?? '');
                 $profile_desc = trim($item['profile_description'] ?? '');
                 $languages = trim($item['languages'] ?? 'Bahasa only');
+                $is_featured = !empty($item['is_featured']) ? 1 : 0;
                 $area = $item['area_key'] ?: 'mataram';
 
                 // Overwrite existing record
@@ -946,7 +947,7 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                             phone=?, whatsapp_number=?, website_url=?,
                             instagram_url=?, facebook_url=?, tiktok_url=?, youtube_url=?, linkedin_url=?,
                             profile_photo_url=?, profile_description=?,
-                            languages=?, updated_at=CURRENT_TIMESTAMP
+                            languages=?, is_featured=?, updated_at=CURRENT_TIMESTAMP
                          WHERE id=?"
                     );
                     $upd->execute([
@@ -955,7 +956,7 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                         $phone, $whatsapp, $website,
                         $instagram, $facebook, $tiktok, $youtube, $linkedin,
                         $profile_photo, $profile_desc,
-                        $languages, (int)$item['existing_id'],
+                        $languages, $is_featured, (int)$item['existing_id'],
                     ]);
                     // Update area
                     $del_area = $db->prepare("DELETE FROM developer_areas WHERE developer_id = ?");
@@ -984,7 +985,7 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                     $phone, $whatsapp, $website,
                     $instagram, $facebook, $tiktok, $youtube, $linkedin,
                     $profile_photo, $profile_desc,
-                    $languages,
+                    $languages, $is_featured,
                 ]);
 
                 $dev_id = $db->lastInsertId();
@@ -1016,8 +1017,8 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                     phone, whatsapp_number, website_url,
                     instagram_url, facebook_url, tiktok_url, youtube_url, linkedin_url,
                     profile_photo_url, profile_description,
-                    languages, is_featured, badge, is_active)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, 1)
+                    languages, is_featured, is_trusted, badge, is_active)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
                  ON DUPLICATE KEY UPDATE
                     google_rating = VALUES(google_rating),
                     google_review_count = VALUES(google_review_count),
@@ -1062,6 +1063,8 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                 $profile_photo = trim($item['profile_photo_url'] ?? '');
                 $profile_desc = trim($item['profile_description'] ?? '');
                 $languages = trim($item['languages'] ?? 'Bahasa only');
+                $is_featured = !empty($item['is_featured']) ? 1 : 0;
+                $is_trusted = !empty($item['is_trusted']) ? 1 : 0;
 
                 if (!$group || empty($category_keys)) {
                     $save_errors[] = "Skipped '{$name}': no category assigned.";
@@ -1078,7 +1081,7 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                             phone=?, whatsapp_number=?, website_url=?,
                             instagram_url=?, facebook_url=?, tiktok_url=?, youtube_url=?, linkedin_url=?,
                             profile_photo_url=?, profile_description=?,
-                            languages=?, updated_at=CURRENT_TIMESTAMP
+                            languages=?, is_featured=?, is_trusted=?, updated_at=CURRENT_TIMESTAMP
                          WHERE id=?"
                     );
                     $upd->execute([
@@ -1088,7 +1091,7 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                         $phone, $whatsapp, $website,
                         $instagram, $facebook, $tiktok, $youtube, $linkedin,
                         $profile_photo, $profile_desc,
-                        $languages, $ex_id,
+                        $languages, $is_featured, $is_trusted, $ex_id,
                     ]);
                     // Update junction table
                     $db->prepare("DELETE FROM provider_categories WHERE provider_id=?")->execute([$ex_id]);
@@ -1119,7 +1122,7 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                     $phone, $whatsapp, $website,
                     $instagram, $facebook, $tiktok, $youtube, $linkedin,
                     $profile_photo, $profile_desc,
-                    $languages,
+                    $languages, $is_featured, $is_trusted,
                 ]);
 
                 $provider_id = $db->lastInsertId();
@@ -1540,6 +1543,7 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
                 <th>Phone</th>
                 <th>Website</th>
                 <th>Region / Area</th>
+                <th>Flags</th>
             </tr>
         </thead>
         <tbody>
@@ -1725,6 +1729,15 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
                             </optgroup>
                         <?php endforeach; ?>
                     </select>
+                </td>
+                <td>
+                    <?php $itype = $parsed['import_type'] ?? 'provider'; ?>
+                    <?php if ($itype === 'developer'): ?>
+                        <label style="font-size:0.75rem;white-space:nowrap;"><input type="checkbox" name="items[<?= $idx ?>][is_featured]" value="1"> Featured</label>
+                    <?php else: ?>
+                        <label style="font-size:0.75rem;white-space:nowrap;"><input type="checkbox" name="items[<?= $idx ?>][is_featured]" value="1"> Featured</label><br>
+                        <label style="font-size:0.75rem;white-space:nowrap;"><input type="checkbox" name="items[<?= $idx ?>][is_trusted]" value="1"> Trusted</label>
+                    <?php endif; ?>
                 </td>
             </tr>
         <?php endforeach; ?>
