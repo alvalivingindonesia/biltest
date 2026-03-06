@@ -378,8 +378,8 @@ function handle_developers_list(): void {
         $where[] = 'd.is_featured = 1';
     }
     if (!empty($_GET['q'])) {
-        $where[] = 'MATCH(d.name, d.short_description, d.description) AGAINST(? IN BOOLEAN MODE)';
-        $params[] = $_GET['q'];
+        $where[] = 'd.name LIKE ?';
+        $params[] = '%' . $_GET['q'] . '%';
     }
 
     $where_sql = implode(' AND ', $where);
@@ -393,7 +393,7 @@ function handle_developers_list(): void {
     $stmt = $db->prepare(
         "SELECT d.id, d.slug, d.name, d.short_description, d.min_ticket_usd,
                 d.google_rating, d.google_review_count, d.phone, d.whatsapp_number,
-                d.website_url, d.languages, d.is_featured, d.badge
+                d.website_url, d.languages, d.is_featured, d.badge, d.profile_photo_url
          FROM developers d
          WHERE {$where_sql}
          ORDER BY {$order}
