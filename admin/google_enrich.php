@@ -186,87 +186,147 @@ function get_db() {
 }
 
 /**
- * Search Google for a business name and extract useful info.
- * Uses Google's search results HTML to find social links, images, descriptions.
+ * Search for a business name using multiple engines and extract useful info.
+ * Tries Bing first (most reliable for server-side), DuckDuckGo as fallback.
  */
 function google_search_enrich($name, $existing, $curl_opts) {
     $log = [];
     $found = [];
+    $search_query = $name . ' Lombok Indonesia';
+    $html = '';
+    $source = '';
 
-    // Append "Lombok" to help locate the right business
-    $search_query = $name . ' Lombok';
-    $google_url = 'https://www.google.com/search?q=' . urlencode($search_query) . '&hl=en&gl=id&num=10';
-
+    // ── Try Bing (most reliable for server-side scraping) ──
+    $bing_url = 'https://www.bing.com/search?q=' . urlencode($search_query) . '&setlang=en&cc=id&count=15';
     $ch = curl_init();
-    curl_setopt_array($ch, [CURLOPT_URL => $google_url] + $curl_opts);
-    $html = curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_setopt_array($ch, [CURLOPT_URL => $bing_url] + $curl_opts);
+    $bing_html = curl_exec($ch);
+    $bing_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    if ($html === false || $http_code >= 400 || strlen($html) < 500) {
-        return ['found' => [], 'log' => ['Google search failed (HTTP ' . $http_code . ', ' . strlen($html ?: '') . ' bytes)'], 'fields_found' => 0];
+    if ($bing_html && $bing_code < 400 && strlen($bing_html) > 1000
+        && stripos($bing_html, 'captcha') === false
+        && stripos($bing_html, 'unusual traffic') === false) {
+        $html = $bing_html;
+        $source = 'Bing';
+        $log[] = 'Bing search OK (' . strlen($html) . ' bytes, HTTP ' . $bing_code . ')';
+    } else {
+        $log[] = 'Bing failed (HTTP ' . $bing_code . ', ' . strlen($bing_html ?: '') . ' bytes) — trying DuckDuckGo';
     }
 
-    // Check for CAPTCHA / block page
-    if (stripos($html, 'unusual traffic') !== false || stripos($html, 'captcha') !== false || stripos($html, 'recaptcha') !== false) {
-        return ['found' => [], 'log' => ['Google returned a CAPTCHA/block page — try again later or reduce batch speed'], 'fields_found' => 0];
+    // ── Fallback: DuckDuckGo HTML ──
+    if (!$html) {
+        $ddg_url = 'https://html.duckduckgo.com/html/?q=' . urlencode($search_query);
+        $ch = curl_init();
+        curl_setopt_array($ch, [CURLOPT_URL => $ddg_url] + $curl_opts);
+        $ddg_html = curl_exec($ch);
+        $ddg_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($ddg_html && $ddg_code < 400 && strlen($ddg_html) > 1000) {
+            $html = $ddg_html;
+            $source = 'DuckDuckGo';
+            $log[] = 'DuckDuckGo search OK (' . strlen($html) . ' bytes, HTTP ' . $ddg_code . ')';
+        } else {
+            $log[] = 'DuckDuckGo also failed (HTTP ' . $ddg_code . ', ' . strlen($ddg_html ?: '') . ' bytes)';
+        }
     }
 
-    $log[] = 'Google search completed (' . strlen($html) . ' bytes, HTTP ' . $http_code . ')';
+    // ── Last resort: Google ──
+    if (!$html) {
+        $google_url = 'https://www.google.com/search?q=' . urlencode($search_query) . '&hl=en&gl=id&num=10';
+        $ch = curl_init();
+        curl_setopt_array($ch, [CURLOPT_URL => $google_url] + $curl_opts);
+        $g_html = curl_exec($ch);
+        $g_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
 
-    // ── Extract social media links from search results ──
+        if ($g_html && $g_code < 400 && strlen($g_html) > 1000
+            && stripos($g_html, 'unusual traffic') === false
+            && stripos($g_html, 'captcha') === false) {
+            $html = $g_html;
+            $source = 'Google';
+            $log[] = 'Google search OK (' . strlen($html) . ' bytes)';
+        } else {
+            $log[] = 'Google also failed/blocked (HTTP ' . $g_code . ')';
+        }
+    }
+
+    if (!$html) {
+        return ['found' => [], 'log' => $log, 'fields_found' => 0];
+    }
+
+    // ── Extract all links from the page ──
+    // Bing/DDG/Google all have href links, DDG wraps them in uddg= param
+    $all_urls = [];
+    preg_match_all('#href="(https?://[^"]+)"#i', $html, $href_matches);
+    foreach ($href_matches[1] as $raw) {
+        $decoded = html_entity_decode($raw, ENT_QUOTES, 'UTF-8');
+        // DuckDuckGo wraps real URLs in //duckduckgo.com/l/?uddg=...
+        if (preg_match('#[?&]uddg=(https?[^&]+)#i', $decoded, $uddg)) {
+            $decoded = urldecode($uddg[1]);
+        }
+        $all_urls[] = $decoded;
+    }
+    // Also extract URLs from plain text (Bing sometimes has them in cite tags etc)
+    preg_match_all('#(https?://[a-zA-Z0-9_./-]+\.[a-zA-Z]{2,}[a-zA-Z0-9_./?&=%-]*)#i', $html, $text_urls);
+    foreach ($text_urls[1] as $tu) {
+        $all_urls[] = html_entity_decode($tu, ENT_QUOTES, 'UTF-8');
+    }
+    $all_urls = array_unique($all_urls);
+    $log[] = 'Extracted ' . count($all_urls) . ' URLs from ' . $source . ' results';
+
+    // ── Extract social media links ──
     $social_patterns = [
-        'instagram_url' => '#https?://(?:www\.)?instagram\.com/[a-zA-Z0-9_.]+/?(?:\?|"|\'|&|$)#i',
-        'facebook_url'  => '#https?://(?:www\.)?(?:facebook|fb)\.com/[a-zA-Z0-9_./-]+/?(?:\?|"|\'|&|$)#i',
-        'tiktok_url'    => '#https?://(?:www\.)?tiktok\.com/@[a-zA-Z0-9_.]+/?(?:\?|"|\'|&|$)#i',
-        'youtube_url'   => '#https?://(?:www\.)?youtube\.com/(?:c/|channel/|@)[a-zA-Z0-9_.-]+/?(?:\?|"|\'|&|$)#i',
-        'linkedin_url'  => '#https?://(?:www\.)?linkedin\.com/(?:company|in)/[a-zA-Z0-9_./-]+/?(?:\?|"|\'|&|$)#i',
+        'instagram_url' => '#^https?://(?:www\.)?instagram\.com/([a-zA-Z0-9_.]+)/?$#i',
+        'facebook_url'  => '#^https?://(?:www\.)?(?:facebook|fb)\.com/([a-zA-Z0-9_./-]+)/?$#i',
+        'tiktok_url'    => '#^https?://(?:www\.)?tiktok\.com/@([a-zA-Z0-9_.]+)/?$#i',
+        'youtube_url'   => '#^https?://(?:www\.)?youtube\.com/(?:c/|channel/|@)([a-zA-Z0-9_.-]+)/?$#i',
+        'linkedin_url'  => '#^https?://(?:www\.)?linkedin\.com/(?:company|in)/([a-zA-Z0-9_./-]+)/?$#i',
     ];
 
-    foreach ($social_patterns as $key => $pattern) {
-        if (!empty($existing[$key])) continue;
-        if (preg_match($pattern, $html, $sm)) {
-            $url = rtrim(preg_replace('/[\?"\'&]$/', '', $sm[0]), '/');
-            // Skip share/sharer/login links
-            if (strpos($url, 'sharer') !== false || strpos($url, '/login') !== false) continue;
-            $found[$key] = $url;
-            $log[] = 'Found ' . $key . ': ' . $url;
+    foreach ($all_urls as $url_candidate) {
+        // Clean trailing junk
+        $url_clean = preg_replace('/[\?"\x27&;#].*$/', '', $url_candidate);
+        $url_clean = rtrim($url_clean, '/');
+
+        foreach ($social_patterns as $key => $pattern) {
+            if (!empty($existing[$key]) || !empty($found[$key])) continue;
+            if (preg_match($pattern, $url_clean . '/', $sm)) {
+                $handle = $sm[1];
+                // Skip generic/junk handles
+                if (preg_match('/^(sharer|share|login|signup|help|about|privacy|policy|watch|explore|reels)$/i', $handle)) continue;
+                $found[$key] = $url_clean;
+                $log[] = 'Found ' . $key . ': ' . $url_clean;
+            }
         }
     }
 
     // ── Extract website URL if missing ──
     if (empty($existing['website_url'])) {
-        // Look for a website link in the knowledge panel area
-        // Google often shows the business website in results
-        preg_match_all('#href="(https?://[^"]+)"#i', $html, $all_links);
-        foreach ($all_links[1] as $link) {
-            $link = html_entity_decode($link, ENT_QUOTES, 'UTF-8');
-            // Skip Google's own URLs, social media, directories
-            if (preg_match('#google\.|facebook\.|instagram\.|youtube\.|tiktok\.|linkedin\.|twitter\.|tripadvisor\.|yelp\.|maps\.|tokopedia\.|shopee\.|bukalapak\.|goo\.gl#i', $link)) continue;
-            if (preg_match('#/search\?|/url\?|webcache|translate\.google#i', $link)) continue;
-            // This could be their website
+        $skip_domains = '#(google\.|bing\.|duckduckgo\.|facebook\.|instagram\.|youtube\.|tiktok\.|linkedin\.|twitter\.|x\.com|tripadvisor\.|yelp\.|maps\.|tokopedia\.|shopee\.|bukalapak\.|wikipedia\.|goo\.gl|msn\.|yahoo\.)#i';
+        foreach ($all_urls as $link) {
+            $link = preg_replace('/[\?#].*$/', '', $link);
+            if (preg_match($skip_domains, $link)) continue;
+            if (preg_match('#/search|/url\?|webcache|translate\.|cache:|&amp;#i', $link)) continue;
             $found['website_url'] = $link;
             $log[] = 'Found website: ' . $link;
             break;
         }
     }
 
-    // ── Extract description from search snippets ──
+    // ── Extract description from snippets ──
     if (empty($existing['description']) || strlen($existing['description'] ?? '') < 50) {
-        // Google search result snippets are inside specific elements
-        // Try to get the knowledge panel description or search snippets
         $snippets = [];
-
-        // Method 1: Knowledge panel description (div with data-attrid containing description)
-        if (preg_match_all('/<span[^>]*>([^<]{50,500})<\/span>/i', $html, $span_matches)) {
+        // Generic snippet extraction — works for Bing, DDG and Google
+        // Bing uses <p class="b_paractl">, DDG uses <a class="result__snippet">, both have <span>
+        if (preg_match_all('#>([^<]{50,500})</#i', $html, $span_matches)) {
+            $name_words = array_filter(explode(' ', strtolower($name)), function($w) { return strlen($w) > 2; });
             foreach ($span_matches[1] as $span_text) {
                 $clean = html_entity_decode(strip_tags($span_text), ENT_QUOTES, 'UTF-8');
                 $clean = trim(preg_replace('/\s+/', ' ', $clean));
-                // Filter out junk
                 if (strlen($clean) < 50) continue;
-                if (preg_match('/cookie|privacy|©|sign in|log in|cached|similar/i', $clean)) continue;
-                // Check if it mentions the business name (relevance check)
-                $name_words = array_filter(explode(' ', strtolower($name)), function($w) { return strlen($w) > 2; });
+                if (preg_match('/cookie|privacy|©|sign in|log in|cached|similar|javascript|stylesheet/i', $clean)) continue;
                 $relevance = 0;
                 foreach ($name_words as $w) {
                     if (stripos($clean, $w) !== false) $relevance++;
@@ -276,16 +336,13 @@ function google_search_enrich($name, $existing, $curl_opts) {
                 }
             }
         }
-
         if ($snippets) {
-            // Pick the longest relevant snippet
             usort($snippets, function($a, $b) { return strlen($b) - strlen($a); });
             $best = $snippets[0];
             if (strlen($best) > strlen($existing['description'] ?? '')) {
                 $found['description'] = mb_substr($best, 0, 2000);
-                $log[] = 'Found description from search results (' . strlen($best) . ' chars)';
+                $log[] = 'Found description (' . strlen($best) . ' chars)';
             }
-            // Also make a short description if missing
             if (empty($existing['short_description'])) {
                 $short = $best;
                 if (strlen($short) > 160) {
@@ -300,33 +357,31 @@ function google_search_enrich($name, $existing, $curl_opts) {
         }
     }
 
-    // ── Extract Google Maps business photo ──
-    // Google often embeds a thumbnail of the business from Maps
+    // ── Profile photo: try to find images in search results ──
     if (empty($existing['profile_photo_url'])) {
+        // Bing/Google often embed thumbnails
         $photo_url = '';
-
-        // Method 1: lh5/lh3 googleusercontent images (Google Maps business photos)
         if (preg_match('#(https://lh[35]\.googleusercontent\.com/[a-zA-Z0-9_/=\-]+)#i', $html, $gm)) {
             $photo_url = html_entity_decode($gm[1], ENT_QUOTES, 'UTF-8');
-            $log[] = 'Found Google Maps photo: ' . substr($photo_url, 0, 80);
+            $log[] = 'Found Google Maps photo';
         }
-
-        // Method 2: encrypted-tbn images (Google search thumbnails)
+        if (!$photo_url && preg_match('#(https://(?:tse|th)\d*\.mm\.bing\.net/th[^"\s]+)#i', $html, $bm)) {
+            $photo_url = html_entity_decode($bm[1], ENT_QUOTES, 'UTF-8');
+            $log[] = 'Found Bing thumbnail';
+        }
         if (!$photo_url && preg_match('#(https://encrypted-tbn\d+\.gstatic\.com/images\?q=tbn:[a-zA-Z0-9_&;=\-]+)#i', $html, $gm)) {
             $photo_url = html_entity_decode($gm[1], ENT_QUOTES, 'UTF-8');
-            $log[] = 'Found Google thumbnail: ' . substr($photo_url, 0, 80);
+            $log[] = 'Found Google thumbnail';
         }
-
         if ($photo_url) {
             $found['profile_photo_url'] = $photo_url;
         }
     }
 
-    // ── Try Google Image search for logo ──
+    // ── Logo: try Bing Image search (more permissive than Google) ──
     if (empty($existing['logo_url'])) {
         $logo_query = $name . ' logo';
-        $img_url = 'https://www.google.com/search?q=' . urlencode($logo_query) . '&tbm=isch&hl=en&gl=id';
-
+        $img_url = 'https://www.bing.com/images/search?q=' . urlencode($logo_query) . '&form=HDRSC2';
         $ch2 = curl_init();
         curl_setopt_array($ch2, [CURLOPT_URL => $img_url] + $curl_opts);
         $img_html = curl_exec($ch2);
@@ -334,34 +389,31 @@ function google_search_enrich($name, $existing, $curl_opts) {
         curl_close($ch2);
 
         if ($img_html && $img_code < 400 && strlen($img_html) > 500) {
-            $log[] = 'Google Image search completed for logo';
-            // Extract image URLs from results
-            // Google Images embeds image URLs in JSON within the page
-            if (preg_match_all('#\["(https://[^"]+\.(?:jpg|jpeg|png|webp)(?:\?[^"]*)?)"#i', $img_html, $img_matches)) {
+            $log[] = 'Bing Image search completed for logo';
+            // Bing Images stores URLs in murl param or in JSON
+            if (preg_match_all('#"murl":"(https?://[^"]+)"#i', $img_html, $img_matches)) {
                 foreach ($img_matches[1] as $candidate) {
-                    $candidate = html_entity_decode($candidate, ENT_QUOTES, 'UTF-8');
-                    // Skip Google's own images
-                    if (preg_match('#gstatic\.com|google\.com|googleapis\.com#i', $candidate)) continue;
-                    // Skip tiny images
+                    $candidate = html_entity_decode(str_replace('\\/', '/', $candidate), ENT_QUOTES, 'UTF-8');
+                    if (preg_match('#gstatic\.com|google\.com|bing\.com|msn\.com#i', $candidate)) continue;
                     if (preg_match('#\b(icon|favicon|pixel|1x1)\b#i', $candidate)) continue;
                     $found['logo_url'] = $candidate;
-                    $log[] = 'Found logo image: ' . substr($candidate, 0, 80);
+                    $log[] = 'Found logo: ' . substr($candidate, 0, 80);
                     break;
                 }
             }
+        } else {
+            $log[] = 'Bing Image search failed (HTTP ' . $img_code . ')';
         }
     }
 
-    // ── Phone number from search results ──
+    // ── Phone number ──
     if (empty($existing['phone'])) {
-        // Google knowledge panel often shows phone numbers
-        if (preg_match('#(?:Phone|Tel|Telepon)[:\s]*([+\d][\d\s\-().]{7,20}\d)#i', $html, $pm)) {
+        if (preg_match('#(?:Phone|Tel|Telepon|Telp)[:\s]*([+\d][\d\s\-().]{7,20}\d)#i', $html, $pm)) {
             $found['phone'] = trim($pm[1]);
             $log[] = 'Found phone: ' . $found['phone'];
         }
-        // Also try Indonesian phone format
-        if (empty($found['phone']) && preg_match('#(?:0|\\+62)[\d\s\-]{8,15}#', $html, $pm)) {
-            $phone = preg_replace('/\s+/', '', $pm[0]);
+        if (empty($found['phone']) && preg_match('#((?:0|\+62)[\d\s\-]{8,15})#', $html, $pm)) {
+            $phone = preg_replace('/\s+/', '', $pm[1]);
             if (strlen(preg_replace('/[^\d]/', '', $phone)) >= 9) {
                 $found['phone'] = $phone;
                 $log[] = 'Found phone: ' . $phone;
