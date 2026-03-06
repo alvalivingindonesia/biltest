@@ -290,6 +290,14 @@ function formatAreaLabel(area) {
   return m[area] || (area || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
+function renderBadge(badge) {
+  if (!badge) return '';
+  if (/^https?:\/\/.+\.(svg|png|jpg|jpeg|gif|webp)(\?.*)?$/i.test(badge)) {
+    return '<img src="' + badge + '" alt="Badge" style="height:28px;width:auto;vertical-align:middle;">';
+  }
+  return badge;
+}
+
 function formatGroupLabel(group) {
   const m = FilterData.labelMap(FilterData.groups);
   return m[group] || (group || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -695,7 +703,7 @@ function renderProviderCard(b, index = 0) {
     : '';
 
   const badge = b.badge
-    ? `<span class="card-badge">${b.badge}</span>`
+    ? `<span class="card-badge">${renderBadge(b.badge)}</span>`
     : '';
 
   const langShort = b.languages.replace('Bahasa + ', '').replace('Bahasa only', 'Bahasa').replace(' + Other', '+');
@@ -965,7 +973,7 @@ async function renderProviderDetail(el, slug) {
             <div class="card-meta mb-3">
               <span class="badge ${getGroupBadgeClass(b.group)}">${formatGroupLabel(b.group)}</span>
               <span class="badge badge--project-type">${formatCategoryLabel(b.category)}</span>
-              ${b.badge ? `<span class="badge badge--featured">${b.badge}</span>` : ''}
+              ${b.badge ? `<span class="badge badge--featured">${renderBadge(b.badge)}</span>` : ''}
             </div>
             <h1 class="page-title">${b.name}</h1>
             <div class="card-meta mt-auto">
@@ -1058,7 +1066,7 @@ async function renderProviderDetail(el, slug) {
 // =====================================================
 
 function renderDeveloperCard(dev, index = 0) {
-  const badge = dev.badge ? `<span class="card-badge">${dev.badge}</span>` : '';
+  const badge = dev.badge ? `<span class="card-badge">${renderBadge(dev.badge)}</span>` : '';
   const ratingInline = dev.google_rating
     ? `<span class="card-rating-inline"><span class="card-rating-star">★</span> ${dev.google_rating.toFixed(1)} <span class="card-rating-count">(${dev.google_review_count})</span></span>`
     : '';
@@ -1185,7 +1193,7 @@ async function renderDeveloperDetail(el, slug) {
           ${dev.profile_photo_url ? `<img src="${dev.profile_photo_url}" alt="${dev.name}" style="width:100px;height:100px;border-radius:var(--radius-md);object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,.12);flex-shrink:0;">` : ''}
           <div style="flex:1;min-width:0;">
             <div class="card-meta mb-3">
-              ${dev.badge ? `<span class="badge badge--featured">${dev.badge}</span>` : ''}
+              ${dev.badge ? `<span class="badge badge--featured">${renderBadge(dev.badge)}</span>` : ''}
               ${dev.project_types.map(t => `<span class="badge badge--project-type">${formatProjectType(t)}</span>`).join('')}
             </div>
             <h1 class="page-title">${dev.name}</h1>
@@ -1978,7 +1986,7 @@ let _cachedDevelopers = [];
 
 function renderProjectCard(p, index = 0) {
   const dev = _cachedDevelopers.find(d => d.id === p.developer_id);
-  const badge = p.badge ? `<span class="card-badge">${p.badge}</span>` : '';
+  const badge = p.badge ? `<span class="card-badge">${renderBadge(p.badge)}</span>` : '';
   const statusLabel = formatProjectStatus(p.status);
 
   return `
@@ -2180,7 +2188,7 @@ async function renderProjectDetail(el, slug) {
         <div class="card-meta mb-3">
           <span class="badge ${getStatusBadgeClass(p.status)}">${formatProjectStatus(p.status)}</span>
           <span class="badge badge--project-type">${formatProjectType(p.project_type)}</span>
-          ${p.badge ? `<span class="badge badge--new">${p.badge}</span>` : ''}
+          ${p.badge ? `<span class="badge badge--new">${renderBadge(p.badge)}</span>` : ''}
         </div>
         <h1 class="page-title">${p.name}</h1>
         <div class="card-meta">
@@ -2233,7 +2241,7 @@ async function renderProjectDetail(el, slug) {
               <div class="card" style="max-width:480px;margin-bottom:var(--space-6);">
                 <div class="card-header">
                   <h3 class="card-name">${dev.name}</h3>
-                  ${dev.badge ? `<span class="badge badge--featured">${dev.badge}</span>` : ''}
+                  ${dev.badge ? `<span class="badge badge--featured">${renderBadge(dev.badge)}</span>` : ''}
                 </div>
                 ${renderGoogleRating(dev.google_rating, dev.google_review_count)}
                 <p class="card-desc">${dev.short_description_en}</p>
