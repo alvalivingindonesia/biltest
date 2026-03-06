@@ -1,18 +1,14 @@
 <?php
 /**
- * Build in Lombok — Admin: Google Search Enrichment (AJAX endpoint)
+ * Build in Lombok — Admin: Enrichment Tool (AJAX endpoint)
  *
- * When an entity has no website, this tool searches Google for the business name
- * and extracts: social links, profile images, descriptions, logos.
+ * Strategy: Use the entity's existing Google Maps URL + direct social lookups.
+ * Search engines block server-side requests; Google Maps pages are more accessible.
  *
- * POST JSON:
- *   { "name": "Toko Cipta Baru", "entity_type": "provider", "existing": {...} }
- *   OR for batch mode:
+ * POST JSON actions:
  *   { "action": "find_missing", "min_reviews": 10 }
- *
- * Returns JSON:
- *   { "found": { ... }, "log": [...] }
- *   OR for batch: { "entities": [...] }
+ *   { "action": "enrich_save", "entity_type": "provider", "entity_id": 73 }
+ *   { "name": "Toko Cipta Baru", "existing": {...} }   (single, no save)
  */
 session_start();
 require_once('/home/rovin629/config/biltest_config.php');
@@ -29,9 +25,9 @@ $input = json_decode(file_get_contents('php://input'), true);
 $curl_opts = [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_FOLLOWLOCATION => true,
-    CURLOPT_MAXREDIRS => 3,
-    CURLOPT_TIMEOUT => 12,
-    CURLOPT_CONNECTTIMEOUT => 6,
+    CURLOPT_MAXREDIRS => 5,
+    CURLOPT_TIMEOUT => 15,
+    CURLOPT_CONNECTTIMEOUT => 8,
     CURLOPT_SSL_VERIFYPEER => false,
     CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     CURLOPT_HTTPHEADER => ['Accept: text/html,application/xhtml+xml', 'Accept-Language: en-US,en;q=0.9,id;q=0.8'],
@@ -47,7 +43,7 @@ if (($input['action'] ?? '') === 'find_missing') {
 
     // Providers without image
     $rows = $db->prepare("
-        SELECT id, name, google_review_count, google_rating, website_url, 'provider' AS entity_type
+        SELECT id, name, google_review_count, google_rating, website_url, google_maps_url, 'provider' AS entity_type
         FROM providers
         WHERE google_review_count >= ?
           AND (profile_photo_url IS NULL OR profile_photo_url = '')
@@ -59,7 +55,7 @@ if (($input['action'] ?? '') === 'find_missing') {
 
     // Developers without image
     $rows = $db->prepare("
-        SELECT id, name, google_review_count, google_rating, website_url, 'developer' AS entity_type
+        SELECT id, name, google_review_count, google_rating, website_url, google_maps_url, 'developer' AS entity_type
         FROM developers
         WHERE google_review_count >= ?
           AND (profile_photo_url IS NULL OR profile_photo_url = '')
@@ -71,7 +67,7 @@ if (($input['action'] ?? '') === 'find_missing') {
 
     // Agents without image
     $rows = $db->prepare("
-        SELECT id, display_name AS name, google_review_count, google_rating, website_url, 'agent' AS entity_type
+        SELECT id, display_name AS name, google_review_count, google_rating, website_url, google_maps_url, 'agent' AS entity_type
         FROM agents
         WHERE google_review_count >= ?
           AND (profile_photo_url IS NULL OR profile_photo_url = '')
@@ -86,7 +82,7 @@ if (($input['action'] ?? '') === 'find_missing') {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ACTION: enrich_save — search Google, find data, and save to DB
+// ACTION: enrich_save — enrich and save to DB
 // ═══════════════════════════════════════════════════════════════
 if (($input['action'] ?? '') === 'enrich_save') {
     $entity_type = $input['entity_type'] ?? '';
@@ -99,10 +95,9 @@ if (($input['action'] ?? '') === 'enrich_save') {
     $db = get_db();
     $table = '';
     $name_col = 'name';
-    $photo_col = 'profile_photo_url';
     if ($entity_type === 'provider') { $table = 'providers'; }
     elseif ($entity_type === 'developer') { $table = 'developers'; }
-    elseif ($entity_type === 'agent') { $table = 'agents'; $name_col = 'display_name'; $photo_col = 'profile_photo_url'; }
+    elseif ($entity_type === 'agent') { $table = 'agents'; $name_col = 'display_name'; }
     else { echo json_encode(['error' => 'Invalid entity_type']); exit; }
 
     $row = $db->query("SELECT * FROM {$table} WHERE id={$entity_id}")->fetch();
@@ -110,52 +105,49 @@ if (($input['action'] ?? '') === 'enrich_save') {
 
     $name = $row[$name_col] ?? '';
     $existing = $row;
-    $found = google_search_enrich($name, $existing, $curl_opts);
+    $result = enrich_entity($name, $existing, $curl_opts);
 
     // Save found fields to DB
-    if (!empty($found['found'])) {
-        // Get actual column names from the table
+    if (!empty($result['found'])) {
         $col_check = $db->query("SHOW COLUMNS FROM `{$table}`")->fetchAll(PDO::FETCH_COLUMN);
         $valid_cols = array_flip($col_check);
 
         $updates = [];
         $params = [];
-        foreach ($found['found'] as $col => $val) {
-            // Only update columns that actually exist in the table
+        foreach ($result['found'] as $col => $val) {
             if (!isset($valid_cols[$col])) {
-                $found['log'][] = 'Skipped ' . $col . ' (column not in ' . $table . ')';
+                $result['log'][] = 'Skipped ' . $col . ' (column not in ' . $table . ')';
                 continue;
             }
-            // Only update if currently empty/null, or description is shorter
             $current = $row[$col];
             $is_empty = ($current === null || $current === '' || $current === '0');
             $is_desc_upgrade = ($col === 'description' && strlen($val) > strlen($current ?? ''));
             if ($is_empty || $is_desc_upgrade) {
                 $updates[] = "`{$col}` = ?";
                 $params[] = $val;
-                $found['log'][] = 'Will save ' . $col;
+                $result['log'][] = 'Will save ' . $col;
             } else {
-                $found['log'][] = 'Skipped ' . $col . ' (already has value)';
+                $result['log'][] = 'Skipped ' . $col . ' (already has value)';
             }
         }
         if ($updates) {
             $params[] = $entity_id;
             $sql = "UPDATE `{$table}` SET " . implode(', ', $updates) . " WHERE id = ?";
             $db->prepare($sql)->execute($params);
-            $found['saved'] = count($updates);
-            $found['log'][] = 'Saved ' . count($updates) . ' field(s) to database';
+            $result['saved'] = count($updates);
+            $result['log'][] = 'Saved ' . count($updates) . ' field(s) to database';
         } else {
-            $found['saved'] = 0;
-            $found['log'][] = 'No new fields to save (all columns already populated or not applicable)';
+            $result['saved'] = 0;
+            $result['log'][] = 'No new fields to save';
         }
     }
 
-    echo json_encode($found);
+    echo json_encode($result);
     exit;
 }
 
 // ═══════════════════════════════════════════════════════════════
-// DEFAULT: Single Google search enrichment (returns data, does not save)
+// DEFAULT: Single enrichment (returns data, does not save)
 // ═══════════════════════════════════════════════════════════════
 $name = trim($input['name'] ?? '');
 $existing = $input['existing'] ?? [];
@@ -165,7 +157,7 @@ if (!$name) {
     exit;
 }
 
-$result = google_search_enrich($name, $existing, $curl_opts);
+$result = enrich_entity($name, $existing, $curl_opts);
 echo json_encode($result);
 exit;
 
@@ -186,238 +178,230 @@ function get_db() {
 }
 
 /**
- * Search for a business name using multiple engines and extract useful info.
- * Tries Bing first (most reliable for server-side), DuckDuckGo as fallback.
+ * Helper: fetch a URL via cURL, return [html, http_code] or [false, code]
  */
-function google_search_enrich($name, $existing, $curl_opts) {
+function fetch_url($url, $curl_opts) {
+    $ch = curl_init();
+    curl_setopt_array($ch, [CURLOPT_URL => $url] + $curl_opts);
+    $html = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return [$html, $code];
+}
+
+/**
+ * Main enrichment function.
+ *
+ * Strategy (in order):
+ *   1. Google Maps URL (if available) — fetch the page for photos/details
+ *   2. Google Places photo via CID/Place ID from the Maps URL
+ *   3. Direct Instagram profile lookup by business name
+ *   4. Direct Facebook page lookup by business name
+ */
+function enrich_entity($name, $existing, $curl_opts) {
     $log = [];
     $found = [];
-    $search_query = $name . ' Lombok Indonesia';
-    $html = '';
-    $source = '';
 
-    // ── Try Bing (most reliable for server-side scraping) ──
-    $bing_url = 'https://www.bing.com/search?q=' . urlencode($search_query) . '&setlang=en&cc=id&count=15';
-    $ch = curl_init();
-    curl_setopt_array($ch, [CURLOPT_URL => $bing_url] + $curl_opts);
-    $bing_html = curl_exec($ch);
-    $bing_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
+    $google_maps_url = $existing['google_maps_url'] ?? '';
 
-    if ($bing_html && $bing_code < 400 && strlen($bing_html) > 1000
-        && stripos($bing_html, 'captcha') === false
-        && stripos($bing_html, 'unusual traffic') === false) {
-        $html = $bing_html;
-        $source = 'Bing';
-        $log[] = 'Bing search OK (' . strlen($html) . ' bytes, HTTP ' . $bing_code . ')';
-    } else {
-        $log[] = 'Bing failed (HTTP ' . $bing_code . ', ' . strlen($bing_html ?: '') . ' bytes) — trying DuckDuckGo';
-    }
+    // ══════════════════════════════════════════════════════════
+    // STEP 1: Fetch Google Maps page (most reliable source)
+    // ══════════════════════════════════════════════════════════
+    if ($google_maps_url) {
+        $log[] = 'Fetching Google Maps URL: ' . substr($google_maps_url, 0, 80);
+        list($maps_html, $maps_code) = fetch_url($google_maps_url, $curl_opts);
 
-    // ── Fallback: DuckDuckGo HTML ──
-    if (!$html) {
-        $ddg_url = 'https://html.duckduckgo.com/html/?q=' . urlencode($search_query);
-        $ch = curl_init();
-        curl_setopt_array($ch, [CURLOPT_URL => $ddg_url] + $curl_opts);
-        $ddg_html = curl_exec($ch);
-        $ddg_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        if ($maps_html && $maps_code < 400 && strlen($maps_html) > 2000) {
+            $log[] = 'Google Maps page loaded (' . strlen($maps_html) . ' bytes)';
 
-        if ($ddg_html && $ddg_code < 400 && strlen($ddg_html) > 1000) {
-            $html = $ddg_html;
-            $source = 'DuckDuckGo';
-            $log[] = 'DuckDuckGo search OK (' . strlen($html) . ' bytes, HTTP ' . $ddg_code . ')';
-        } else {
-            $log[] = 'DuckDuckGo also failed (HTTP ' . $ddg_code . ', ' . strlen($ddg_html ?: '') . ' bytes)';
-        }
-    }
-
-    // ── Last resort: Google ──
-    if (!$html) {
-        $google_url = 'https://www.google.com/search?q=' . urlencode($search_query) . '&hl=en&gl=id&num=10';
-        $ch = curl_init();
-        curl_setopt_array($ch, [CURLOPT_URL => $google_url] + $curl_opts);
-        $g_html = curl_exec($ch);
-        $g_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if ($g_html && $g_code < 400 && strlen($g_html) > 1000
-            && stripos($g_html, 'unusual traffic') === false
-            && stripos($g_html, 'captcha') === false) {
-            $html = $g_html;
-            $source = 'Google';
-            $log[] = 'Google search OK (' . strlen($html) . ' bytes)';
-        } else {
-            $log[] = 'Google also failed/blocked (HTTP ' . $g_code . ')';
-        }
-    }
-
-    if (!$html) {
-        return ['found' => [], 'log' => $log, 'fields_found' => 0];
-    }
-
-    // ── Extract all links from the page ──
-    // Bing/DDG/Google all have href links, DDG wraps them in uddg= param
-    $all_urls = [];
-    preg_match_all('#href="(https?://[^"]+)"#i', $html, $href_matches);
-    foreach ($href_matches[1] as $raw) {
-        $decoded = html_entity_decode($raw, ENT_QUOTES, 'UTF-8');
-        // DuckDuckGo wraps real URLs in //duckduckgo.com/l/?uddg=...
-        if (preg_match('#[?&]uddg=(https?[^&]+)#i', $decoded, $uddg)) {
-            $decoded = urldecode($uddg[1]);
-        }
-        $all_urls[] = $decoded;
-    }
-    // Also extract URLs from plain text (Bing sometimes has them in cite tags etc)
-    preg_match_all('#(https?://[a-zA-Z0-9_./-]+\.[a-zA-Z]{2,}[a-zA-Z0-9_./?&=%-]*)#i', $html, $text_urls);
-    foreach ($text_urls[1] as $tu) {
-        $all_urls[] = html_entity_decode($tu, ENT_QUOTES, 'UTF-8');
-    }
-    $all_urls = array_unique($all_urls);
-    $log[] = 'Extracted ' . count($all_urls) . ' URLs from ' . $source . ' results';
-
-    // ── Extract social media links ──
-    $social_patterns = [
-        'instagram_url' => '#^https?://(?:www\.)?instagram\.com/([a-zA-Z0-9_.]+)/?$#i',
-        'facebook_url'  => '#^https?://(?:www\.)?(?:facebook|fb)\.com/([a-zA-Z0-9_./-]+)/?$#i',
-        'tiktok_url'    => '#^https?://(?:www\.)?tiktok\.com/@([a-zA-Z0-9_.]+)/?$#i',
-        'youtube_url'   => '#^https?://(?:www\.)?youtube\.com/(?:c/|channel/|@)([a-zA-Z0-9_.-]+)/?$#i',
-        'linkedin_url'  => '#^https?://(?:www\.)?linkedin\.com/(?:company|in)/([a-zA-Z0-9_./-]+)/?$#i',
-    ];
-
-    foreach ($all_urls as $url_candidate) {
-        // Clean trailing junk
-        $url_clean = preg_replace('/[\?"\x27&;#].*$/', '', $url_candidate);
-        $url_clean = rtrim($url_clean, '/');
-
-        foreach ($social_patterns as $key => $pattern) {
-            if (!empty($existing[$key]) || !empty($found[$key])) continue;
-            if (preg_match($pattern, $url_clean . '/', $sm)) {
-                $handle = $sm[1];
-                // Skip generic/junk handles
-                if (preg_match('/^(sharer|share|login|signup|help|about|privacy|policy|watch|explore|reels)$/i', $handle)) continue;
-                $found[$key] = $url_clean;
-                $log[] = 'Found ' . $key . ': ' . $url_clean;
-            }
-        }
-    }
-
-    // ── Extract website URL if missing ──
-    if (empty($existing['website_url'])) {
-        $skip_domains = '#(google\.|bing\.|duckduckgo\.|facebook\.|instagram\.|youtube\.|tiktok\.|linkedin\.|twitter\.|x\.com|tripadvisor\.|yelp\.|maps\.|tokopedia\.|shopee\.|bukalapak\.|wikipedia\.|goo\.gl|msn\.|yahoo\.)#i';
-        foreach ($all_urls as $link) {
-            $link = preg_replace('/[\?#].*$/', '', $link);
-            if (preg_match($skip_domains, $link)) continue;
-            if (preg_match('#/search|/url\?|webcache|translate\.|cache:|&amp;#i', $link)) continue;
-            $found['website_url'] = $link;
-            $log[] = 'Found website: ' . $link;
-            break;
-        }
-    }
-
-    // ── Extract description from snippets ──
-    if (empty($existing['description']) || strlen($existing['description'] ?? '') < 50) {
-        $snippets = [];
-        // Generic snippet extraction — works for Bing, DDG and Google
-        // Bing uses <p class="b_paractl">, DDG uses <a class="result__snippet">, both have <span>
-        if (preg_match_all('#>([^<]{50,500})</#i', $html, $span_matches)) {
-            $name_words = array_filter(explode(' ', strtolower($name)), function($w) { return strlen($w) > 2; });
-            foreach ($span_matches[1] as $span_text) {
-                $clean = html_entity_decode(strip_tags($span_text), ENT_QUOTES, 'UTF-8');
-                $clean = trim(preg_replace('/\s+/', ' ', $clean));
-                if (strlen($clean) < 50) continue;
-                if (preg_match('/cookie|privacy|©|sign in|log in|cached|similar|javascript|stylesheet/i', $clean)) continue;
-                $relevance = 0;
-                foreach ($name_words as $w) {
-                    if (stripos($clean, $w) !== false) $relevance++;
-                }
-                if ($relevance > 0 || count($name_words) <= 1) {
-                    $snippets[] = $clean;
-                }
-            }
-        }
-        if ($snippets) {
-            usort($snippets, function($a, $b) { return strlen($b) - strlen($a); });
-            $best = $snippets[0];
-            if (strlen($best) > strlen($existing['description'] ?? '')) {
-                $found['description'] = mb_substr($best, 0, 2000);
-                $log[] = 'Found description (' . strlen($best) . ' chars)';
-            }
-            if (empty($existing['short_description'])) {
-                $short = $best;
-                if (strlen($short) > 160) {
-                    if (preg_match('/^(.{60,160}[.!?])\s/', $short, $sm2)) {
-                        $short = $sm2[1];
-                    } else {
-                        $short = mb_substr($short, 0, 160) . '...';
+            // ── Photo from Google Maps ──
+            // Google Maps pages embed business photos as lh5/lh3 googleusercontent URLs
+            if (empty($existing['profile_photo_url'])) {
+                $photo_patterns = [
+                    // Google Maps business photos (high quality)
+                    '#(https://lh[35]\\.googleusercontent\\.com/p/[a-zA-Z0-9_/=\\-]+)#i',
+                    // Generic googleusercontent
+                    '#(https://lh[35]\\.googleusercontent\\.com/[a-zA-Z0-9_/=\\-]+)#i',
+                    // Street view / photo thumbnails
+                    '#(https://streetviewpixels[a-zA-Z0-9._/-]+\\.googleusercontent\\.com/[a-zA-Z0-9_/=\\-]+)#i',
+                    // geo photos
+                    '#(https://geo[0-9]*\\.ggpht\\.com/[a-zA-Z0-9_/=\\-?&]+)#i',
+                ];
+                foreach ($photo_patterns as $pp) {
+                    if (preg_match($pp, $maps_html, $pm)) {
+                        $found['profile_photo_url'] = html_entity_decode($pm[1], ENT_QUOTES, 'UTF-8');
+                        $log[] = 'Found photo from Maps page';
+                        break;
                     }
                 }
-                $found['short_description'] = $short;
+            }
+
+            // ── Website from Google Maps ──
+            if (empty($existing['website_url'])) {
+                // Maps pages sometimes embed the business website
+                if (preg_match('#"website":"(https?://[^"]+)"#i', $maps_html, $wm)) {
+                    $found['website_url'] = html_entity_decode($wm[1], ENT_QUOTES, 'UTF-8');
+                    $log[] = 'Found website from Maps: ' . $found['website_url'];
+                }
+            }
+
+            // ── Phone from Google Maps ──
+            if (empty($existing['phone'])) {
+                // Google Maps JSON often contains phone
+                if (preg_match('#"phone(?:Number)?"\s*:\s*"([+\d][\d\s\-().]{7,20}\d)"#i', $maps_html, $phm)) {
+                    $found['phone'] = trim($phm[1]);
+                    $log[] = 'Found phone from Maps: ' . $found['phone'];
+                }
+                // Also try formatted phone in visible text
+                if (empty($found['phone']) && preg_match('#(?:0|\+62)[\d\s\-]{8,15}#', $maps_html, $phm)) {
+                    $phone = preg_replace('/\s+/', '', $phm[0]);
+                    if (strlen(preg_replace('/[^\d]/', '', $phone)) >= 9) {
+                        $found['phone'] = $phone;
+                        $log[] = 'Found phone from Maps text: ' . $phone;
+                    }
+                }
+            }
+
+            // ── Address from Google Maps ──
+            if (empty($existing['address'])) {
+                if (preg_match('#"address(?:Line)?"\s*:\s*"([^"]{10,200})"#i', $maps_html, $am)) {
+                    $found['address'] = html_entity_decode($am[1], ENT_QUOTES, 'UTF-8');
+                    $log[] = 'Found address from Maps';
+                }
+            }
+
+            // ── Social links from Google Maps (they sometimes appear) ──
+            $social_domains = [
+                'instagram_url' => 'instagram.com',
+                'facebook_url'  => 'facebook.com',
+                'linkedin_url'  => 'linkedin.com',
+                'youtube_url'   => 'youtube.com',
+                'tiktok_url'    => 'tiktok.com',
+            ];
+            preg_match_all('#https?://(?:www\.)?(?:facebook|fb|instagram|linkedin|youtube|tiktok)\.com/[a-zA-Z0-9_./@-]+#i', $maps_html, $social_matches);
+            foreach ($social_matches[0] as $surl) {
+                $surl = rtrim(html_entity_decode($surl, ENT_QUOTES, 'UTF-8'), '/');
+                foreach ($social_domains as $key => $domain) {
+                    if (empty($existing[$key]) && empty($found[$key]) && stripos($surl, $domain) !== false) {
+                        // Skip generic paths
+                        if (preg_match('#/(sharer|share|login|signup|help|policies|watch)#i', $surl)) continue;
+                        $found[$key] = $surl;
+                        $log[] = 'Found ' . $key . ' from Maps: ' . $surl;
+                    }
+                }
+            }
+        } else {
+            $log[] = 'Google Maps fetch failed (HTTP ' . $maps_code . ', ' . strlen($maps_html ?: '') . ' bytes)';
+        }
+    } else {
+        $log[] = 'No Google Maps URL available';
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // STEP 2: Try Google Maps Place photo API-style URL
+    // ══════════════════════════════════════════════════════════
+    if (empty($found['profile_photo_url']) && empty($existing['profile_photo_url']) && $google_maps_url) {
+        // Extract CID or place identifier from the maps URL
+        $place_photo_url = '';
+        // /maps/place/... URLs often have a data= param with encoded CID
+        // We can try the Maps thumbnail endpoint
+        if (preg_match('#/maps/place/([^/?]+)#i', $google_maps_url, $place_match)) {
+            $place_name = urldecode($place_match[1]);
+            $log[] = 'Trying Maps search for place: ' . $place_name;
+            // Use Maps search to find a photo
+            $maps_search = 'https://www.google.com/maps/search/' . urlencode($place_name . ' Lombok') . '/';
+            list($ms_html, $ms_code) = fetch_url($maps_search, $curl_opts);
+            if ($ms_html && $ms_code < 400) {
+                if (preg_match('#(https://lh[35]\.googleusercontent\.com/p/[a-zA-Z0-9_/=\-]+)#i', $ms_html, $mpm)) {
+                    $found['profile_photo_url'] = html_entity_decode($mpm[1], ENT_QUOTES, 'UTF-8');
+                    $log[] = 'Found photo from Maps search redirect';
+                }
             }
         }
     }
 
-    // ── Profile photo: try to find images in search results ──
-    if (empty($existing['profile_photo_url'])) {
-        // Bing/Google often embed thumbnails
-        $photo_url = '';
-        if (preg_match('#(https://lh[35]\.googleusercontent\.com/[a-zA-Z0-9_/=\-]+)#i', $html, $gm)) {
-            $photo_url = html_entity_decode($gm[1], ENT_QUOTES, 'UTF-8');
-            $log[] = 'Found Google Maps photo';
-        }
-        if (!$photo_url && preg_match('#(https://(?:tse|th)\d*\.mm\.bing\.net/th[^"\s]+)#i', $html, $bm)) {
-            $photo_url = html_entity_decode($bm[1], ENT_QUOTES, 'UTF-8');
-            $log[] = 'Found Bing thumbnail';
-        }
-        if (!$photo_url && preg_match('#(https://encrypted-tbn\d+\.gstatic\.com/images\?q=tbn:[a-zA-Z0-9_&;=\-]+)#i', $html, $gm)) {
-            $photo_url = html_entity_decode($gm[1], ENT_QUOTES, 'UTF-8');
-            $log[] = 'Found Google thumbnail';
-        }
-        if ($photo_url) {
-            $found['profile_photo_url'] = $photo_url;
-        }
-    }
+    // ══════════════════════════════════════════════════════════
+    // STEP 3: Try direct Instagram lookup
+    // ══════════════════════════════════════════════════════════
+    if (empty($existing['instagram_url']) && empty($found['instagram_url'])) {
+        // Build a likely Instagram handle from the business name
+        $ig_handles = build_social_handles($name);
+        foreach ($ig_handles as $handle) {
+            $ig_url = 'https://www.instagram.com/' . $handle . '/';
+            list($ig_html, $ig_code) = fetch_url($ig_url, $curl_opts);
+            // Instagram returns 200 for valid profiles, 404 for non-existent
+            if ($ig_code === 200 && $ig_html && strlen($ig_html) > 5000) {
+                // Verify it's an actual profile (not a login/redirect page)
+                if (stripos($ig_html, '"@type":"ProfilePage"') !== false
+                    || stripos($ig_html, 'profile_pic_url') !== false
+                    || preg_match('#<title>[^<]*@' . preg_quote($handle, '#') . '#i', $ig_html)) {
+                    $found['instagram_url'] = 'https://www.instagram.com/' . $handle;
+                    $log[] = 'Found Instagram profile: @' . $handle;
 
-    // ── Logo: try Bing Image search (more permissive than Google) ──
-    if (empty($existing['logo_url'])) {
-        $logo_query = $name . ' logo';
-        $img_url = 'https://www.bing.com/images/search?q=' . urlencode($logo_query) . '&form=HDRSC2';
-        $ch2 = curl_init();
-        curl_setopt_array($ch2, [CURLOPT_URL => $img_url] + $curl_opts);
-        $img_html = curl_exec($ch2);
-        $img_code = curl_getinfo($ch2, CURLINFO_HTTP_CODE);
-        curl_close($ch2);
-
-        if ($img_html && $img_code < 400 && strlen($img_html) > 500) {
-            $log[] = 'Bing Image search completed for logo';
-            // Bing Images stores URLs in murl param or in JSON
-            if (preg_match_all('#"murl":"(https?://[^"]+)"#i', $img_html, $img_matches)) {
-                foreach ($img_matches[1] as $candidate) {
-                    $candidate = html_entity_decode(str_replace('\\/', '/', $candidate), ENT_QUOTES, 'UTF-8');
-                    if (preg_match('#gstatic\.com|google\.com|bing\.com|msn\.com#i', $candidate)) continue;
-                    if (preg_match('#\b(icon|favicon|pixel|1x1)\b#i', $candidate)) continue;
-                    $found['logo_url'] = $candidate;
-                    $log[] = 'Found logo: ' . substr($candidate, 0, 80);
+                    // Try to get profile pic from Instagram
+                    if (empty($found['profile_photo_url']) && empty($existing['profile_photo_url'])) {
+                        if (preg_match('#"profile_pic_url(?:_hd)?"\s*:\s*"(https?://[^"]+)"#i', $ig_html, $igpm)) {
+                            $pic = str_replace('\/', '/', $igpm[1]);
+                            $found['profile_photo_url'] = $pic;
+                            $log[] = 'Found profile photo from Instagram';
+                        }
+                    }
                     break;
                 }
             }
-        } else {
-            $log[] = 'Bing Image search failed (HTTP ' . $img_code . ')';
+            // Small delay to be polite
+            usleep(300000); // 300ms
+        }
+        if (empty($found['instagram_url'])) {
+            $log[] = 'No Instagram profile found (tried: ' . implode(', ', $ig_handles) . ')';
         }
     }
 
-    // ── Phone number ──
-    if (empty($existing['phone'])) {
-        if (preg_match('#(?:Phone|Tel|Telepon|Telp)[:\s]*([+\d][\d\s\-().]{7,20}\d)#i', $html, $pm)) {
-            $found['phone'] = trim($pm[1]);
-            $log[] = 'Found phone: ' . $found['phone'];
-        }
-        if (empty($found['phone']) && preg_match('#((?:0|\+62)[\d\s\-]{8,15})#', $html, $pm)) {
-            $phone = preg_replace('/\s+/', '', $pm[1]);
-            if (strlen(preg_replace('/[^\d]/', '', $phone)) >= 9) {
-                $found['phone'] = $phone;
-                $log[] = 'Found phone: ' . $phone;
+    // ══════════════════════════════════════════════════════════
+    // STEP 4: If still no photo, try fetching the website directly
+    // ══════════════════════════════════════════════════════════
+    $website = $found['website_url'] ?? ($existing['website_url'] ?? '');
+    if (empty($found['profile_photo_url']) && empty($existing['profile_photo_url']) && $website) {
+        $log[] = 'Trying website for photo/logo: ' . $website;
+        list($site_html, $site_code) = fetch_url($website, $curl_opts);
+        if ($site_html && $site_code < 400 && strlen($site_html) > 500) {
+            // Look for og:image or logo
+            if (preg_match('#<meta[^>]+property=["\']og:image["\'][^>]+content=["\'](https?://[^"\']+)["\']#i', $site_html, $ogm)) {
+                $found['profile_photo_url'] = html_entity_decode($ogm[1], ENT_QUOTES, 'UTF-8');
+                $log[] = 'Found og:image from website';
+            } elseif (preg_match('#<meta[^>]+content=["\'](https?://[^"\']+)["\'][^>]+property=["\']og:image["\']#i', $site_html, $ogm)) {
+                $found['profile_photo_url'] = html_entity_decode($ogm[1], ENT_QUOTES, 'UTF-8');
+                $log[] = 'Found og:image from website (alt order)';
             }
+
+            // Logo from website
+            if (empty($found['logo_url']) && empty($existing['logo_url'])) {
+                if (preg_match('#<(?:img|link)[^>]+(?:logo|brand)[^>]+(?:src|href)=["\'](https?://[^"\']+)["\']#i', $site_html, $lgm)) {
+                    $found['logo_url'] = html_entity_decode($lgm[1], ENT_QUOTES, 'UTF-8');
+                    $log[] = 'Found logo from website';
+                }
+            }
+
+            // Social links from the website itself
+            $site_social = [
+                'instagram_url' => '#href=["\'](https?://(?:www\.)?instagram\.com/[a-zA-Z0-9_.]+/?)["\']#i',
+                'facebook_url'  => '#href=["\'](https?://(?:www\.)?(?:facebook|fb)\.com/[a-zA-Z0-9_./-]+/?)["\']#i',
+                'linkedin_url'  => '#href=["\'](https?://(?:www\.)?linkedin\.com/(?:company|in)/[a-zA-Z0-9_./-]+/?)["\']#i',
+                'tiktok_url'    => '#href=["\'](https?://(?:www\.)?tiktok\.com/@[a-zA-Z0-9_.]+/?)["\']#i',
+            ];
+            foreach ($site_social as $sk => $sp) {
+                if (empty($existing[$sk]) && empty($found[$sk])) {
+                    if (preg_match($sp, $site_html, $ssm)) {
+                        $url = rtrim(html_entity_decode($ssm[1], ENT_QUOTES, 'UTF-8'), '/');
+                        if (strpos($url, 'sharer') === false && strpos($url, '/login') === false) {
+                            $found[$sk] = $url;
+                            $log[] = 'Found ' . $sk . ' from website';
+                        }
+                    }
+                }
+            }
+        } else {
+            $log[] = 'Website fetch failed (HTTP ' . $site_code . ')';
         }
     }
 
@@ -426,4 +410,42 @@ function google_search_enrich($name, $existing, $curl_opts) {
         'log' => $log,
         'fields_found' => count($found),
     ];
+}
+
+/**
+ * Build likely social media handles from a business name.
+ * Returns array of handles to try (lowercase, cleaned).
+ */
+function build_social_handles($name) {
+    $handles = [];
+    $clean = strtolower(trim($name));
+
+    // Remove common Indonesian business prefixes/suffixes
+    $clean = preg_replace('/^(toko|cv\.?|pt\.?|ud\.?)\s+/i', '', $clean);
+    $clean = preg_replace('/\s+(lombok|bali|indonesia|ntb)$/i', '', $clean);
+
+    // Version 1: just underscores
+    $h1 = preg_replace('/[^a-z0-9]/', '_', $clean);
+    $h1 = preg_replace('/_+/', '_', trim($h1, '_'));
+    if (strlen($h1) >= 3) $handles[] = $h1;
+
+    // Version 2: no separators
+    $h2 = preg_replace('/[^a-z0-9]/', '', $clean);
+    if (strlen($h2) >= 3 && $h2 !== $h1) $handles[] = $h2;
+
+    // Version 3: dots instead of spaces
+    $h3 = preg_replace('/\s+/', '.', trim(preg_replace('/[^a-z0-9\s]/', '', $clean)));
+    if (strlen($h3) >= 3 && $h3 !== $h1 && $h3 !== $h2) $handles[] = $h3;
+
+    // Version 4: original name with _lombok suffix
+    if (strlen($h1) >= 3) $handles[] = $h1 . '_lombok';
+
+    // Version 5: first word + "lombok"
+    $words = explode(' ', $clean);
+    if (count($words) > 1) {
+        $fw = preg_replace('/[^a-z0-9]/', '', $words[0]);
+        if (strlen($fw) >= 3) $handles[] = $fw . 'lombok';
+    }
+
+    return array_unique(array_slice($handles, 0, 4)); // max 4 attempts
 }

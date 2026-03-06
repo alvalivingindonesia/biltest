@@ -1775,7 +1775,7 @@ elseif ($section === 'batch_enrich'):
 </div>
 <div id="be-results" class="card" style="display:none;padding:0;overflow-x:auto">
     <table id="be-table">
-        <thead><tr><th>Type</th><th>ID</th><th>Name</th><th>Reviews</th><th>Rating</th><th>Website</th><th>Status</th><th>Action</th></tr></thead>
+        <thead><tr><th>Type</th><th>ID</th><th>Name</th><th>Reviews</th><th>Rating</th><th>Maps URL</th><th>Status</th><th>Action</th></tr></thead>
         <tbody id="be-tbody"></tbody>
     </table>
 </div>
@@ -1830,7 +1830,7 @@ function beRenderTable() {
     var html = '';
     for (var i = 0; i < beEntities.length; i++) {
         var e = beEntities[i];
-        var ws = e.website_url ? '<a href="' + e.website_url + '" target="_blank" style="font-size:12px">' + e.website_url.replace(/^https?:\/\/(www\.)?/, '').substring(0, 30) + '</a>' : '<span style="color:#ccc">None</span>';
+        var ws = e.google_maps_url ? '<a href="' + e.google_maps_url + '" target="_blank" style="font-size:11px;color:#16a34a" title="' + e.google_maps_url + '">Maps &#x2713;</a>' : '<span style="color:#ccc">No maps</span>';
         html += '<tr id="be-row-' + i + '">';
         html += '<td><span class="badge b-blue">' + e.entity_type + '</span></td>';
         html += '<td style="color:#888;font-size:12px">' + e.id + '</td>';
