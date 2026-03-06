@@ -722,18 +722,28 @@ filterCatDropdown();
 <div class="card" style="padding:0;overflow-x:auto">
 <table>
     <tr>
-        <th><a href="?<?= $p_sort_name_url ?>" style="color:inherit;text-decoration:none">Name <?= $sort==='name'?'▲':'' ?></a></th>
+        <th style="width:40px"></th>
+        <th><a href="?<?= $p_sort_name_url ?>" style="color:inherit;text-decoration:none">Name <?= $sort==='name'?'&#9650;':'' ?></a></th>
         <th>Group</th><th>Categories</th><th>Area</th>
-        <th><a href="?<?= $p_sort_reviews_url ?>" style="color:inherit;text-decoration:none">Reviews <?= $sort==='reviews'?'▼':'' ?></a> / <a href="?<?= $p_sort_rating_url ?>" style="color:inherit;text-decoration:none">Rating <?= $sort==='rating'?'▼':'' ?></a></th>
+        <th><a href="?<?= $p_sort_reviews_url ?>" style="color:inherit;text-decoration:none">Reviews <?= $sort==='reviews'?'&#9660;':'' ?></a> / <a href="?<?= $p_sort_rating_url ?>" style="color:inherit;text-decoration:none">Rating <?= $sort==='rating'?'&#9660;':'' ?></a></th>
+        <th>Website</th>
         <th>Active</th><th>Actions</th>
     </tr>
     <?php foreach ($rows as $r): ?>
     <tr>
+        <td>
+            <?php if (!empty($r['profile_photo_url'])): ?>
+            <img src="<?= htmlspecialchars($r['profile_photo_url']) ?>" alt="" style="width:36px;height:36px;border-radius:4px;object-fit:cover;display:block">
+            <?php else: ?>
+            <div style="width:36px;height:36px;background:#e5e7eb;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#9ca3af">No img</div>
+            <?php endif; ?>
+        </td>
         <td><a href="?s=providers&a=edit&id=<?= $r['id'] ?>"><?= htmlspecialchars($r['name']) ?></a></td>
         <td><span class="badge b-blue"><?= htmlspecialchars($r['grp_label'] ?? '-') ?></span></td>
         <td><?= htmlspecialchars(implode(', ', $prov_cat_map[$r['id']] ?? []) ?: '-') ?></td>
         <td><?= htmlspecialchars($r['area_label'] ?? '-') ?></td>
-        <td>★<?= $r['google_rating'] ?: '-' ?> (<?= $r['google_review_count'] ?>)</td>
+        <td>&#9733;<?= $r['google_rating'] ?: '-' ?> (<?= $r['google_review_count'] ?>)</td>
+        <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?php if (!empty($r['website_url'])): ?><a href="<?= htmlspecialchars($r['website_url']) ?>" target="_blank" rel="noopener" style="font-size:12px"><?= htmlspecialchars(parse_url($r['website_url'], PHP_URL_HOST) ?: $r['website_url']) ?></a><?php else: ?><span style="color:#ccc">-</span><?php endif; ?></td>
         <td><?= $r['is_active'] ? '<span class="badge b-green">Yes</span>' : '<span class="badge b-red">No</span>' ?></td>
         <td class="actions">
             <a href="?s=providers&a=edit&id=<?= $r['id'] ?>" class="btn btn-o btn-sm">Edit</a>
@@ -786,7 +796,12 @@ elseif ($section === 'providers' && ($action === 'edit' || $action === 'save')):
         <div class="fg"><label>Review Count</label><input type="number" name="google_review_count" value="<?= $v('google_review_count','0') ?>"></div>
         <div class="fg"><label>Phone</label><input type="text" name="phone" value="<?= $v('phone') ?>"></div>
         <div class="fg"><label>WhatsApp</label><input type="text" name="whatsapp_number" value="<?= $v('whatsapp_number') ?>"></div>
-        <div class="fg"><label>Website</label><input type="url" name="website_url" value="<?= $v('website_url') ?>"></div>
+        <div class="fg"><label>Website</label>
+            <div style="display:flex;gap:8px;align-items:center">
+                <input type="url" name="website_url" id="prov_website_url" value="<?= $v('website_url') ?>" style="flex:1">
+                <?php if ($id): ?><button type="button" class="btn btn-o btn-sm" onclick="scanWebsite('providers')" id="scan-btn" title="Scan website for missing info">&#x1F50D; Scan</button><?php endif; ?>
+            </div>
+        </div>
         <div class="fg"><label>Badge</label><input type="text" name="badge" value="<?= $v('badge') ?>" placeholder="e.g. Verified, Top Rated"></div>
         <div class="fg span2"><label>Profile Photo URL</label>
             <div style="display:flex;gap:8px;align-items:center">
@@ -811,6 +826,7 @@ elseif ($section === 'providers' && ($action === 'edit' || $action === 'save')):
             <div class="ck"><input type="checkbox" name="is_active" <?= ($id ? !empty($item['is_active']) : true)?'checked':'' ?>> Active</div>
         </div>
     </div>
+    <div id="scan-results" style="display:none;margin-top:12px;padding:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px"></div>
     <div style="margin-top:16px;display:flex;gap:8px">
         <button class="btn btn-g">Save</button>
         <a href="?s=providers" class="btn btn-o">Cancel</a>
@@ -888,18 +904,27 @@ elseif ($section === 'developers' && $action === 'list'):
 <div class="card" style="padding:0;overflow-x:auto">
 <table>
     <tr>
-        <th><a href="?<?= $d_sort_name_url ?>" style="color:inherit;text-decoration:none">Name <?= $sort==='name'?'▲':'' ?></a></th>
+        <th style="width:40px"></th>
+        <th><a href="?<?= $d_sort_name_url ?>" style="color:inherit;text-decoration:none">Name <?= $sort==='name'?'&#9650;':'' ?></a></th>
         <th>Categories</th><th>Areas</th>
-        <th><a href="?<?= $d_sort_reviews_url ?>" style="color:inherit;text-decoration:none">Reviews <?= $sort==='reviews'?'▼':'' ?></a> / <a href="?<?= $d_sort_rating_url ?>" style="color:inherit;text-decoration:none">Rating <?= $sort==='rating'?'▼':'' ?></a></th>
-        <th>Phone</th><th>Active</th><th>Actions</th>
+        <th><a href="?<?= $d_sort_reviews_url ?>" style="color:inherit;text-decoration:none">Reviews <?= $sort==='reviews'?'&#9660;':'' ?></a> / <a href="?<?= $d_sort_rating_url ?>" style="color:inherit;text-decoration:none">Rating <?= $sort==='rating'?'&#9660;':'' ?></a></th>
+        <th>Website</th>
+        <th>Active</th><th>Actions</th>
     </tr>
     <?php foreach ($rows as $r): ?>
     <tr>
+        <td>
+            <?php if (!empty($r['profile_photo_url'])): ?>
+            <img src="<?= htmlspecialchars($r['profile_photo_url']) ?>" alt="" style="width:36px;height:36px;border-radius:4px;object-fit:cover;display:block">
+            <?php else: ?>
+            <div style="width:36px;height:36px;background:#e5e7eb;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#9ca3af">No img</div>
+            <?php endif; ?>
+        </td>
         <td><a href="?s=developers&a=edit&id=<?= $r['id'] ?>"><?= htmlspecialchars($r['name']) ?></a></td>
         <td><?= htmlspecialchars(implode(', ', $dev_cat_map[$r['id']] ?? []) ?: '-') ?></td>
         <td><?= htmlspecialchars(implode(', ', $dev_area_map[$r['id']] ?? []) ?: '-') ?></td>
-        <td>★<?= $r['google_rating'] ?: '-' ?> (<?= $r['google_review_count'] ?>)</td>
-        <td><?= htmlspecialchars($r['phone'] ?? '-') ?></td>
+        <td>&#9733;<?= $r['google_rating'] ?: '-' ?> (<?= $r['google_review_count'] ?>)</td>
+        <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?php if (!empty($r['website_url'])): ?><a href="<?= htmlspecialchars($r['website_url']) ?>" target="_blank" rel="noopener" style="font-size:12px"><?= htmlspecialchars(parse_url($r['website_url'], PHP_URL_HOST) ?: $r['website_url']) ?></a><?php else: ?><span style="color:#ccc">-</span><?php endif; ?></td>
         <td><?= $r['is_active'] ? '<span class="badge b-green">Yes</span>' : '<span class="badge b-red">No</span>' ?></td>
         <td class="actions">
             <a href="?s=developers&a=edit&id=<?= $r['id'] ?>" class="btn btn-o btn-sm">Edit</a>
@@ -936,7 +961,12 @@ elseif ($section === 'developers' && ($action === 'edit' || $action === 'save'))
         <div class="fg"><label>Review Count</label><input type="number" name="google_review_count" value="<?= $v('google_review_count','0') ?>"></div>
         <div class="fg"><label>Phone</label><input type="text" name="phone" value="<?= $v('phone') ?>"></div>
         <div class="fg"><label>WhatsApp</label><input type="text" name="whatsapp_number" value="<?= $v('whatsapp_number') ?>"></div>
-        <div class="fg"><label>Website</label><input type="url" name="website_url" value="<?= $v('website_url') ?>"></div>
+        <div class="fg"><label>Website</label>
+            <div style="display:flex;gap:8px;align-items:center">
+                <input type="url" name="website_url" id="dev_website_url" value="<?= $v('website_url') ?>" style="flex:1">
+                <?php if ($id): ?><button type="button" class="btn btn-o btn-sm" onclick="scanWebsite('developers')" id="scan-btn-dev" title="Scan website for missing info">&#x1F50D; Scan</button><?php endif; ?>
+            </div>
+        </div>
         <div class="fg"><label>Badge</label><input type="text" name="badge" value="<?= $v('badge') ?>"></div>
         <div class="fg span2"><label>Profile Photo URL</label>
             <div style="display:flex;gap:8px;align-items:center">
@@ -970,6 +1000,7 @@ elseif ($section === 'developers' && ($action === 'edit' || $action === 'save'))
             <div class="ck"><input type="checkbox" name="is_active" <?= ($id ? !empty($item['is_active']) : true)?'checked':'' ?>> Active</div>
         </div>
     </div>
+    <div id="scan-results-dev" style="display:none;margin-top:12px;padding:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px"></div>
     <div style="margin-top:16px;display:flex;gap:8px">
         <button class="btn btn-g">Save</button>
         <a href="?s=developers" class="btn btn-o">Cancel</a>
@@ -1526,13 +1557,21 @@ elseif ($section === 'agents'):
 </form>
 <div class="card" style="padding:0;overflow-x:auto">
 <table>
-    <tr><th>ID</th><th>User Email</th><th>Display Name</th><th>Agency Name</th><th>Phone</th><th>Verified</th><th>Active</th><th>Listings</th><th>Created</th><th>Actions</th></tr>
+    <tr><th style="width:40px">Photo</th><th>ID</th><th>User Email</th><th>Display Name</th><th>Agency Name</th><th>Website</th><th>Phone</th><th>Verified</th><th>Active</th><th>Listings</th><th>Created</th><th>Actions</th></tr>
     <?php foreach ($agents as $ag): ?>
     <tr>
+        <td>
+            <?php if (!empty($ag['profile_image_url'])): ?>
+            <img src="<?= htmlspecialchars($ag['profile_image_url']) ?>" alt="" style="width:40px;height:40px;border-radius:50%;object-fit:cover;display:block">
+            <?php else: ?>
+            <div style="width:40px;height:40px;background:#e5e7eb;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;color:#9ca3af">—</div>
+            <?php endif; ?>
+        </td>
         <td style="color:#888;font-size:12px"><?= $ag['id'] ?></td>
         <td><?= htmlspecialchars($ag['email'] ?? '-') ?></td>
         <td><?= htmlspecialchars($ag['display_name'] ?? '-') ?></td>
         <td><?= htmlspecialchars($ag['agency_name'] ?? '-') ?></td>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?php if (!empty($ag['website_url'])): ?><a href="<?= htmlspecialchars($ag['website_url']) ?>" target="_blank" title="<?= htmlspecialchars($ag['website_url']) ?>" style="color:#0c7c84"><?= htmlspecialchars(preg_replace('#^https?://(www\.)?#','', $ag['website_url'])) ?></a><?php else: ?>-<?php endif; ?></td>
         <td><?= htmlspecialchars($ag['phone'] ?? '-') ?></td>
         <td><?= $ag['is_verified'] ? '<span class="badge b-green">Y</span>' : '<span class="badge b-red">N</span>' ?></td>
         <td><?= $ag['is_active'] ? '<span class="badge b-green">Y</span>' : '<span class="badge b-red">N</span>' ?></td>
@@ -1755,6 +1794,119 @@ function triggerReviewCheck(btn) {
 </script>
 
 <?php endif; ?>
+
+<script>
+/* ── Website Enrichment Scanner ────────────────────────────── */
+function scanWebsite(entityType) {
+    var urlInput, resultsDiv, btn;
+    if (entityType === 'providers') {
+        urlInput = document.getElementById('prov_website_url');
+        resultsDiv = document.getElementById('scan-results');
+        btn = document.getElementById('scan-btn');
+    } else if (entityType === 'developers') {
+        urlInput = document.getElementById('dev_website_url');
+        resultsDiv = document.getElementById('scan-results-dev');
+        btn = document.getElementById('scan-btn-dev');
+    } else {
+        return;
+    }
+    var url = urlInput ? urlInput.value.trim() : '';
+    if (!url) { alert('Enter a website URL first.'); return; }
+
+    btn.disabled = true;
+    btn.innerHTML = '&#x23F3; Scanning…';
+    resultsDiv.style.display = 'block';
+    resultsDiv.innerHTML = '<span style="color:#666">Fetching website data…</span>';
+
+    /* Collect current form values so scraper knows what is already filled */
+    var form = btn.closest('form');
+    var existing = {};
+    var fieldNames = ['description','short_description','profile_photo_url','profile_image_url','logo_url',
+        'instagram_url','facebook_url','linkedin_url','whatsapp_number','phone','email'];
+    for (var i = 0; i < fieldNames.length; i++) {
+        var inp = form.querySelector('[name="' + fieldNames[i] + '"]');
+        if (inp && inp.value.trim()) existing[fieldNames[i]] = inp.value.trim();
+    }
+
+    fetch('scrape_enrich.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({url: url, existing: existing})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.disabled = false;
+        btn.innerHTML = '&#x1F50D; Scan';
+        if (data.error) {
+            resultsDiv.innerHTML = '<strong style="color:#dc2626">Error:</strong> ' + data.error;
+            return;
+        }
+        var found = data.found || {};
+        var log = data.log || [];
+        var keys = Object.keys(found);
+        if (keys.length === 0) {
+            resultsDiv.innerHTML = '<strong>No new data found.</strong> All fields already populated or website did not expose additional info.';
+            return;
+        }
+        /* Build summary and populate empty form fields */
+        var html = '<strong style="color:#16a34a">Found ' + keys.length + ' field(s):</strong><ul style="margin:8px 0 0;padding-left:20px;font-size:13px">';
+        for (var j = 0; j < keys.length; j++) {
+            var k = keys[j];
+            var val = found[k];
+            html += '<li><strong>' + k.replace(/_/g, ' ') + ':</strong> ';
+            if (val && (val.indexOf('http') === 0 || val.indexOf('//') === 0)) {
+                html += '<a href="' + val + '" target="_blank" style="word-break:break-all">' + val.substring(0, 80) + '</a>';
+            } else {
+                html += (val && val.length > 120 ? val.substring(0, 120) + '…' : val);
+            }
+            html += ' <button type="button" onclick="applyField(this,\'' + entityType + '\',\'' + k + '\')" class="btn btn-g btn-sm" style="margin-left:6px;padding:2px 8px;font-size:11px">Apply</button></li>';
+            /* Auto-apply to empty fields */
+            var inp = form.querySelector('[name="' + k + '"]');
+            if (inp && !inp.value.trim()) {
+                inp.value = val;
+            }
+        }
+        html += '</ul>';
+        if (log.length) {
+            html += '<details style="margin-top:8px;font-size:12px;color:#666"><summary>Scan log</summary><ul style="padding-left:16px;margin-top:4px">';
+            for (var l = 0; l < log.length; l++) { html += '<li>' + log[l] + '</li>'; }
+            html += '</ul></details>';
+        }
+        html += '<p style="margin-top:10px;font-size:12px;color:#666">Fields auto-applied to empty inputs. Click <strong>Save</strong> to persist.</p>';
+        resultsDiv.innerHTML = html;
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.innerHTML = '&#x1F50D; Scan';
+        resultsDiv.innerHTML = '<strong style="color:#dc2626">Network error:</strong> ' + err.message;
+        console.error(err);
+    });
+}
+function applyField(applyBtn, entityType, fieldName) {
+    /* Manually apply a found value to its form field */
+    var resultsDiv = (entityType === 'providers') ? document.getElementById('scan-results') : document.getElementById('scan-results-dev');
+    var form = resultsDiv.closest('form');
+    if (!form) return;
+    var inp = form.querySelector('[name="' + fieldName + '"]');
+    if (!inp) { alert('Field "' + fieldName + '" not found in form.'); return; }
+    /* Get value from the list item text */
+    var li = applyBtn.parentNode;
+    var strong = li.querySelector('strong');
+    var aTag = li.querySelector('a');
+    var val = '';
+    if (aTag) { val = aTag.getAttribute('href'); }
+    else {
+        var text = li.textContent || '';
+        text = text.replace(strong.textContent, '').replace('Apply', '').trim();
+        if (text.charAt(text.length - 1) === '…') text = text.substring(0, text.length - 1);
+        val = text;
+    }
+    inp.value = val;
+    applyBtn.textContent = 'Applied';
+    applyBtn.disabled = true;
+    applyBtn.className = 'btn btn-o btn-sm';
+}
+</script>
 
 </div><!-- main -->
 </div><!-- shell -->
