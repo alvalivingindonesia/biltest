@@ -610,6 +610,7 @@ function toggleSidebarSub(e,id){
     <a href="?s=lookups" class="<?= $section==='lookups'?'active':'' ?>">Categories & Lookups</a>
     <h2>Tools</h2>
     <a href="import.php">Google Maps Importer</a>
+    <a href="?s=batch_enrich" class="<?= $section==='batch_enrich'?'active':'' ?>">Batch Enrich</a>
     <a href="?s=review_updates" class="<?= $section==='review_updates'?'active':'' ?>">Review Update Log</a>
     <a href="https://biltest.roving-i.com.au" target="_blank" rel="noopener" style="opacity:.7;">🌐 View Live Site</a>
     <a href="?logout=1" style="margin-top:auto;opacity:.6">Logout</a>
@@ -1757,6 +1758,174 @@ elseif ($section === 'listings'):
 
 <?php
 // ═══════════════════════════════════════════════════════════════
+// BATCH ENRICH — Find entities with reviews but no image, enrich via Google
+// ═══════════════════════════════════════════════════════════════
+elseif ($section === 'batch_enrich'):
+?>
+<h1>Batch Enrich Tool</h1>
+<p style="color:#666;margin-bottom:16px;font-size:13px">
+    Finds providers, developers and agents with 10+ Google reviews but no profile image.<br>
+    For each, you can trigger a Google search to find social links, images, descriptions, logos and phone numbers.
+</p>
+<div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
+    <label style="font-size:13px;font-weight:600">Min reviews:</label>
+    <input type="number" id="be-min-reviews" value="10" min="1" style="width:80px;padding:5px 8px;font-size:13px;border:1px solid #d0d0d0;border-radius:5px">
+    <button class="btn btn-p" id="be-find-btn" onclick="beFindMissing()">Find Entities</button>
+    <span id="be-status" style="font-size:13px;color:#666"></span>
+</div>
+<div id="be-results" class="card" style="display:none;padding:0;overflow-x:auto">
+    <table id="be-table">
+        <thead><tr><th>Type</th><th>ID</th><th>Name</th><th>Reviews</th><th>Rating</th><th>Website</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody id="be-tbody"></tbody>
+    </table>
+</div>
+<div id="be-empty" class="card" style="display:none;text-align:center;color:#888">No entities found matching criteria.</div>
+<div id="be-batch-bar" style="margin-top:12px;display:flex;gap:8px;align-items:center">
+    <button class="btn btn-g" id="be-enrich-all-btn" onclick="beEnrichAll()" style="display:none">Enrich All (one-by-one)</button>
+    <span id="be-batch-status" style="font-size:13px;color:#666"></span>
+</div>
+<script>
+var beEntities = [];
+var beProcessing = false;
+
+function beFindMissing() {
+    var minReviews = parseInt(document.getElementById('be-min-reviews').value) || 10;
+    var btn = document.getElementById('be-find-btn');
+    var status = document.getElementById('be-status');
+    btn.disabled = true;
+    btn.textContent = 'Searching…';
+    status.textContent = '';
+    document.getElementById('be-results').style.display = 'none';
+    document.getElementById('be-empty').style.display = 'none';
+    document.getElementById('be-enrich-all-btn').style.display = 'none';
+
+    fetch('google_enrich.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: 'find_missing', min_reviews: minReviews})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.disabled = false;
+        btn.textContent = 'Find Entities';
+        if (data.error) { status.textContent = 'Error: ' + data.error; return; }
+        beEntities = data.entities || [];
+        if (beEntities.length === 0) {
+            document.getElementById('be-empty').style.display = 'block';
+            status.textContent = 'No matching entities found.';
+            return;
+        }
+        status.textContent = 'Found ' + beEntities.length + ' entit' + (beEntities.length === 1 ? 'y' : 'ies') + '.';
+        beRenderTable();
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.textContent = 'Find Entities';
+        status.textContent = 'Network error: ' + err.message;
+    });
+}
+
+function beRenderTable() {
+    var tbody = document.getElementById('be-tbody');
+    var html = '';
+    for (var i = 0; i < beEntities.length; i++) {
+        var e = beEntities[i];
+        var ws = e.website_url ? '<a href="' + e.website_url + '" target="_blank" style="font-size:12px">' + e.website_url.replace(/^https?:\/\/(www\.)?/, '').substring(0, 30) + '</a>' : '<span style="color:#ccc">None</span>';
+        html += '<tr id="be-row-' + i + '">';
+        html += '<td><span class="badge b-blue">' + e.entity_type + '</span></td>';
+        html += '<td style="color:#888;font-size:12px">' + e.id + '</td>';
+        html += '<td>' + (e.name || '-') + '</td>';
+        html += '<td>' + (e.google_review_count || 0) + '</td>';
+        html += '<td>&#9733;' + (e.google_rating || '-') + '</td>';
+        html += '<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + ws + '</td>';
+        html += '<td id="be-status-' + i + '"><span class="badge b-yellow">Pending</span></td>';
+        html += '<td><button class="btn btn-p btn-sm" id="be-btn-' + i + '" onclick="beEnrichOne(' + i + ')">Enrich</button></td>';
+        html += '</tr>';
+    }
+    tbody.innerHTML = html;
+    document.getElementById('be-results').style.display = 'block';
+    document.getElementById('be-enrich-all-btn').style.display = 'inline-flex';
+}
+
+function beEnrichOne(idx) {
+    var e = beEntities[idx];
+    var btn = document.getElementById('be-btn-' + idx);
+    var st = document.getElementById('be-status-' + idx);
+    btn.disabled = true;
+    btn.textContent = 'Working…';
+    st.innerHTML = '<span class="badge b-yellow">Searching…</span>';
+
+    fetch('google_enrich.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: 'enrich_save', entity_type: e.entity_type, entity_id: e.id})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) {
+            st.innerHTML = '<span class="badge b-red" title="' + data.error + '">Error</span>';
+            btn.textContent = 'Retry';
+            btn.disabled = false;
+            return;
+        }
+        var saved = data.saved || 0;
+        var fieldsFound = data.fields_found || Object.keys(data.found || {}).length;
+        if (saved > 0) {
+            st.innerHTML = '<span class="badge b-green">' + saved + ' saved</span>';
+        } else if (fieldsFound > 0) {
+            st.innerHTML = '<span class="badge b-blue">' + fieldsFound + ' found (0 new)</span>';
+        } else {
+            st.innerHTML = '<span class="badge b-yellow">No data</span>';
+        }
+        btn.textContent = 'Done';
+        btn.disabled = true;
+        /* Show details on hover */
+        if (data.log && data.log.length) {
+            st.title = data.log.join('\n');
+        }
+    })
+    .catch(function(err) {
+        st.innerHTML = '<span class="badge b-red">Net error</span>';
+        btn.textContent = 'Retry';
+        btn.disabled = false;
+    });
+}
+
+function beEnrichAll() {
+    if (beProcessing) return;
+    beProcessing = true;
+    var allBtn = document.getElementById('be-enrich-all-btn');
+    var batchStatus = document.getElementById('be-batch-status');
+    allBtn.disabled = true;
+    allBtn.textContent = 'Processing…';
+    var idx = 0;
+    var total = beEntities.length;
+
+    function processNext() {
+        /* Skip already-done rows */
+        while (idx < total) {
+            var btn = document.getElementById('be-btn-' + idx);
+            if (btn && btn.textContent === 'Done') { idx++; continue; }
+            break;
+        }
+        if (idx >= total) {
+            allBtn.textContent = 'All Done';
+            batchStatus.textContent = 'Batch complete.';
+            beProcessing = false;
+            return;
+        }
+        batchStatus.textContent = 'Processing ' + (idx + 1) + ' of ' + total + '…';
+        /* Trigger the single enrich, then wait 2s to avoid rate limits */
+        beEnrichOne(idx);
+        idx++;
+        setTimeout(processNext, 2500);
+    }
+    processNext();
+}
+</script>
+
+<?php
+// ═══════════════════════════════════════════════════════════════
 // REVIEW UPDATE LOG
 // ═══════════════════════════════════════════════════════════════
 elseif ($section === 'review_updates'):
@@ -1841,7 +2010,16 @@ function scanWebsite(entityType) {
         return;
     }
     var url = urlInput ? urlInput.value.trim() : '';
-    if (!url) { alert('Enter a website URL first.'); return; }
+    var form = btn.closest('form');
+    var nameInput = form.querySelector('[name="name"]');
+    var entityName = nameInput ? nameInput.value.trim() : '';
+
+    /* If no URL, fall back to Google search enrichment */
+    if (!url) {
+        if (!entityName) { alert('Enter a website URL or ensure the Name field is filled.'); return; }
+        scanGoogle(entityType, entityName, form, resultsDiv, btn);
+        return;
+    }
 
     btn.disabled = true;
     btn.innerHTML = '&#x23F3; Scanning…';
@@ -1849,14 +2027,7 @@ function scanWebsite(entityType) {
     resultsDiv.innerHTML = '<span style="color:#666">Fetching website data…</span>';
 
     /* Collect current form values so scraper knows what is already filled */
-    var form = btn.closest('form');
-    var existing = {};
-    var fieldNames = ['description','short_description','profile_photo_url','profile_image_url','logo_url',
-        'instagram_url','facebook_url','linkedin_url','whatsapp_number','phone','email'];
-    for (var i = 0; i < fieldNames.length; i++) {
-        var inp = form.querySelector('[name="' + fieldNames[i] + '"]');
-        if (inp && inp.value.trim()) existing[fieldNames[i]] = inp.value.trim();
-    }
+    var existing = collectExisting(form);
 
     fetch('scrape_enrich.php', {
         method: 'POST',
@@ -1864,53 +2035,94 @@ function scanWebsite(entityType) {
         body: JSON.stringify({url: url, existing: existing})
     })
     .then(function(r) { return r.json(); })
-    .then(function(data) {
-        btn.disabled = false;
-        btn.innerHTML = '&#x1F50D; Scan';
-        if (data.error) {
-            resultsDiv.innerHTML = '<strong style="color:#dc2626">Error:</strong> ' + data.error;
-            return;
-        }
-        var found = data.found || {};
-        var log = data.log || [];
-        var keys = Object.keys(found);
-        if (keys.length === 0) {
-            resultsDiv.innerHTML = '<strong>No new data found.</strong> All fields already populated or website did not expose additional info.';
-            return;
-        }
-        /* Build summary and populate empty form fields */
-        var html = '<strong style="color:#16a34a">Found ' + keys.length + ' field(s):</strong><ul style="margin:8px 0 0;padding-left:20px;font-size:13px">';
-        for (var j = 0; j < keys.length; j++) {
-            var k = keys[j];
-            var val = found[k];
-            html += '<li><strong>' + k.replace(/_/g, ' ') + ':</strong> ';
-            if (val && (val.indexOf('http') === 0 || val.indexOf('//') === 0)) {
-                html += '<a href="' + val + '" target="_blank" style="word-break:break-all">' + val.substring(0, 80) + '</a>';
-            } else {
-                html += (val && val.length > 120 ? val.substring(0, 120) + '…' : val);
-            }
-            html += ' <button type="button" onclick="applyField(this,\'' + entityType + '\',\'' + k + '\')" class="btn btn-g btn-sm" style="margin-left:6px;padding:2px 8px;font-size:11px">Apply</button></li>';
-            /* Auto-apply to empty fields */
-            var inp = form.querySelector('[name="' + k + '"]');
-            if (inp && !inp.value.trim()) {
-                inp.value = val;
-            }
-        }
-        html += '</ul>';
-        if (log.length) {
-            html += '<details style="margin-top:8px;font-size:12px;color:#666"><summary>Scan log</summary><ul style="padding-left:16px;margin-top:4px">';
-            for (var l = 0; l < log.length; l++) { html += '<li>' + log[l] + '</li>'; }
-            html += '</ul></details>';
-        }
-        html += '<p style="margin-top:10px;font-size:12px;color:#666">Fields auto-applied to empty inputs. Click <strong>Save</strong> to persist.</p>';
-        resultsDiv.innerHTML = html;
-    })
+    .then(function(data) { handleScanResult(data, entityType, form, resultsDiv, btn); })
     .catch(function(err) {
         btn.disabled = false;
         btn.innerHTML = '&#x1F50D; Scan';
         resultsDiv.innerHTML = '<strong style="color:#dc2626">Network error:</strong> ' + err.message;
-        console.error(err);
     });
+}
+
+/* Google Search enrichment — used when no website URL */
+function scanGoogle(entityType, name, form, resultsDiv, btn) {
+    btn.disabled = true;
+    btn.innerHTML = '&#x23F3; Searching…';
+    resultsDiv.style.display = 'block';
+    resultsDiv.innerHTML = '<span style="color:#666">Searching Google for &ldquo;' + name + '&rdquo;…</span>';
+
+    var existing = collectExisting(form);
+
+    fetch('google_enrich.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: name, existing: existing})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) { handleScanResult(data, entityType, form, resultsDiv, btn); })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.innerHTML = '&#x1F50D; Scan';
+        resultsDiv.innerHTML = '<strong style="color:#dc2626">Network error:</strong> ' + err.message;
+    });
+}
+
+/* Collect existing form field values */
+function collectExisting(form) {
+    var existing = {};
+    var fieldNames = ['description','short_description','profile_photo_url','logo_url',
+        'instagram_url','facebook_url','linkedin_url','youtube_url','tiktok_url',
+        'whatsapp_number','phone','email','website_url'];
+    for (var i = 0; i < fieldNames.length; i++) {
+        var inp = form.querySelector('[name="' + fieldNames[i] + '"]');
+        if (inp && inp.value.trim()) existing[fieldNames[i]] = inp.value.trim();
+    }
+    return existing;
+}
+
+/* Handle scan/search results — shared by website scan and Google search */
+function handleScanResult(data, entityType, form, resultsDiv, btn) {
+    btn.disabled = false;
+    btn.innerHTML = '&#x1F50D; Scan';
+    if (data.error) {
+        resultsDiv.innerHTML = '<strong style="color:#dc2626">Error:</strong> ' + data.error;
+        return;
+    }
+    var found = data.found || {};
+    var log = data.log || [];
+    var keys = Object.keys(found);
+    if (keys.length === 0) {
+        resultsDiv.innerHTML = '<strong>No new data found.</strong> All fields already populated or no additional info found online.';
+        return;
+    }
+    /* Build summary and populate empty form fields */
+    var html = '<strong style="color:#16a34a">Found ' + keys.length + ' field(s):</strong><ul style="margin:8px 0 0;padding-left:20px;font-size:13px">';
+    for (var j = 0; j < keys.length; j++) {
+        var k = keys[j];
+        var val = found[k];
+        html += '<li><strong>' + k.replace(/_/g, ' ') + ':</strong> ';
+        if (val && (val.indexOf('http') === 0 || val.indexOf('//') === 0)) {
+            html += '<a href="' + val + '" target="_blank" style="word-break:break-all">' + val.substring(0, 80) + '</a>';
+        } else {
+            html += (val && val.length > 120 ? val.substring(0, 120) + '…' : val);
+        }
+        html += ' <button type="button" onclick="applyField(this,\'' + entityType + '\',\'' + k + '\')" class="btn btn-g btn-sm" style="margin-left:6px;padding:2px 8px;font-size:11px">Apply</button></li>';
+        /* Auto-apply to empty fields */
+        var inp = form.querySelector('[name="' + k + '"]');
+        if (inp && !inp.value.trim()) {
+            inp.value = val;
+        }
+    }
+    html += '</ul>';
+    if (log.length) {
+        html += '<details style="margin-top:8px;font-size:12px;color:#666"><summary>Scan log</summary><ul style="padding-left:16px;margin-top:4px">';
+        for (var l = 0; l < log.length; l++) { html += '<li>' + log[l] + '</li>'; }
+        html += '</ul></details>';
+    }
+    html += '<p style="margin-top:10px;font-size:12px;color:#666">Fields auto-applied to empty inputs. Click <strong>Save</strong> to persist.</p>';
+    if (data.saved) {
+        html += '<p style="font-size:12px;color:#16a34a;font-weight:600">' + data.saved + ' field(s) saved to database.</p>';
+    }
+    resultsDiv.innerHTML = html;
 }
 function applyField(applyBtn, entityType, fieldName) {
     /* Manually apply a found value to its form field */
