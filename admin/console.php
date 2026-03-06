@@ -1758,14 +1758,37 @@ elseif ($section === 'listings'):
 
 <?php
 // ═══════════════════════════════════════════════════════════════
-// BATCH ENRICH — Find entities with reviews but no image, enrich via Google
+// BATCH ENRICH — Client-side workflow: admin searches manually, pastes data
 // ═══════════════════════════════════════════════════════════════
 elseif ($section === 'batch_enrich'):
 ?>
+<style>
+.be-card{background:#fff;border:1px solid #e0e0e0;border-radius:8px;margin-bottom:10px;overflow:hidden}
+.be-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;user-select:none;gap:8px}
+.be-header:hover{background:#fafaf8}
+.be-name{font-weight:600;font-size:14px;flex:1}
+.be-meta{font-size:12px;color:#888;display:flex;gap:10px;align-items:center}
+.be-detail{display:none;padding:0 14px 14px;border-top:1px solid #f0f0f0}
+.be-detail.open{display:block}
+.be-existing{font-size:12px;color:#888;margin:8px 0 12px;line-height:1.6}
+.be-existing b{color:#444}
+.be-links{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.be-links a{display:inline-block;padding:5px 10px;font-size:12px;border-radius:5px;text-decoration:none;color:#fff;font-weight:500}
+.be-links a.l-gs{background:#4285f4}
+.be-links a.l-gi{background:#ea4335}
+.be-links a.l-gm{background:#34a853}
+.be-links a.l-ig{background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)}
+.be-links a.l-fb{background:#1877f2}
+.be-fields{display:grid;grid-template-columns:120px 1fr;gap:6px 10px;align-items:center;font-size:13px}
+.be-fields label{font-weight:500;color:#555;text-align:right}
+.be-fields input{padding:5px 8px;border:1px solid #d0d0d0;border-radius:5px;font-size:13px}
+.be-actions{display:flex;gap:8px;margin-top:12px;align-items:center}
+.be-actions .be-msg{font-size:12px;margin-left:8px}
+</style>
+
 <h1>Batch Enrich Tool</h1>
 <p style="color:#666;margin-bottom:16px;font-size:13px">
-    Finds providers, developers and agents with 10+ Google reviews but no profile image.<br>
-    For each, you can trigger a Google search to find social links, images, descriptions, logos and phone numbers.
+    Finds entities with Google reviews but no profile image. Click search links to find info in your browser, then paste URLs back and save.
 </p>
 <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
     <label style="font-size:13px;font-weight:600">Min reviews:</label>
@@ -1773,31 +1796,21 @@ elseif ($section === 'batch_enrich'):
     <button class="btn btn-p" id="be-find-btn" onclick="beFindMissing()">Find Entities</button>
     <span id="be-status" style="font-size:13px;color:#666"></span>
 </div>
-<div id="be-results" class="card" style="display:none;padding:0;overflow-x:auto">
-    <table id="be-table">
-        <thead><tr><th>Type</th><th>ID</th><th>Name</th><th>Reviews</th><th>Rating</th><th>Maps URL</th><th>Status</th><th>Action</th></tr></thead>
-        <tbody id="be-tbody"></tbody>
-    </table>
-</div>
+<div id="be-cards"></div>
 <div id="be-empty" class="card" style="display:none;text-align:center;color:#888">No entities found matching criteria.</div>
-<div id="be-batch-bar" style="margin-top:12px;display:flex;gap:8px;align-items:center">
-    <button class="btn btn-g" id="be-enrich-all-btn" onclick="beEnrichAll()" style="display:none">Enrich All (one-by-one)</button>
-    <span id="be-batch-status" style="font-size:13px;color:#666"></span>
-</div>
+
 <script>
 var beEntities = [];
-var beProcessing = false;
 
 function beFindMissing() {
     var minReviews = parseInt(document.getElementById('be-min-reviews').value) || 10;
     var btn = document.getElementById('be-find-btn');
     var status = document.getElementById('be-status');
     btn.disabled = true;
-    btn.textContent = 'Searching…';
+    btn.textContent = 'Searching\u2026';
     status.textContent = '';
-    document.getElementById('be-results').style.display = 'none';
+    document.getElementById('be-cards').innerHTML = '';
     document.getElementById('be-empty').style.display = 'none';
-    document.getElementById('be-enrich-all-btn').style.display = 'none';
 
     fetch('google_enrich.php', {
         method: 'POST',
@@ -1812,11 +1825,11 @@ function beFindMissing() {
         beEntities = data.entities || [];
         if (beEntities.length === 0) {
             document.getElementById('be-empty').style.display = 'block';
-            status.textContent = 'No matching entities found.';
+            status.textContent = 'No matching entities.';
             return;
         }
         status.textContent = 'Found ' + beEntities.length + ' entit' + (beEntities.length === 1 ? 'y' : 'ies') + '.';
-        beRenderTable();
+        beRenderCards();
     })
     .catch(function(err) {
         btn.disabled = false;
@@ -1825,103 +1838,111 @@ function beFindMissing() {
     });
 }
 
-function beRenderTable() {
-    var tbody = document.getElementById('be-tbody');
+function beRenderCards() {
+    var container = document.getElementById('be-cards');
     var html = '';
     for (var i = 0; i < beEntities.length; i++) {
         var e = beEntities[i];
-        var ws = e.google_maps_url ? '<a href="' + e.google_maps_url + '" target="_blank" style="font-size:11px;color:#16a34a" title="' + e.google_maps_url + '">Maps &#x2713;</a>' : '<span style="color:#ccc">No maps</span>';
-        html += '<tr id="be-row-' + i + '">';
-        html += '<td><span class="badge b-blue">' + e.entity_type + '</span></td>';
-        html += '<td style="color:#888;font-size:12px">' + e.id + '</td>';
-        html += '<td>' + (e.name || '-') + '</td>';
-        html += '<td>' + (e.google_review_count || 0) + '</td>';
-        html += '<td>&#9733;' + (e.google_rating || '-') + '</td>';
-        html += '<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + ws + '</td>';
-        html += '<td id="be-status-' + i + '"><span class="badge b-yellow">Pending</span></td>';
-        html += '<td><button class="btn btn-p btn-sm" id="be-btn-' + i + '" onclick="beEnrichOne(' + i + ')">Enrich</button></td>';
-        html += '</tr>';
+        var q = encodeURIComponent(e.name + ' Lombok');
+        var existing = '';
+        if (e.website_url) existing += '<b>Website:</b> ' + e.website_url + '<br>';
+        if (e.google_maps_url) existing += '<b>Maps:</b> <a href="' + e.google_maps_url + '" target="_blank">' + e.google_maps_url.substring(0, 60) + '</a><br>';
+        if (e.instagram_url) existing += '<b>Instagram:</b> ' + e.instagram_url + '<br>';
+        if (e.facebook_url) existing += '<b>Facebook:</b> ' + e.facebook_url + '<br>';
+        if (e.phone) existing += '<b>Phone:</b> ' + e.phone + '<br>';
+        if (e.logo_url) existing += '<b>Logo:</b> ' + e.logo_url + '<br>';
+
+        html += '<div class="be-card" id="be-card-' + i + '">';
+        html += '<div class="be-header" onclick="beToggle(' + i + ')">';
+        html += '<span class="badge b-blue" style="margin-right:6px">' + e.entity_type + '</span>';
+        html += '<span class="be-name">' + (e.name || 'ID ' + e.id) + '</span>';
+        html += '<span class="be-meta"><span>\u2605' + (e.google_rating || '-') + '</span><span>' + (e.google_review_count || 0) + ' reviews</span></span>';
+        html += '<span style="font-size:18px;color:#aaa" id="be-arrow-' + i + '">&#9654;</span>';
+        html += '</div>';
+        html += '<div class="be-detail" id="be-detail-' + i + '">';
+        if (existing) html += '<div class="be-existing">' + existing + '</div>';
+        html += '<div style="font-size:12px;font-weight:600;color:#555;margin-bottom:6px">Search (opens in new tab):</div>';
+        html += '<div class="be-links">';
+        html += '<a class="l-gs" href="https://www.google.com/search?q=' + q + '" target="_blank">Google Search</a>';
+        html += '<a class="l-gi" href="https://www.google.com/search?tbm=isch&q=' + q + '" target="_blank">Google Images</a>';
+        html += '<a class="l-gm" href="https://www.google.com/maps/search/' + q + '" target="_blank">Google Maps</a>';
+        html += '<a class="l-ig" href="https://www.google.com/search?q=site:instagram.com+' + q + '" target="_blank">Instagram</a>';
+        html += '<a class="l-fb" href="https://www.google.com/search?q=site:facebook.com+' + q + '" target="_blank">Facebook</a>';
+        html += '</div>';
+        html += '<div style="font-size:12px;font-weight:600;color:#555;margin-bottom:6px">Paste found info:</div>';
+        html += '<div class="be-fields">';
+        html += '<label>Profile Image</label><input type="text" id="be-f-' + i + '-profile_photo_url" placeholder="Image URL">';
+        html += '<label>Instagram</label><input type="text" id="be-f-' + i + '-instagram_url" placeholder="https://instagram.com/..." value="' + (e.instagram_url || '') + '">';
+        html += '<label>Facebook</label><input type="text" id="be-f-' + i + '-facebook_url" placeholder="https://facebook.com/..." value="' + (e.facebook_url || '') + '">';
+        html += '<label>Logo</label><input type="text" id="be-f-' + i + '-logo_url" placeholder="Logo image URL" value="' + (e.logo_url || '') + '">';
+        html += '<label>Phone</label><input type="text" id="be-f-' + i + '-phone" placeholder="+62..." value="' + (e.phone || '') + '">';
+        html += '</div>';
+        html += '<div class="be-actions">';
+        html += '<button class="btn btn-p btn-sm" onclick="beSave(' + i + ')">Save</button>';
+        html += '<button class="btn btn-sm" style="background:#eee;color:#555" onclick="beSkip(' + i + ')">Skip</button>';
+        html += '<span class="be-msg" id="be-msg-' + i + '"></span>';
+        html += '</div>';
+        html += '</div></div>';
     }
-    tbody.innerHTML = html;
-    document.getElementById('be-results').style.display = 'block';
-    document.getElementById('be-enrich-all-btn').style.display = 'inline-flex';
+    container.innerHTML = html;
+    /* Auto-open first card */
+    if (beEntities.length > 0) beToggle(0);
 }
 
-function beEnrichOne(idx) {
+function beToggle(idx) {
+    var detail = document.getElementById('be-detail-' + idx);
+    var arrow = document.getElementById('be-arrow-' + idx);
+    if (detail.classList.contains('open')) {
+        detail.classList.remove('open');
+        arrow.innerHTML = '&#9654;';
+    } else {
+        detail.classList.add('open');
+        arrow.innerHTML = '&#9660;';
+    }
+}
+
+function beSave(idx) {
     var e = beEntities[idx];
-    var btn = document.getElementById('be-btn-' + idx);
-    var st = document.getElementById('be-status-' + idx);
-    btn.disabled = true;
-    btn.textContent = 'Working…';
-    st.innerHTML = '<span class="badge b-yellow">Searching…</span>';
+    var msg = document.getElementById('be-msg-' + idx);
+    var fieldNames = ['profile_photo_url','instagram_url','facebook_url','logo_url','phone'];
+    var fields = {};
+    var count = 0;
+    for (var f = 0; f < fieldNames.length; f++) {
+        var val = document.getElementById('be-f-' + idx + '-' + fieldNames[f]).value.trim();
+        if (val) { fields[fieldNames[f]] = val; count++; }
+    }
+    if (count === 0) { msg.innerHTML = '<span style="color:#d4604a">No fields filled in</span>'; return; }
+    msg.innerHTML = '<span style="color:#888">Saving\u2026</span>';
 
     fetch('google_enrich.php', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({action: 'enrich_save', entity_type: e.entity_type, entity_id: e.id})
+        body: JSON.stringify({action: 'quick_save', entity_type: e.entity_type, entity_id: e.id, fields: fields})
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        if (data.error) {
-            st.innerHTML = '<span class="badge b-red" title="' + data.error + '">Error</span>';
-            btn.textContent = 'Retry';
-            btn.disabled = false;
-            return;
-        }
-        var saved = data.saved || 0;
-        var fieldsFound = data.fields_found || Object.keys(data.found || {}).length;
-        if (saved > 0) {
-            st.innerHTML = '<span class="badge b-green">' + saved + ' saved</span>';
-        } else if (fieldsFound > 0) {
-            st.innerHTML = '<span class="badge b-blue" style="cursor:help">' + fieldsFound + ' found (0 new)</span>';
-        } else {
-            st.innerHTML = '<span class="badge b-yellow" style="cursor:help">No data</span>';
-        }
-        btn.textContent = 'Done';
-        btn.disabled = true;
-        /* Show full log on hover */
-        if (data.log && data.log.length) {
-            st.title = data.log.join('\n');
-            btn.title = data.log.join('\n');
+        if (data.error) { msg.innerHTML = '<span style="color:#d4604a">' + data.error + '</span>'; return; }
+        msg.innerHTML = '<span style="color:#16a34a">\u2713 Saved ' + data.saved + ' field(s)</span>';
+        document.getElementById('be-card-' + idx).style.borderColor = '#16a34a';
+        /* Auto-open next card */
+        if (idx + 1 < beEntities.length) {
+            var nextDetail = document.getElementById('be-detail-' + (idx + 1));
+            if (!nextDetail.classList.contains('open')) beToggle(idx + 1);
         }
     })
     .catch(function(err) {
-        st.innerHTML = '<span class="badge b-red">Net error</span>';
-        btn.textContent = 'Retry';
-        btn.disabled = false;
+        msg.innerHTML = '<span style="color:#d4604a">Network error</span>';
     });
 }
 
-function beEnrichAll() {
-    if (beProcessing) return;
-    beProcessing = true;
-    var allBtn = document.getElementById('be-enrich-all-btn');
-    var batchStatus = document.getElementById('be-batch-status');
-    allBtn.disabled = true;
-    allBtn.textContent = 'Processing…';
-    var idx = 0;
-    var total = beEntities.length;
-
-    function processNext() {
-        /* Skip already-done rows */
-        while (idx < total) {
-            var btn = document.getElementById('be-btn-' + idx);
-            if (btn && btn.textContent === 'Done') { idx++; continue; }
-            break;
-        }
-        if (idx >= total) {
-            allBtn.textContent = 'All Done';
-            batchStatus.textContent = 'Batch complete.';
-            beProcessing = false;
-            return;
-        }
-        batchStatus.textContent = 'Processing ' + (idx + 1) + ' of ' + total + '…';
-        /* Trigger the single enrich, then wait 4s to avoid Google rate limits */
-        beEnrichOne(idx);
-        idx++;
-        setTimeout(processNext, 4000);
+function beSkip(idx) {
+    document.getElementById('be-card-' + idx).style.opacity = '0.4';
+    document.getElementById('be-detail-' + idx).classList.remove('open');
+    document.getElementById('be-arrow-' + idx).innerHTML = '&#9654;';
+    if (idx + 1 < beEntities.length) {
+        var nextDetail = document.getElementById('be-detail-' + (idx + 1));
+        if (!nextDetail.classList.contains('open')) beToggle(idx + 1);
     }
-    processNext();
 }
 </script>
 
