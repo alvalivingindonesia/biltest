@@ -1873,15 +1873,16 @@ function beEnrichOne(idx) {
         if (saved > 0) {
             st.innerHTML = '<span class="badge b-green">' + saved + ' saved</span>';
         } else if (fieldsFound > 0) {
-            st.innerHTML = '<span class="badge b-blue">' + fieldsFound + ' found (0 new)</span>';
+            st.innerHTML = '<span class="badge b-blue" style="cursor:help">' + fieldsFound + ' found (0 new)</span>';
         } else {
-            st.innerHTML = '<span class="badge b-yellow">No data</span>';
+            st.innerHTML = '<span class="badge b-yellow" style="cursor:help">No data</span>';
         }
         btn.textContent = 'Done';
         btn.disabled = true;
-        /* Show details on hover */
+        /* Show full log on hover */
         if (data.log && data.log.length) {
             st.title = data.log.join('\n');
+            btn.title = data.log.join('\n');
         }
     })
     .catch(function(err) {
@@ -1915,10 +1916,10 @@ function beEnrichAll() {
             return;
         }
         batchStatus.textContent = 'Processing ' + (idx + 1) + ' of ' + total + '…';
-        /* Trigger the single enrich, then wait 2s to avoid rate limits */
+        /* Trigger the single enrich, then wait 4s to avoid Google rate limits */
         beEnrichOne(idx);
         idx++;
-        setTimeout(processNext, 2500);
+        setTimeout(processNext, 4000);
     }
     processNext();
 }

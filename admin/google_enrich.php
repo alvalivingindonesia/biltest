@@ -114,13 +114,28 @@ if (($input['action'] ?? '') === 'enrich_save') {
 
     // Save found fields to DB
     if (!empty($found['found'])) {
+        // Get actual column names from the table
+        $col_check = $db->query("SHOW COLUMNS FROM `{$table}`")->fetchAll(PDO::FETCH_COLUMN);
+        $valid_cols = array_flip($col_check);
+
         $updates = [];
         $params = [];
         foreach ($found['found'] as $col => $val) {
-            // Only update columns that exist in the table and are currently empty
-            if (isset($row[$col]) && (empty($row[$col]) || ($col === 'description' && strlen($val) > strlen($row[$col] ?? '')))) {
+            // Only update columns that actually exist in the table
+            if (!isset($valid_cols[$col])) {
+                $found['log'][] = 'Skipped ' . $col . ' (column not in ' . $table . ')';
+                continue;
+            }
+            // Only update if currently empty/null, or description is shorter
+            $current = $row[$col];
+            $is_empty = ($current === null || $current === '' || $current === '0');
+            $is_desc_upgrade = ($col === 'description' && strlen($val) > strlen($current ?? ''));
+            if ($is_empty || $is_desc_upgrade) {
                 $updates[] = "`{$col}` = ?";
                 $params[] = $val;
+                $found['log'][] = 'Will save ' . $col;
+            } else {
+                $found['log'][] = 'Skipped ' . $col . ' (already has value)';
             }
         }
         if ($updates) {
@@ -189,10 +204,15 @@ function google_search_enrich($name, $existing, $curl_opts) {
     curl_close($ch);
 
     if ($html === false || $http_code >= 400 || strlen($html) < 500) {
-        return ['found' => [], 'log' => ['Google search failed (HTTP ' . $http_code . ')'], 'fields_found' => 0];
+        return ['found' => [], 'log' => ['Google search failed (HTTP ' . $http_code . ', ' . strlen($html ?: '') . ' bytes)'], 'fields_found' => 0];
     }
 
-    $log[] = 'Google search completed (' . strlen($html) . ' bytes)';
+    // Check for CAPTCHA / block page
+    if (stripos($html, 'unusual traffic') !== false || stripos($html, 'captcha') !== false || stripos($html, 'recaptcha') !== false) {
+        return ['found' => [], 'log' => ['Google returned a CAPTCHA/block page — try again later or reduce batch speed'], 'fields_found' => 0];
+    }
+
+    $log[] = 'Google search completed (' . strlen($html) . ' bytes, HTTP ' . $http_code . ')';
 
     // ── Extract social media links from search results ──
     $social_patterns = [
