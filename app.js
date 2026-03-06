@@ -1092,11 +1092,14 @@ function renderDeveloperCard(dev, index = 0) {
 }
 
 async function renderDevelopers(el, params = {}) {
+  await FilterData.load();
   let devs = [];
   try {
-    const res = await DataLayer.getDevelopers({ per_page: 100 });
+    const res = await DataLayer.getDevelopers({ per_page: 100, ...params });
     devs = res.data;
   } catch(e) { console.error('Failed to load developers:', e); }
+
+  const areaOptions = buildAreaOptions(params.area || '');
 
   el.innerHTML = `
     <div class="page-header">
@@ -1112,6 +1115,27 @@ async function renderDevelopers(el, params = {}) {
     </div>
     <div class="section">
       <div class="container">
+        <div class="filters-bar">
+          <button class="filters-toggle-btn" onclick="this.closest('.filters-bar').querySelector('.filters-body').classList.toggle('open')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+            Filters
+          </button>
+          <div class="filters-body">
+            <div class="filters-grid">
+              <div class="filter-group">
+                <label class="filter-label">Area</label>
+                <select id="fil-dev-area" class="filter-select" aria-label="Area">
+                  <option value="">All areas</option>
+                  ${areaOptions}
+                </select>
+              </div>
+              <div class="filter-group">
+                <label class="filter-label">Search</label>
+                <input type="text" id="fil-dev-q" class="filter-select" placeholder="Search name..." value="${params.q || ''}" style="background-image:none;padding-right:var(--space-3);">
+              </div>
+            </div>
+          </div>
+        </div>
         <p class="results-count"><strong>${devs.length}</strong> developer${devs.length !== 1 ? 's' : ''} listed</p>
         <div class="card-grid">
           ${devs.map((d, i) => renderDeveloperCard(d, i)).join('')}
@@ -1119,6 +1143,22 @@ async function renderDevelopers(el, params = {}) {
       </div>
     </div>
   `;
+
+  // Filter event listeners
+  const filArea = el.querySelector('#fil-dev-area');
+  const filQ = el.querySelector('#fil-dev-q');
+  function applyDevFilters() {
+    const p = {};
+    if (filArea.value) {
+      if (filArea.value.startsWith('region:')) p.region = filArea.value.replace('region:', '');
+      else p.area = filArea.value;
+    }
+    if (filQ.value) p.q = filQ.value;
+    navigate('developers', p);
+  }
+  filArea.addEventListener('change', applyDevFilters);
+  let debounce; filQ.addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(applyDevFilters, 400); });
+
   requestAnimationFrame(() => animateCards(el));
 }
 
@@ -1270,33 +1310,45 @@ async function renderListings(el, params = {}) {
     <div class="section">
       <div class="container">
         <div class="filters-bar">
-          <div class="filter-group">
-            <select id="fil-type" class="filter-select" aria-label="Property type">
-              <option value="">All types</option>
-              ${typeOptions}
-            </select>
-          </div>
-          <div class="filter-group">
-            <select id="fil-area" class="filter-select" aria-label="Area">
-              <option value="">All areas</option>
-              ${areaOptions}
-            </select>
-          </div>
-          <div class="filter-group">
-            <select id="fil-cert" class="filter-select" aria-label="Certificate">
-              <option value="">Any certificate</option>
-              ${certOptions}
-            </select>
-          </div>
-          <div class="filter-group">
-            <select id="fil-price" class="filter-select" aria-label="Price range">
-              <option value="">Any price</option>
-              <option value="0-50000" ${params.max_price_usd === '50000' ? 'selected' : ''}>Under $50k</option>
-              <option value="50000-100000">$50k - $100k</option>
-              <option value="100000-250000">$100k - $250k</option>
-              <option value="250000-500000">$250k - $500k</option>
-              <option value="500000-0">$500k+</option>
-            </select>
+          <button class="filters-toggle-btn" onclick="this.closest('.filters-bar').querySelector('.filters-body').classList.toggle('open')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+            Filters
+          </button>
+          <div class="filters-body open">
+            <div class="filters-grid">
+              <div class="filter-group">
+                <label class="filter-label">Type</label>
+                <select id="fil-type" class="filter-select" aria-label="Property type">
+                  <option value="">All types</option>
+                  ${typeOptions}
+                </select>
+              </div>
+              <div class="filter-group">
+                <label class="filter-label">Area</label>
+                <select id="fil-area" class="filter-select" aria-label="Area">
+                  <option value="">All areas</option>
+                  ${areaOptions}
+                </select>
+              </div>
+              <div class="filter-group">
+                <label class="filter-label">Certificate</label>
+                <select id="fil-cert" class="filter-select" aria-label="Certificate">
+                  <option value="">Any certificate</option>
+                  ${certOptions}
+                </select>
+              </div>
+              <div class="filter-group">
+                <label class="filter-label">Price</label>
+                <select id="fil-price" class="filter-select" aria-label="Price range">
+                  <option value="">Any price</option>
+                  <option value="0-50000" ${params.max_price_usd === '50000' ? 'selected' : ''}>Under $50k</option>
+                  <option value="50000-100000">$50k - $100k</option>
+                  <option value="100000-250000">$100k - $250k</option>
+                  <option value="250000-500000">$250k - $500k</option>
+                  <option value="500000-0">$500k+</option>
+                </select>
+              </div>
+            </div>
           </div>
         </div>
         <div class="card-grid listings-grid" id="listings-grid">
