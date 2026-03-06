@@ -298,6 +298,19 @@ function renderBadge(badge) {
   return badge;
 }
 
+function iconInstagram() { return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>'; }
+function iconFacebook() { return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>'; }
+function iconLinkedIn() { return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>'; }
+
+function renderSocialLinks(entity) {
+  const links = [];
+  if (entity.instagram_url) links.push(`<a href="${entity.instagram_url}" target="_blank" rel="noopener noreferrer" class="social-link" aria-label="Instagram" title="Instagram">${iconInstagram()}</a>`);
+  if (entity.facebook_url) links.push(`<a href="${entity.facebook_url}" target="_blank" rel="noopener noreferrer" class="social-link" aria-label="Facebook" title="Facebook">${iconFacebook()}</a>`);
+  if (entity.linkedin_url) links.push(`<a href="${entity.linkedin_url}" target="_blank" rel="noopener noreferrer" class="social-link" aria-label="LinkedIn" title="LinkedIn">${iconLinkedIn()}</a>`);
+  if (links.length === 0) return '';
+  return `<div class="social-links" style="display:flex;gap:var(--space-3);margin-top:var(--space-3);">${links.join('')}</div>`;
+}
+
 function formatGroupLabel(group) {
   const m = FilterData.labelMap(FilterData.groups);
   return m[group] || (group || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -1006,7 +1019,9 @@ async function renderProviderDetail(el, slug) {
               ${b.address ? `<div class="info-row"><span class="info-icon">${iconMapPin()}</span><span class="info-label">Address</span><span class="info-value">${b.address}</span></div>` : ''}
               ${b.phone ? `<div class="info-row"><span class="info-icon">${iconPhone()}</span><span class="info-label">Phone</span><span class="info-value"><a href="tel:${b.phone}">${b.phone}</a></span></div>` : ''}
               ${b.website_url ? `<div class="info-row"><span class="info-icon">${iconGlobe()}</span><span class="info-label">Website</span><span class="info-value"><a href="${b.website_url}" target="_blank" rel="noopener noreferrer">Visit website ${iconExternalLink()}</a></span></div>` : ''}
+              ${b.google_maps_url ? `<div class="info-row"><span class="info-icon">${iconMapPin()}</span><span class="info-label">Google Maps</span><span class="info-value"><a href="${b.google_maps_url}" target="_blank" rel="noopener noreferrer">View on map ${iconExternalLink()}</a></span></div>` : ''}
             </div>
+            ${renderSocialLinks(b)}
 
             <div class="card-actions">
               ${b.whatsapp_number ? `<a href="https://wa.me/${b.whatsapp_number}" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp">${iconWhatsApp()} WhatsApp</a>` : ''}
@@ -1234,7 +1249,9 @@ async function renderDeveloperDetail(el, slug) {
               <div class="info-list mb-4">
                 ${dev.phone ? `<div class="info-row"><span class="info-icon">${iconPhone()}</span><span class="info-value"><a href="tel:${dev.phone}">${dev.phone}</a></span></div>` : ''}
                 ${dev.website_url ? `<div class="info-row"><span class="info-icon">${iconGlobe()}</span><span class="info-value"><a href="${dev.website_url}" target="_blank" rel="noopener noreferrer">Website ${iconExternalLink()}</a></span></div>` : ''}
+                ${dev.google_maps_url ? `<div class="info-row"><span class="info-icon">${iconMapPin()}</span><span class="info-value"><a href="${dev.google_maps_url}" target="_blank" rel="noopener noreferrer">View on map ${iconExternalLink()}</a></span></div>` : ''}
               </div>
+              ${renderSocialLinks(dev)}
               ${dev.whatsapp_number ? `<a href="https://wa.me/${dev.whatsapp_number}" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--full">${iconWhatsApp()} WhatsApp</a>` : ''}
             </div>
           </div>

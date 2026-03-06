@@ -712,6 +712,23 @@
   flex-shrink: 0;
 }
 
+/* Social links */
+.social-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--color-surface-alt, #f0ede8);
+  color: var(--color-text-muted, #6b6560);
+  transition: background .2s, color .2s;
+}
+.social-link:hover {
+  background: var(--color-primary, #0c7c84);
+  color: #fff;
+}
+
 /* Category label — subtle, no background */
 .card-category-label {
   font-size: var(--text-xs);
