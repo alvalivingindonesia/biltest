@@ -141,6 +141,23 @@ switch ($action) {
     case 'my_claims':      handle_my_claims(); break;
     case 'submit_listing': handle_submit_listing(); break;
     case 'my_submissions': handle_my_submissions(); break;
+    // Social login
+    case 'social_login':   handle_social_login(); break;
+    // Agent profile
+    case 'register_agent': handle_register_agent(); break;
+    case 'update_agent':   handle_update_agent(); break;
+    case 'my_agent':       handle_my_agent(); break;
+    // Listing management
+    case 'create_listing': handle_create_listing(); break;
+    case 'update_listing': handle_update_listing(); break;
+    case 'my_listings':    handle_my_listings(); break;
+    case 'delete_listing': handle_delete_listing(); break;
+    // Image management
+    case 'upload_image':   handle_upload_image(); break;
+    case 'delete_image':   handle_delete_image(); break;
+    case 'set_primary_image': handle_set_primary_image(); break;
+    // Review check
+    case 'check_reviews':  handle_check_reviews(); break;
     default:               json_error(400, 'Unknown action');
 }
 
@@ -542,4 +559,589 @@ function handle_my_submissions(): void {
     );
     $stmt->execute([$uid]);
     json_out(['data' => $stmt->fetchAll()]);
+}
+
+// =================================================================
+// HELPERS FOR AGENT / LISTING
+// =================================================================
+
+/**
+ * Generate a URL-safe slug from a name, ensuring uniqueness in a given table.
+ */
+function slug_from_name(string $name, string $table, string $col = 'slug'): string {
+    $base = strtolower(trim($name));
+    $base = preg_replace('/[^a-z0-9]+/', '-', $base);
+    $base = trim($base, '-');
+    if ($base === '') $base = 'item';
+
+    $db = get_db();
+    $slug = $base;
+    $i = 0;
+    while (true) {
+        $check = $db->prepare("SELECT 1 FROM `{$table}` WHERE `{$col}` = ?");
+        $check->execute([$slug]);
+        if (!$check->fetch()) break;
+        $i++;
+        $slug = $base . '-' . $i;
+    }
+    return $slug;
+}
+
+/**
+ * Return the agent record for a given user_id, or null.
+ */
+function get_agent_for_user(int $user_id): ?array {
+    $db = get_db();
+    $stmt = $db->prepare("SELECT * FROM agents WHERE user_id = ? LIMIT 1");
+    $stmt->execute([$user_id]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+/**
+ * Require auth + agent profile. Returns agent_id.
+ */
+function require_agent(): int {
+    $uid = require_auth();
+    $agent = get_agent_for_user($uid);
+    if (!$agent) json_error(403, 'You need an agent profile to do this.');
+    return (int)$agent['id'];
+}
+
+
+// =================================================================
+// SOCIAL LOGIN
+// =================================================================
+
+function handle_social_login(): void {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+    $data = get_post_data();
+
+    $provider    = trim($data['provider'] ?? '');
+    $token       = trim($data['token'] ?? '');
+    $email       = trim(strtolower($data['email'] ?? ''));
+    $name        = trim($data['name'] ?? '');
+    $provider_id = trim($data['provider_id'] ?? '');
+    $avatar_url  = trim($data['avatar_url'] ?? '');
+
+    if (!in_array($provider, ['google', 'facebook', 'instagram'])) json_error(400, 'Invalid provider.');
+    if (!$provider_id) json_error(400, 'provider_id required.');
+    if (!$name) json_error(400, 'name required.');
+
+    $id_col = $provider . '_id'; // google_id, facebook_id, instagram_id
+
+    $db = get_db();
+
+    // 1. Check by social ID
+    $stmt = $db->prepare("SELECT * FROM users WHERE `{$id_col}` = ? LIMIT 1");
+    $stmt->execute([$provider_id]);
+    $user = $stmt->fetch();
+
+    if (!$user && $email) {
+        // 2. Check by email — link social account to existing user
+        $stmt = $db->prepare("SELECT * FROM users WHERE email = ? AND is_active = 1 LIMIT 1");
+        $stmt->execute([$email]);
+        $user = $stmt->fetch();
+
+        if ($user) {
+            // Link the social account
+            $db->prepare("UPDATE users SET `{$id_col}` = ?, auth_provider = ?, avatar_url = ? WHERE id = ?")
+               ->execute([$provider_id, $provider, $avatar_url ?: null, $user['id']]);
+        }
+    }
+
+    if (!$user) {
+        // 3. Create new user
+        $db->prepare(
+            "INSERT INTO users (email, password_hash, display_name, is_verified, is_active, auth_provider, `{$id_col}`, avatar_url)
+             VALUES (?, NULL, ?, 1, 1, ?, ?, ?)"
+        )->execute([
+            $email ?: null,
+            $name,
+            $provider,
+            $provider_id,
+            $avatar_url ?: null,
+        ]);
+        $new_id = (int)$db->lastInsertId();
+        $stmt = $db->prepare("SELECT * FROM users WHERE id = ?");
+        $stmt->execute([$new_id]);
+        $user = $stmt->fetch();
+    }
+
+    if (!$user['is_active']) json_error(403, 'This account has been deactivated.');
+
+    // Start session
+    $_SESSION['user_id']    = (int)$user['id'];
+    $_SESSION['user_email'] = $user['email'] ?? '';
+    $_SESSION['user_role']  = $user['role'] ?? 'user';
+
+    $db->prepare("UPDATE users SET last_login_at = NOW() WHERE id = ?")->execute([$user['id']]);
+
+    json_out([
+        'success' => true,
+        'user' => [
+            'id'           => (int)$user['id'],
+            'email'        => $user['email'],
+            'display_name' => $user['display_name'],
+            'role'         => $user['role'] ?? 'user',
+            'avatar_url'   => $user['avatar_url'] ?? null,
+        ],
+    ]);
+}
+
+
+// =================================================================
+// AGENT PROFILE
+// =================================================================
+
+function handle_register_agent(): void {
+    $uid = require_auth();
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+
+    // Ensure they don't already have a profile
+    if (get_agent_for_user($uid)) json_error(409, 'You already have an agent profile.');
+
+    $data = get_post_data();
+    $display_name = trim($data['display_name'] ?? '');
+    $area_key     = trim($data['area_key'] ?? '');
+
+    if (!$display_name || strlen($display_name) < 2) json_error(400, 'display_name required (min 2 chars).');
+
+    $slug = slug_from_name($display_name, 'agents');
+
+    $db = get_db();
+    $db->prepare(
+        "INSERT INTO agents (user_id, slug, display_name, agency_name, bio, phone, whatsapp_number,
+                             email, website_url, areas_served, languages, google_maps_url, is_active, is_verified)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)"
+    )->execute([
+        $uid,
+        $slug,
+        $display_name,
+        trim($data['agency_name'] ?? '') ?: null,
+        trim($data['bio'] ?? '') ?: null,
+        trim($data['phone'] ?? '') ?: null,
+        trim($data['whatsapp_number'] ?? '') ?: null,
+        trim($data['email'] ?? '') ?: null,
+        trim($data['website_url'] ?? '') ?: null,
+        trim($data['areas_served'] ?? '') ?: null,
+        trim($data['languages'] ?? '') ?: null,
+        trim($data['google_maps_url'] ?? '') ?: null,
+    ]);
+
+    $agent_id = (int)$db->lastInsertId();
+    $stmt = $db->prepare("SELECT * FROM agents WHERE id = ?");
+    $stmt->execute([$agent_id]);
+
+    json_out(['success' => true, 'agent' => $stmt->fetch()], 201);
+}
+
+function handle_update_agent(): void {
+    $uid = require_auth();
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+
+    $agent = get_agent_for_user($uid);
+    if (!$agent) json_error(404, 'No agent profile found for your account.');
+
+    $data = get_post_data();
+    $display_name = trim($data['display_name'] ?? $agent['display_name']);
+    if (!$display_name || strlen($display_name) < 2) json_error(400, 'display_name required (min 2 chars).');
+
+    $db = get_db();
+    $db->prepare(
+        "UPDATE agents SET
+            display_name = ?, agency_name = ?, bio = ?, phone = ?, whatsapp_number = ?,
+            email = ?, website_url = ?, areas_served = ?, languages = ?, google_maps_url = ?
+         WHERE id = ?"
+    )->execute([
+        $display_name,
+        trim($data['agency_name'] ?? '') ?: null,
+        trim($data['bio'] ?? '') ?: null,
+        trim($data['phone'] ?? '') ?: null,
+        trim($data['whatsapp_number'] ?? '') ?: null,
+        trim($data['email'] ?? '') ?: null,
+        trim($data['website_url'] ?? '') ?: null,
+        trim($data['areas_served'] ?? '') ?: null,
+        trim($data['languages'] ?? '') ?: null,
+        trim($data['google_maps_url'] ?? '') ?: null,
+        $agent['id'],
+    ]);
+
+    json_out(['success' => true, 'message' => 'Agent profile updated.']);
+}
+
+function handle_my_agent(): void {
+    $uid = require_auth();
+    $agent = get_agent_for_user($uid);
+    json_out(['agent' => $agent]);
+}
+
+
+// =================================================================
+// LISTING MANAGEMENT
+// =================================================================
+
+function handle_create_listing(): void {
+    $uid      = require_auth();
+    $agent_id = require_agent();
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+
+    $data = get_post_data();
+
+    $listing_type_key = trim($data['listing_type_key'] ?? '');
+    $title            = trim($data['title'] ?? '');
+    $short_desc       = trim($data['short_description'] ?? '');
+    $area_key         = trim($data['area_key'] ?? '');
+
+    if (!$listing_type_key) json_error(400, 'listing_type_key required.');
+    if (!$title || strlen($title) < 3) json_error(400, 'title required (min 3 chars).');
+    if (!$short_desc) json_error(400, 'short_description required.');
+    if (!$area_key) json_error(400, 'area_key required.');
+
+    $slug = slug_from_name($title, 'listings');
+
+    $db = get_db();
+    $db->prepare(
+        "INSERT INTO listings (agent_id, slug, listing_type_key, title, short_description, description,
+                               area_key, price_usd, price_idr, land_size_sqm, build_size_sqm,
+                               certificate_type_key, google_maps_url, address, status, is_approved, is_featured)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', 0, 0)"
+    )->execute([
+        $agent_id,
+        $slug,
+        $listing_type_key,
+        $title,
+        $short_desc,
+        trim($data['description'] ?? '') ?: null,
+        $area_key,
+        !empty($data['price_usd']) ? (int)$data['price_usd'] : null,
+        !empty($data['price_idr']) ? (int)$data['price_idr'] : null,
+        !empty($data['land_size_sqm']) ? (float)$data['land_size_sqm'] : null,
+        !empty($data['build_size_sqm']) ? (float)$data['build_size_sqm'] : null,
+        trim($data['certificate_type_key'] ?? '') ?: null,
+        trim($data['google_maps_url'] ?? '') ?: null,
+        trim($data['address'] ?? '') ?: null,
+    ]);
+
+    $listing_id = (int)$db->lastInsertId();
+    $stmt = $db->prepare("SELECT * FROM listings WHERE id = ?");
+    $stmt->execute([$listing_id]);
+
+    json_out(['success' => true, 'listing' => $stmt->fetch()], 201);
+}
+
+function handle_update_listing(): void {
+    $uid      = require_auth();
+    $agent_id = require_agent();
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+
+    $data       = get_post_data();
+    $listing_id = (int)($data['listing_id'] ?? 0);
+    if (!$listing_id) json_error(400, 'listing_id required.');
+
+    $db = get_db();
+    // Ownership check
+    $stmt = $db->prepare("SELECT * FROM listings WHERE id = ? AND agent_id = ?");
+    $stmt->execute([$listing_id, $agent_id]);
+    $listing = $stmt->fetch();
+    if (!$listing) json_error(404, 'Listing not found or you do not own it.');
+
+    $title      = trim($data['title'] ?? $listing['title']);
+    $short_desc = trim($data['short_description'] ?? $listing['short_description']);
+    $area_key   = trim($data['area_key'] ?? $listing['area_key']);
+
+    if (strlen($title) < 3) json_error(400, 'title too short.');
+
+    $db->prepare(
+        "UPDATE listings SET
+            listing_type_key = ?, title = ?, short_description = ?, description = ?,
+            area_key = ?, price_usd = ?, price_idr = ?, land_size_sqm = ?, build_size_sqm = ?,
+            certificate_type_key = ?, google_maps_url = ?, address = ?
+         WHERE id = ?"
+    )->execute([
+        trim($data['listing_type_key'] ?? $listing['listing_type_key']),
+        $title,
+        $short_desc,
+        trim($data['description'] ?? '') ?: ($listing['description'] ?? null),
+        $area_key,
+        !empty($data['price_usd']) ? (int)$data['price_usd'] : ($listing['price_usd'] ?? null),
+        !empty($data['price_idr']) ? (int)$data['price_idr'] : ($listing['price_idr'] ?? null),
+        !empty($data['land_size_sqm']) ? (float)$data['land_size_sqm'] : ($listing['land_size_sqm'] ?? null),
+        !empty($data['build_size_sqm']) ? (float)$data['build_size_sqm'] : ($listing['build_size_sqm'] ?? null),
+        trim($data['certificate_type_key'] ?? '') ?: ($listing['certificate_type_key'] ?? null),
+        trim($data['google_maps_url'] ?? '') ?: ($listing['google_maps_url'] ?? null),
+        trim($data['address'] ?? '') ?: ($listing['address'] ?? null),
+        $listing_id,
+    ]);
+
+    json_out(['success' => true, 'message' => 'Listing updated.']);
+}
+
+function handle_my_listings(): void {
+    $uid      = require_auth();
+    $agent_id = require_agent();
+
+    $db = get_db();
+    $stmt = $db->prepare(
+        "SELECT l.*, lt.label AS listing_type_label, a.label AS area_label,
+                (SELECT COUNT(*) FROM listing_images li WHERE li.listing_id = l.id) AS image_count
+         FROM listings l
+         LEFT JOIN listing_types lt ON lt.`key` = l.listing_type_key
+         LEFT JOIN areas a ON a.`key` = l.area_key
+         WHERE l.agent_id = ?
+         ORDER BY l.created_at DESC"
+    );
+    $stmt->execute([$agent_id]);
+    json_out(['data' => $stmt->fetchAll()]);
+}
+
+function handle_delete_listing(): void {
+    $uid      = require_auth();
+    $agent_id = require_agent();
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+
+    $data       = get_post_data();
+    $listing_id = (int)($data['listing_id'] ?? 0);
+    if (!$listing_id) json_error(400, 'listing_id required.');
+
+    $db = get_db();
+    $stmt = $db->prepare("SELECT id FROM listings WHERE id = ? AND agent_id = ?");
+    $stmt->execute([$listing_id, $agent_id]);
+    if (!$stmt->fetch()) json_error(404, 'Listing not found or you do not own it.');
+
+    // Soft-delete
+    $db->prepare("UPDATE listings SET status = 'expired' WHERE id = ?")->execute([$listing_id]);
+
+    json_out(['success' => true, 'message' => 'Listing deleted.']);
+}
+
+
+// =================================================================
+// IMAGE UPLOAD
+// =================================================================
+
+function handle_upload_image(): void {
+    $uid      = require_auth();
+    $agent_id = require_agent();
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+
+    $listing_id = (int)($_POST['listing_id'] ?? 0);
+    if (!$listing_id) json_error(400, 'listing_id required.');
+
+    // Ownership check
+    $db = get_db();
+    $stmt = $db->prepare("SELECT id FROM listings WHERE id = ? AND agent_id = ?");
+    $stmt->execute([$listing_id, $agent_id]);
+    if (!$stmt->fetch()) json_error(404, 'Listing not found or you do not own it.');
+
+    // Max 10 images per listing
+    $count = $db->prepare("SELECT COUNT(*) FROM listing_images WHERE listing_id = ?");
+    $count->execute([$listing_id]);
+    if ((int)$count->fetchColumn() >= 10) json_error(400, 'Maximum 10 images per listing reached.');
+
+    // File validation
+    if (empty($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) {
+        json_error(400, 'No file uploaded or upload error.');
+    }
+
+    $file    = $_FILES['image'];
+    $maxSize = 5 * 1024 * 1024; // 5MB
+    if ($file['size'] > $maxSize) json_error(400, 'File too large. Maximum 5MB.');
+
+    // Validate MIME type
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $mime  = finfo_file($finfo, $file['tmp_name']);
+    finfo_close($finfo);
+
+    $allowed_mimes = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
+    if (!array_key_exists($mime, $allowed_mimes)) {
+        json_error(400, 'Only JPEG, PNG, and WebP images are allowed.');
+    }
+
+    $ext      = $allowed_mimes[$mime];
+    $filename = time() . '_' . bin2hex(random_bytes(6)) . '.' . $ext;
+
+    // Build save path
+    $upload_dir = '/home/rovin629/subdomain/biltest.roving-i.com.au/uploads/listings/' . $listing_id . '/';
+    if (!is_dir($upload_dir)) {
+        if (!mkdir($upload_dir, 0755, true)) {
+            json_error(500, 'Could not create upload directory.');
+        }
+    }
+
+    $dest = $upload_dir . $filename;
+    if (!move_uploaded_file($file['tmp_name'], $dest)) {
+        json_error(500, 'Failed to save uploaded file.');
+    }
+
+    $url = '/uploads/listings/' . $listing_id . '/' . $filename;
+
+    // Determine if first image (make it primary automatically)
+    $is_first = $db->prepare("SELECT COUNT(*) FROM listing_images WHERE listing_id = ?");
+    $is_first->execute([$listing_id]);
+    $is_primary = (int)$is_first->fetchColumn() === 0 ? 1 : 0;
+
+    $db->prepare(
+        "INSERT INTO listing_images (listing_id, url, alt_text, is_primary, sort_order)
+         VALUES (?, ?, '', ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM listing_images li2 WHERE li2.listing_id = ?))"
+    )->execute([$listing_id, $url, $is_primary, $listing_id]);
+
+    $image_id = (int)$db->lastInsertId();
+
+    json_out(['success' => true, 'image' => ['id' => $image_id, 'url' => $url, 'is_primary' => (bool)$is_primary]], 201);
+}
+
+function handle_delete_image(): void {
+    $uid      = require_auth();
+    $agent_id = require_agent();
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+
+    $data     = get_post_data();
+    $image_id = (int)($data['image_id'] ?? 0);
+    if (!$image_id) json_error(400, 'image_id required.');
+
+    $db = get_db();
+
+    // Ownership check via listings join
+    $stmt = $db->prepare(
+        "SELECT li.url, li.listing_id FROM listing_images li
+         JOIN listings l ON l.id = li.listing_id
+         WHERE li.id = ? AND l.agent_id = ?"
+    );
+    $stmt->execute([$image_id, $agent_id]);
+    $img = $stmt->fetch();
+    if (!$img) json_error(404, 'Image not found or you do not own this listing.');
+
+    // Delete file from disk
+    $file_path = '/home/rovin629/subdomain/biltest.roving-i.com.au' . $img['url'];
+    if (is_file($file_path)) @unlink($file_path);
+
+    $db->prepare("DELETE FROM listing_images WHERE id = ?")->execute([$image_id]);
+
+    // If deleted image was primary, auto-assign next available
+    $next = $db->prepare("SELECT id FROM listing_images WHERE listing_id = ? ORDER BY sort_order ASC LIMIT 1");
+    $next->execute([$img['listing_id']]);
+    $next_img = $next->fetch();
+    if ($next_img) {
+        $db->prepare("UPDATE listing_images SET is_primary = 1 WHERE id = ?")->execute([$next_img['id']]);
+    }
+
+    json_out(['success' => true, 'message' => 'Image deleted.']);
+}
+
+function handle_set_primary_image(): void {
+    $uid      = require_auth();
+    $agent_id = require_agent();
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+
+    $data     = get_post_data();
+    $image_id = (int)($data['image_id'] ?? 0);
+    if (!$image_id) json_error(400, 'image_id required.');
+
+    $db = get_db();
+
+    // Ownership check
+    $stmt = $db->prepare(
+        "SELECT li.listing_id FROM listing_images li
+         JOIN listings l ON l.id = li.listing_id
+         WHERE li.id = ? AND l.agent_id = ?"
+    );
+    $stmt->execute([$image_id, $agent_id]);
+    $img = $stmt->fetch();
+    if (!$img) json_error(404, 'Image not found or you do not own this listing.');
+
+    $listing_id = $img['listing_id'];
+
+    // Unset all primaries for this listing, then set the chosen one
+    $db->prepare("UPDATE listing_images SET is_primary = 0 WHERE listing_id = ?")->execute([$listing_id]);
+    $db->prepare("UPDATE listing_images SET is_primary = 1 WHERE id = ?")->execute([$image_id]);
+
+    json_out(['success' => true, 'message' => 'Primary image updated.']);
+}
+
+
+// =================================================================
+// REVIEW CHECK
+// =================================================================
+
+function handle_check_reviews(): void {
+    $uid = require_auth();
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+
+    $data        = get_post_data();
+    $entity_type = trim($data['entity_type'] ?? '');
+    $entity_id   = (int)($data['entity_id'] ?? 0);
+
+    $allowed = ['provider', 'developer', 'agent'];
+    if (!in_array($entity_type, $allowed)) json_error(400, 'entity_type must be one of: ' . implode(', ', $allowed));
+    if (!$entity_id) json_error(400, 'entity_id required.');
+
+    // Verify the requestor is allowed: must be the agent or provider owner
+    $uid_check = require_auth();
+
+    $db = get_db();
+
+    // Get entity
+    $table   = $entity_type === 'agent' ? 'agents' : $entity_type . 's';
+    $stmt    = $db->prepare("SELECT id, google_maps_url, google_rating, google_review_count, google_place_id FROM `{$table}` WHERE id = ? LIMIT 1");
+    $stmt->execute([$entity_id]);
+    $entity = $stmt->fetch();
+    if (!$entity) json_error(404, ucfirst($entity_type) . ' not found.');
+
+    // Permission check
+    $allowed_to_check = false;
+    if ($entity_type === 'agent') {
+        $agent = get_agent_for_user($uid_check);
+        if ($agent && (int)$agent['id'] === $entity_id) $allowed_to_check = true;
+    } elseif ($entity_type === 'provider') {
+        $own = $db->prepare("SELECT 1 FROM provider_owners WHERE provider_id = ? AND user_id = ?");
+        $own->execute([$entity_id, $uid_check]);
+        if ($own->fetch()) $allowed_to_check = true;
+    }
+    // Admin bypass
+    if (($_SESSION['user_role'] ?? '') === 'admin') $allowed_to_check = true;
+
+    if (!$allowed_to_check) json_error(403, 'You are not authorised to request review updates for this entity.');
+
+    // Log the request
+    $db->prepare(
+        "INSERT INTO review_update_log (entity_type, entity_id, requested_by, status, created_at)
+         VALUES (?, ?, ?, 'pending', NOW())"
+    )->execute([$entity_type, $entity_id, $uid_check]);
+
+    // Try Google Places API if key and place_id are available
+    $api_result = null;
+    if (!empty($entity['google_place_id']) && defined('GOOGLE_PLACES_API_KEY') && GOOGLE_PLACES_API_KEY) {
+        $url = 'https://maps.googleapis.com/maps/api/place/details/json?place_id='
+             . urlencode($entity['google_place_id'])
+             . '&fields=rating,user_ratings_total&key='
+             . urlencode(GOOGLE_PLACES_API_KEY);
+
+        $ctx      = stream_context_create(['http' => ['timeout' => 10]]);
+        $response = @file_get_contents($url, false, $ctx);
+        if ($response) {
+            $parsed = json_decode($response, true);
+            if (isset($parsed['result'])) {
+                $rating = $parsed['result']['rating'] ?? null;
+                $count  = $parsed['result']['user_ratings_total'] ?? null;
+                if ($rating !== null) {
+                    $db->prepare(
+                        "UPDATE `{$table}` SET google_rating = ?, google_review_count = ?, last_review_check = NOW() WHERE id = ?"
+                    )->execute([$rating, $count, $entity_id]);
+                    $db->prepare("UPDATE review_update_log SET status='done', new_rating=?, new_count=?, updated_at=NOW() WHERE entity_type=? AND entity_id=? AND status='pending' ORDER BY id DESC LIMIT 1")
+                       ->execute([$rating, $count, $entity_type, $entity_id]);
+                    $api_result = ['rating' => $rating, 'review_count' => $count];
+                }
+            }
+        }
+    }
+
+    json_out([
+        'success'       => true,
+        'message'       => $api_result
+            ? 'Review data updated from Google Places API.'
+            : 'Review check requested. Data will be updated shortly.',
+        'current_rating'       => $api_result ? $api_result['rating'] : ($entity['google_rating'] ?? null),
+        'current_review_count' => $api_result ? $api_result['review_count'] : ($entity['google_review_count'] ?? null),
+    ]);
 }

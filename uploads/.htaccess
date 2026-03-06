@@ -1,0 +1,12 @@
+# Allow image files to be served
+<FilesMatch "\.(jpg|jpeg|png|gif|webp)$">
+    Order Allow,Deny
+    Allow from all
+</FilesMatch>
+
+# Deny everything else (especially PHP)
+<FilesMatch "\.php$">
+    Deny from all
+</FilesMatch>
+
+Options -Indexes

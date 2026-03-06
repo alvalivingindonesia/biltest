@@ -215,11 +215,17 @@ switch ($resource) {
     case 'search':
         handle_search();
         break;
+    case 'listings':
+        $slug ? handle_listing_detail($slug) : handle_listings_list();
+        break;
+    case 'agents':
+        $slug ? handle_agent_detail($slug) : handle_agents_list();
+        break;
     default:
         json_out([
             'name' => 'Build in Lombok API',
             'version' => '1.0',
-            'endpoints' => ['providers', 'developers', 'projects', 'guides', 'filters', 'search'],
+            'endpoints' => ['providers', 'developers', 'projects', 'guides', 'filters', 'search', 'listings', 'agents'],
         ]);
 }
 
@@ -590,6 +596,8 @@ function handle_filters(): void {
     $areas = $db->query("SELECT `key`, label FROM areas ORDER BY sort_order")->fetchAll();
     $project_types = $db->query("SELECT `key`, label FROM project_types ORDER BY sort_order")->fetchAll();
     $project_statuses = $db->query("SELECT `key`, label FROM project_statuses ORDER BY sort_order")->fetchAll();
+    $listing_types = $db->query("SELECT `key`, label FROM listing_types ORDER BY sort_order")->fetchAll();
+    $land_certificate_types = $db->query("SELECT `key`, label FROM land_certificate_types ORDER BY sort_order")->fetchAll();
 
     json_out([
         'groups' => $groups,
@@ -597,6 +605,8 @@ function handle_filters(): void {
         'areas' => $areas,
         'project_types' => $project_types,
         'project_statuses' => $project_statuses,
+        'listing_types' => $listing_types,
+        'land_certificate_types' => $land_certificate_types,
     ]);
 }
 
@@ -644,5 +654,267 @@ function handle_search(): void {
     $stmt->execute([$q, $limit]);
     $results = array_merge($results, $stmt->fetchAll());
 
+    // Listings
+    $stmt = $db->prepare(
+        "SELECT 'listing' AS type, l.slug, l.title AS name, l.short_description AS excerpt, NULL AS google_rating
+         FROM listings l
+         WHERE l.status = 'active' AND l.is_approved = 1
+           AND MATCH(l.title, l.short_description, l.description) AGAINST(? IN BOOLEAN MODE)
+         LIMIT ?"
+    );
+    $stmt->execute([$q, $limit]);
+    $results = array_merge($results, $stmt->fetchAll());
+
     json_out(['data' => $results, 'query' => $q]);
+}
+
+
+// =============================================================
+// LISTINGS
+// =============================================================
+
+function handle_listings_list(): void {
+    $db = get_db();
+    [$page, $per_page, $offset] = get_page_params();
+
+    $where = ["l.status = 'active'", 'l.is_approved = 1'];
+    $params = [];
+
+    // Filter: listing_type
+    if (!empty($_GET['listing_type'])) {
+        $where[] = 'l.listing_type_key = ?';
+        $params[] = $_GET['listing_type'];
+    }
+    // Filter: area
+    if (!empty($_GET['area'])) {
+        $where[] = 'l.area_key = ?';
+        $params[] = $_GET['area'];
+    }
+    // Filter: price range (USD)
+    if (!empty($_GET['min_price_usd'])) {
+        $where[] = 'l.price_usd >= ?';
+        $params[] = (int)$_GET['min_price_usd'];
+    }
+    if (!empty($_GET['max_price_usd'])) {
+        $where[] = 'l.price_usd <= ?';
+        $params[] = (int)$_GET['max_price_usd'];
+    }
+    // Filter: size range
+    if (!empty($_GET['min_size'])) {
+        $where[] = 'l.land_size_sqm >= ?';
+        $params[] = (int)$_GET['min_size'];
+    }
+    if (!empty($_GET['max_size'])) {
+        $where[] = 'l.land_size_sqm <= ?';
+        $params[] = (int)$_GET['max_size'];
+    }
+    // Filter: certificate type
+    if (!empty($_GET['certificate_type'])) {
+        $where[] = 'l.certificate_type_key = ?';
+        $params[] = $_GET['certificate_type'];
+    }
+    // Filter: specific agent
+    if (!empty($_GET['agent_id'])) {
+        $where[] = 'l.agent_id = ?';
+        $params[] = (int)$_GET['agent_id'];
+    }
+    // Filter: featured
+    if (isset($_GET['featured']) && $_GET['featured'] === '1') {
+        $where[] = 'l.is_featured = 1';
+    }
+    // Filter: fulltext search
+    if (!empty($_GET['q'])) {
+        $where[] = 'MATCH(l.title, l.short_description, l.description) AGAINST(? IN BOOLEAN MODE)';
+        $params[] = $_GET['q'];
+    }
+
+    $where_sql = implode(' AND ', $where);
+
+    $sort = get_sort_param(['price_usd', 'land_size_sqm', 'created_at', 'title'], 'created_at');
+    $order = "l.is_featured DESC, l.{$sort} " . get_sort_dir();
+
+    // Count
+    $count_stmt = $db->prepare("SELECT COUNT(*) FROM listings l WHERE {$where_sql}");
+    $count_stmt->execute($params);
+    $total = (int)$count_stmt->fetchColumn();
+
+    // Fetch with joins
+    $stmt = $db->prepare(
+        "SELECT l.id, l.slug, l.title, l.short_description, l.listing_type_key, l.area_key,
+                l.price_usd, l.price_idr, l.land_size_sqm, l.build_size_sqm,
+                l.certificate_type_key, l.is_featured, l.badge, l.agent_id,
+                ag.display_name AS agent_name, ag.slug AS agent_slug,
+                lt.label AS listing_type_label,
+                lct.label AS certificate_type_label,
+                a.label AS area_label
+         FROM listings l
+         LEFT JOIN agents ag ON ag.id = l.agent_id
+         LEFT JOIN listing_types lt ON lt.`key` = l.listing_type_key
+         LEFT JOIN land_certificate_types lct ON lct.`key` = l.certificate_type_key
+         LEFT JOIN areas a ON a.`key` = l.area_key
+         WHERE {$where_sql}
+         ORDER BY {$order}
+         LIMIT ? OFFSET ?"
+    );
+    $stmt->execute(array_merge($params, [$per_page, $offset]));
+    $items = $stmt->fetchAll();
+
+    // Attach primary image
+    attach_listing_primary_image($items);
+    // Attach tags
+    attach_tags($items, 'listing_tags', 'listing_id');
+
+    json_out(paginated_response($items, $total, $page, $per_page));
+}
+
+function handle_listing_detail(string $slug): void {
+    $db = get_db();
+    $stmt = $db->prepare(
+        "SELECT l.*,
+                ag.display_name AS agent_name, ag.slug AS agent_slug,
+                ag.agency_name, ag.phone AS agent_phone,
+                ag.whatsapp_number AS agent_whatsapp, ag.email AS agent_email,
+                ag.bio AS agent_bio, ag.languages AS agent_languages,
+                lt.label AS listing_type_label,
+                lct.label AS certificate_type_label,
+                a.label AS area_label
+         FROM listings l
+         LEFT JOIN agents ag ON ag.id = l.agent_id
+         LEFT JOIN listing_types lt ON lt.`key` = l.listing_type_key
+         LEFT JOIN land_certificate_types lct ON lct.`key` = l.certificate_type_key
+         LEFT JOIN areas a ON a.`key` = l.area_key
+         WHERE l.slug = ? AND l.status = 'active' AND l.is_approved = 1"
+    );
+    $stmt->execute([$slug]);
+    $item = $stmt->fetch();
+    if (!$item) json_error(404, 'Listing not found');
+
+    // All images
+    $i = $db->prepare("SELECT id, url, alt_text, is_primary, sort_order FROM listing_images WHERE listing_id = ? ORDER BY is_primary DESC, sort_order ASC");
+    $i->execute([$item['id']]);
+    $item['images'] = $i->fetchAll();
+
+    // Tags
+    $t = $db->prepare("SELECT tag FROM listing_tags WHERE listing_id = ? ORDER BY tag");
+    $t->execute([$item['id']]);
+    $item['tags'] = $t->fetchAll(PDO::FETCH_COLUMN);
+
+    json_out(['data' => $item]);
+}
+
+/**
+ * Attach the primary listing image to a list of listings.
+ */
+function attach_listing_primary_image(array &$items): void {
+    if (empty($items)) return;
+    $ids = array_column($items, 'id');
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+
+    $db = get_db();
+    $stmt = $db->prepare(
+        "SELECT listing_id, url, alt_text FROM listing_images
+         WHERE listing_id IN ({$placeholders}) AND is_primary = 1"
+    );
+    $stmt->execute($ids);
+    $rows = $stmt->fetchAll();
+
+    $map = [];
+    foreach ($rows as $r) {
+        $map[$r['listing_id']] = ['url' => $r['url'], 'alt' => $r['alt_text']];
+    }
+    foreach ($items as &$item) {
+        $item['image'] = $map[$item['id']] ?? null;
+    }
+}
+
+
+// =============================================================
+// AGENTS
+// =============================================================
+
+function handle_agents_list(): void {
+    $db = get_db();
+    [$page, $per_page, $offset] = get_page_params();
+
+    $where = ['ag.is_active = 1'];
+    $params = [];
+
+    // Filter: area served
+    if (!empty($_GET['area'])) {
+        $where[] = 'ag.areas_served LIKE ?';
+        $params[] = '%' . $_GET['area'] . '%';
+    }
+    // Filter: verified
+    if (isset($_GET['verified']) && in_array($_GET['verified'], ['0', '1'])) {
+        $where[] = 'ag.is_verified = ?';
+        $params[] = (int)$_GET['verified'];
+    }
+    // Filter: fulltext search
+    if (!empty($_GET['q'])) {
+        $where[] = 'MATCH(ag.display_name, ag.agency_name, ag.bio) AGAINST(? IN BOOLEAN MODE)';
+        $params[] = $_GET['q'];
+    }
+
+    $where_sql = implode(' AND ', $where);
+    $sort = get_sort_param(['display_name', 'created_at'], 'display_name');
+    $order = "ag.is_verified DESC, ag.{$sort} " . get_sort_dir();
+
+    // Count
+    $count_stmt = $db->prepare("SELECT COUNT(*) FROM agents ag WHERE {$where_sql}");
+    $count_stmt->execute($params);
+    $total = (int)$count_stmt->fetchColumn();
+
+    // Fetch
+    $stmt = $db->prepare(
+        "SELECT ag.id, ag.slug, ag.display_name, ag.agency_name, ag.bio,
+                ag.phone, ag.whatsapp_number, ag.email, ag.website_url,
+                ag.areas_served, ag.languages, ag.is_verified, ag.badge,
+                ag.google_rating, ag.google_review_count, ag.profile_image_url,
+                (SELECT COUNT(*) FROM listings l WHERE l.agent_id = ag.id AND l.status = 'active' AND l.is_approved = 1) AS active_listing_count
+         FROM agents ag
+         WHERE {$where_sql}
+         ORDER BY {$order}
+         LIMIT ? OFFSET ?"
+    );
+    $stmt->execute(array_merge($params, [$per_page, $offset]));
+    $items = $stmt->fetchAll();
+
+    json_out(paginated_response($items, $total, $page, $per_page));
+}
+
+function handle_agent_detail(string $slug): void {
+    $db = get_db();
+    $stmt = $db->prepare(
+        "SELECT ag.*
+         FROM agents ag
+         WHERE ag.slug = ? AND ag.is_active = 1"
+    );
+    $stmt->execute([$slug]);
+    $item = $stmt->fetch();
+    if (!$item) json_error(404, 'Agent not found');
+
+    // Active listings for this agent
+    $l = $db->prepare(
+        "SELECT l.id, l.slug, l.title, l.listing_type_key, l.area_key, l.price_usd,
+                l.land_size_sqm, l.build_size_sqm, l.certificate_type_key, l.is_featured,
+                lt.label AS listing_type_label, a.label AS area_label
+         FROM listings l
+         LEFT JOIN listing_types lt ON lt.`key` = l.listing_type_key
+         LEFT JOIN areas a ON a.`key` = l.area_key
+         WHERE l.agent_id = ? AND l.status = 'active' AND l.is_approved = 1
+         ORDER BY l.is_featured DESC, l.created_at DESC"
+    );
+    $l->execute([$item['id']]);
+    $listings = $l->fetchAll();
+    attach_listing_primary_image($listings);
+    $item['listings'] = $listings;
+
+    // Reviews summary
+    $item['reviews'] = [
+        'google_rating' => $item['google_rating'] ?? null,
+        'google_review_count' => $item['google_review_count'] ?? null,
+        'last_review_check' => $item['last_review_check'] ?? null,
+    ];
+
+    json_out(['data' => $item]);
 }

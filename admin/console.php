@@ -344,6 +344,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $msg = 'User status updated.';
             header("Location: console.php?s=users&msg=" . urlencode($msg)); exit;
         }
+        // --- AGENTS: toggle verified ---
+        elseif ($section === 'agents' && $action === 'toggle_verified') {
+            $aid = (int)$_POST['agent_id'];
+            $db->prepare("UPDATE agents SET is_verified = NOT is_verified WHERE id=?")->execute([$aid]);
+            $msg = 'Agent verification status updated.';
+            header("Location: console.php?s=agents&msg=" . urlencode($msg)); exit;
+        }
+        // --- AGENTS: toggle active ---
+        elseif ($section === 'agents' && $action === 'toggle_active') {
+            $aid = (int)$_POST['agent_id'];
+            $db->prepare("UPDATE agents SET is_active = NOT is_active WHERE id=?")->execute([$aid]);
+            $msg = 'Agent active status updated.';
+            header("Location: console.php?s=agents&msg=" . urlencode($msg)); exit;
+        }
+        // --- LISTINGS: approve ---
+        elseif ($section === 'listings' && $action === 'approve_listing') {
+            $lid = (int)$_POST['listing_id'];
+            $db->prepare("UPDATE property_listings SET is_approved=1, status='active' WHERE id=?")->execute([$lid]);
+            $msg = 'Listing approved.';
+            header("Location: console.php?s=listings&msg=" . urlencode($msg)); exit;
+        }
+        // --- LISTINGS: reject ---
+        elseif ($section === 'listings' && $action === 'reject_listing') {
+            $lid = (int)$_POST['listing_id'];
+            $db->prepare("UPDATE property_listings SET is_approved=0, status='draft' WHERE id=?")->execute([$lid]);
+            $msg = 'Listing rejected (set back to draft).';
+            header("Location: console.php?s=listings&msg=" . urlencode($msg)); exit;
+        }
+        // --- LISTINGS: toggle featured ---
+        elseif ($section === 'listings' && $action === 'toggle_featured') {
+            $lid = (int)$_POST['listing_id'];
+            $db->prepare("UPDATE property_listings SET is_featured = NOT is_featured WHERE id=?")->execute([$lid]);
+            $msg = 'Listing featured status updated.';
+            header("Location: console.php?s=listings&msg=" . urlencode($msg)); exit;
+        }
+        // --- LISTINGS: change status ---
+        elseif ($section === 'listings' && $action === 'change_status') {
+            $lid = (int)$_POST['listing_id'];
+            $new_status = $_POST['new_status'];
+            $allowed_statuses = ['draft','active','under_offer','sold','expired'];
+            if (!in_array($new_status, $allowed_statuses)) throw new Exception('Invalid status');
+            $db->prepare("UPDATE property_listings SET status=? WHERE id=?")->execute([$new_status, $lid]);
+            $msg = 'Listing status updated to ' . $new_status . '.';
+            header("Location: console.php?s=listings&msg=" . urlencode($msg)); exit;
+        }
+        // --- LISTINGS: delete ---
+        elseif ($section === 'listings' && $action === 'delete_listing') {
+            $lid = (int)$_POST['listing_id'];
+            $db->prepare("DELETE FROM property_listings WHERE id=?")->execute([$lid]);
+            $msg = 'Listing deleted.';
+            header("Location: console.php?s=listings&msg=" . urlencode($msg)); exit;
+        }
     } catch (Exception $e) {
         $msg = 'Error: ' . $e->getMessage();
     }
@@ -383,10 +435,16 @@ $dev_count = $db->query("SELECT COUNT(*) FROM developers")->fetchColumn();
 $proj_count = $db->query("SELECT COUNT(*) FROM projects")->fetchColumn();
 $guide_count = $db->query("SELECT COUNT(*) FROM guides")->fetchColumn();
 $user_count = 0; $claim_count = 0; $sub_count = 0;
+$agent_count = 0; $listing_count = 0; $listing_pending_count = 0;
 try {
     $user_count = $db->query("SELECT COUNT(*) FROM users")->fetchColumn();
     $claim_count = $db->query("SELECT COUNT(*) FROM claim_requests WHERE status='pending'")->fetchColumn();
     $sub_count = $db->query("SELECT COUNT(*) FROM listing_submissions WHERE status='pending'")->fetchColumn();
+} catch (Exception $e) { /* tables may not exist yet */ }
+try {
+    $agent_count = $db->query("SELECT COUNT(*) FROM agents")->fetchColumn();
+    $listing_count = $db->query("SELECT COUNT(*) FROM property_listings")->fetchColumn();
+    $listing_pending_count = $db->query("SELECT COUNT(*) FROM property_listings WHERE is_approved=0 AND status != 'draft'")->fetchColumn();
 } catch (Exception $e) { /* tables may not exist yet */ }
 
 ?><!DOCTYPE html>
@@ -470,12 +528,15 @@ textarea{min-height:80px;resize:vertical}
     <a href="?s=guides" class="<?= $section==='guides'?'active':'' ?>">Guides (<?= $guide_count ?>)</a>
     <h2>User Management</h2>
     <a href="?s=users" class="<?= $section==='users'?'active':'' ?>">Users (<?= $user_count ?>)</a>
+    <a href="?s=agents" class="<?= $section==='agents'?'active':'' ?>">Agents (<?= $agent_count ?>)</a>
+    <a href="?s=listings" class="<?= $section==='listings'?'active':'' ?>">Listings (<?= $listing_count ?>)<?php if($listing_pending_count):?> <span style="background:#f59e0b;color:#fff;border-radius:10px;padding:0 6px;font-size:11px;margin-left:4px"><?=$listing_pending_count?></span><?php endif;?></a>
     <a href="?s=claims" class="<?= $section==='claims'?'active':'' ?>">Claims<?php if($claim_count):?> <span style="background:#f59e0b;color:#fff;border-radius:10px;padding:0 6px;font-size:11px;margin-left:4px"><?=$claim_count?></span><?php endif;?></a>
     <a href="?s=submissions" class="<?= $section==='submissions'?'active':'' ?>">Submissions<?php if($sub_count):?> <span style="background:#f59e0b;color:#fff;border-radius:10px;padding:0 6px;font-size:11px;margin-left:4px"><?=$sub_count?></span><?php endif;?></a>
     <h2>Configuration</h2>
     <a href="?s=lookups" class="<?= $section==='lookups'?'active':'' ?>">Categories & Lookups</a>
     <h2>Tools</h2>
     <a href="import.php">Google Maps Importer</a>
+    <a href="?s=review_updates" class="<?= $section==='review_updates'?'active':'' ?>">Review Update Log</a>
     <a href="?logout=1" style="margin-top:auto;opacity:.6">Logout</a>
 </div>
 
@@ -1272,6 +1333,282 @@ elseif ($section === 'submissions'):
 <?php if (empty($subs)): ?>
 <div class="card" style="text-align:center;color:#888">No submissions found.</div>
 <?php endif; ?>
+
+<?php
+// ═══════════════════════════════════════════════════════════════
+// AGENTS
+// ═══════════════════════════════════════════════════════════════
+elseif ($section === 'agents'):
+    $q = $_GET['q'] ?? '';
+    $f_verified = $_GET['fv'] ?? '';
+    $f_active = $_GET['fa'] ?? '';
+    $where = '1=1'; $params = [];
+    if ($q) { $where .= " AND (u.email LIKE ? OR a.display_name LIKE ? OR a.agency_name LIKE ?)"; $params[] = "%{$q}%"; $params[] = "%{$q}%"; $params[] = "%{$q}%"; }
+    if ($f_verified === '1') { $where .= " AND a.is_verified=1"; }
+    elseif ($f_verified === '0') { $where .= " AND a.is_verified=0"; }
+    if ($f_active === '1') { $where .= " AND a.is_active=1"; }
+    elseif ($f_active === '0') { $where .= " AND a.is_active=0"; }
+    $agents = [];
+    try {
+        $stmt = $db->prepare("
+            SELECT a.*, u.email,
+                (SELECT COUNT(*) FROM property_listings pl WHERE pl.agent_id=a.id) AS listings_count
+            FROM agents a
+            LEFT JOIN users u ON u.id = a.user_id
+            WHERE {$where}
+            ORDER BY a.created_at DESC LIMIT 200");
+        $stmt->execute($params);
+        $agents = $stmt->fetchAll();
+    } catch (Exception $e) { $agents = []; }
+?>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <h1 style="margin:0">Agents (<?= count($agents) ?>)</h1>
+</div>
+<form class="search-bar" method="GET">
+    <input type="hidden" name="s" value="agents">
+    <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" placeholder="Search email, name, agency..." style="flex:1;min-width:160px">
+    <select name="fv">
+        <option value="">Any Verification</option>
+        <option value="1" <?= $f_verified==='1'?'selected':'' ?>>Verified</option>
+        <option value="0" <?= $f_verified==='0'?'selected':'' ?>>Not Verified</option>
+    </select>
+    <select name="fa">
+        <option value="">Any Status</option>
+        <option value="1" <?= $f_active==='1'?'selected':'' ?>>Active</option>
+        <option value="0" <?= $f_active==='0'?'selected':'' ?>>Inactive</option>
+    </select>
+    <button class="btn btn-o">Filter</button>
+    <?php if ($q || $f_verified !== '' || $f_active !== ''): ?><a href="?s=agents" class="btn btn-o">Clear</a><?php endif; ?>
+</form>
+<div class="card" style="padding:0;overflow-x:auto">
+<table>
+    <tr><th>ID</th><th>User Email</th><th>Display Name</th><th>Agency Name</th><th>Phone</th><th>Verified</th><th>Active</th><th>Listings</th><th>Created</th><th>Actions</th></tr>
+    <?php foreach ($agents as $ag): ?>
+    <tr>
+        <td style="color:#888;font-size:12px"><?= $ag['id'] ?></td>
+        <td><?= htmlspecialchars($ag['email'] ?? '-') ?></td>
+        <td><?= htmlspecialchars($ag['display_name'] ?? '-') ?></td>
+        <td><?= htmlspecialchars($ag['agency_name'] ?? '-') ?></td>
+        <td><?= htmlspecialchars($ag['phone'] ?? '-') ?></td>
+        <td><?= $ag['is_verified'] ? '<span class="badge b-green">Y</span>' : '<span class="badge b-red">N</span>' ?></td>
+        <td><?= $ag['is_active'] ? '<span class="badge b-green">Y</span>' : '<span class="badge b-red">N</span>' ?></td>
+        <td style="text-align:center"><?= (int)$ag['listings_count'] ?></td>
+        <td style="color:#888;font-size:12px"><?= $ag['created_at'] ?? '-' ?></td>
+        <td class="actions" style="white-space:nowrap">
+            <form method="POST" action="?s=agents&a=toggle_verified" style="display:inline">
+                <input type="hidden" name="agent_id" value="<?= $ag['id'] ?>">
+                <button class="btn btn-o btn-sm" title="Toggle verified"><?= $ag['is_verified'] ? 'Unverify' : 'Verify' ?></button>
+            </form>
+            <form method="POST" action="?s=agents&a=toggle_active" style="display:inline">
+                <input type="hidden" name="agent_id" value="<?= $ag['id'] ?>">
+                <button class="btn btn-o btn-sm"><?= $ag['is_active'] ? 'Deactivate' : 'Activate' ?></button>
+            </form>
+            <?php if (!empty($ag['user_id'])): ?>
+            <a href="?s=users&q=<?= urlencode($ag['email'] ?? '') ?>" class="btn btn-o btn-sm" title="View user account">User</a>
+            <?php endif; ?>
+        </td>
+    </tr>
+    <?php endforeach; ?>
+</table>
+</div>
+<?php if (empty($agents)): ?>
+<div class="card" style="text-align:center;color:#888">No agents found.</div>
+<?php endif; ?>
+
+<?php
+// ═══════════════════════════════════════════════════════════════
+// LISTINGS
+// ═══════════════════════════════════════════════════════════════
+elseif ($section === 'listings'):
+    $q = $_GET['q'] ?? '';
+    $f_status = $_GET['fs'] ?? '';
+    $f_approved = $_GET['fap'] ?? '';
+    $f_area = $_GET['fa'] ?? '';
+    $where = '1=1'; $params = [];
+    if ($q) { $where .= " AND (pl.title LIKE ? OR pl.listing_type LIKE ?)"; $params[] = "%{$q}%"; $params[] = "%{$q}%"; }
+    if ($f_status) { $where .= " AND pl.status=?"; $params[] = $f_status; }
+    if ($f_approved === '1') { $where .= " AND pl.is_approved=1"; }
+    elseif ($f_approved === '0') { $where .= " AND pl.is_approved=0"; }
+    if ($f_area) { $where .= " AND pl.area_key=?"; $params[] = $f_area; }
+    $listings = [];
+    try {
+        $stmt = $db->prepare("
+            SELECT pl.*,
+                a.display_name AS agent_name,
+                ar.label AS area_label,
+                (SELECT file_path FROM listing_images li WHERE li.listing_id=pl.id AND li.is_primary=1 LIMIT 1) AS primary_image
+            FROM property_listings pl
+            LEFT JOIN agents a ON a.id = pl.agent_id
+            LEFT JOIN areas ar ON ar.`key` = pl.area_key
+            WHERE {$where}
+            ORDER BY pl.created_at DESC LIMIT 200");
+        $stmt->execute($params);
+        $listings = $stmt->fetchAll();
+    } catch (Exception $e) { $listings = []; }
+    // Status badge colour helper
+    $status_badge = [
+        'draft'      => 'b-yellow',
+        'active'     => 'b-green',
+        'under_offer'=> 'b-blue',
+        'sold'       => 'b-red',
+        'expired'    => 'b-red',
+    ];
+?>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <h1 style="margin:0">Listings (<?= count($listings) ?>)</h1>
+</div>
+<form class="search-bar" method="GET">
+    <input type="hidden" name="s" value="listings">
+    <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" placeholder="Search title or type..." style="flex:1;min-width:160px">
+    <select name="fs">
+        <option value="">All Statuses</option>
+        <option value="draft" <?= $f_status==='draft'?'selected':'' ?>>Draft</option>
+        <option value="active" <?= $f_status==='active'?'selected':'' ?>>Active</option>
+        <option value="under_offer" <?= $f_status==='under_offer'?'selected':'' ?>>Under Offer</option>
+        <option value="sold" <?= $f_status==='sold'?'selected':'' ?>>Sold</option>
+        <option value="expired" <?= $f_status==='expired'?'selected':'' ?>>Expired</option>
+    </select>
+    <select name="fap">
+        <option value="">Approved: All</option>
+        <option value="1" <?= $f_approved==='1'?'selected':'' ?>>Approved: Yes</option>
+        <option value="0" <?= $f_approved==='0'?'selected':'' ?>>Approved: No</option>
+    </select>
+    <select name="fa">
+        <option value="">All Areas</option>
+        <?php foreach ($areas_list as $a): ?><option value="<?= $a['key'] ?>" <?= $f_area===$a['key']?'selected':'' ?>><?= htmlspecialchars($a['label']) ?></option><?php endforeach; ?>
+    </select>
+    <button class="btn btn-o">Filter</button>
+    <?php if ($q || $f_status || $f_approved !== '' || $f_area): ?><a href="?s=listings" class="btn btn-o">Clear</a><?php endif; ?>
+</form>
+<div class="card" style="padding:0;overflow-x:auto">
+<table>
+    <tr><th style="width:40px"></th><th>ID</th><th>Title</th><th>Type</th><th>Area</th><th>Agent</th><th>Price (USD)</th><th>Status</th><th>Approved</th><th>Featured</th><th>Created</th><th>Actions</th></tr>
+    <?php foreach ($listings as $lst): ?>
+    <tr>
+        <td>
+            <?php if (!empty($lst['primary_image'])): ?>
+            <img src="<?= htmlspecialchars($lst['primary_image']) ?>" alt="" style="width:40px;height:32px;object-fit:cover;border-radius:3px;display:block">
+            <?php else: ?>
+            <div style="width:40px;height:32px;background:#e5e7eb;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#9ca3af">—</div>
+            <?php endif; ?>
+        </td>
+        <td style="color:#888;font-size:12px"><?= $lst['id'] ?></td>
+        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="<?= htmlspecialchars($lst['title'] ?? '') ?>"><?= htmlspecialchars($lst['title'] ?? '-') ?></td>
+        <td><span class="badge b-blue"><?= htmlspecialchars($lst['listing_type'] ?? '-') ?></span></td>
+        <td><?= htmlspecialchars($lst['area_label'] ?? '-') ?></td>
+        <td><?= htmlspecialchars($lst['agent_name'] ?? '-') ?></td>
+        <td><?= $lst['price_usd'] ? '$'.number_format((float)$lst['price_usd']) : '-' ?></td>
+        <td><span class="badge <?= $status_badge[$lst['status']] ?? 'b-yellow' ?>"><?= htmlspecialchars($lst['status'] ?? '-') ?></span></td>
+        <td><?= $lst['is_approved'] ? '<span class="badge b-green">Y</span>' : '<span class="badge b-red">N</span>' ?></td>
+        <td><?= !empty($lst['is_featured']) ? '<span class="badge b-blue">Y</span>' : '<span class="badge b-yellow">N</span>' ?></td>
+        <td style="color:#888;font-size:12px;white-space:nowrap"><?= isset($lst['created_at']) ? substr($lst['created_at'],0,10) : '-' ?></td>
+        <td class="actions" style="white-space:nowrap">
+            <?php if (!$lst['is_approved'] && $lst['status'] !== 'draft'): ?>
+            <form method="POST" action="?s=listings&a=approve_listing" style="display:inline">
+                <input type="hidden" name="listing_id" value="<?= $lst['id'] ?>">
+                <button class="btn btn-g btn-sm">Approve</button>
+            </form>
+            <?php elseif ($lst['is_approved']): ?>
+            <form method="POST" action="?s=listings&a=reject_listing" style="display:inline" onsubmit="return confirm('Reject this listing?')">
+                <input type="hidden" name="listing_id" value="<?= $lst['id'] ?>">
+                <button class="btn btn-o btn-sm">Reject</button>
+            </form>
+            <?php endif; ?>
+            <form method="POST" action="?s=listings&a=toggle_featured" style="display:inline">
+                <input type="hidden" name="listing_id" value="<?= $lst['id'] ?>">
+                <button class="btn btn-o btn-sm"><?= !empty($lst['is_featured']) ? 'Unfeature' : 'Feature' ?></button>
+            </form>
+            <form method="POST" action="?s=listings&a=change_status" style="display:inline">
+                <input type="hidden" name="listing_id" value="<?= $lst['id'] ?>">
+                <select name="new_status" onchange="this.form.submit()" style="padding:3px 6px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px;cursor:pointer">
+                    <option value="">— set status —</option>
+                    <option value="draft">draft</option>
+                    <option value="active">active</option>
+                    <option value="under_offer">under_offer</option>
+                    <option value="sold">sold</option>
+                    <option value="expired">expired</option>
+                </select>
+            </form>
+            <form method="POST" action="?s=listings&a=delete_listing" style="display:inline" onsubmit="return confirm('Delete listing permanently?')">
+                <input type="hidden" name="listing_id" value="<?= $lst['id'] ?>">
+                <button class="btn btn-r btn-sm">Del</button>
+            </form>
+        </td>
+    </tr>
+    <?php endforeach; ?>
+</table>
+</div>
+<?php if (empty($listings)): ?>
+<div class="card" style="text-align:center;color:#888">No listings found.</div>
+<?php endif; ?>
+
+<?php
+// ═══════════════════════════════════════════════════════════════
+// REVIEW UPDATE LOG
+// ═══════════════════════════════════════════════════════════════
+elseif ($section === 'review_updates'):
+    $review_log = [];
+    try {
+        $review_log = $db->query("
+            SELECT * FROM review_update_log
+            ORDER BY checked_at DESC
+            LIMIT 200
+        ")->fetchAll();
+    } catch (Exception $e) { $review_log = []; }
+?>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <h1 style="margin:0">Review Update Log (<?= count($review_log) ?>)</h1>
+    <button class="btn btn-p" id="trigger-review-check" onclick="triggerReviewCheck(this)">Run Review Check (All)</button>
+</div>
+<p style="color:#666;margin-bottom:16px;font-size:13px">Log of rating/review count changes detected by the automated review checker. Use the button above to trigger a fresh check.</p>
+<div class="card" style="padding:0;overflow-x:auto">
+<table>
+    <tr><th>ID</th><th>Entity Type</th><th>Entity ID</th><th>Old Rating</th><th>New Rating</th><th>Old Count</th><th>New Count</th><th>Source</th><th>Checked At</th></tr>
+    <?php foreach ($review_log as $rl): ?>
+    <tr>
+        <td style="color:#888;font-size:12px"><?= $rl['id'] ?></td>
+        <td><span class="badge b-blue"><?= htmlspecialchars($rl['entity_type'] ?? '-') ?></span></td>
+        <td><?= htmlspecialchars($rl['entity_id'] ?? '-') ?></td>
+        <td><?= $rl['old_rating'] !== null ? htmlspecialchars($rl['old_rating']) : '<span style="color:#aaa">—</span>' ?></td>
+        <td><?php
+            $old = $rl['old_rating'];
+            $new = $rl['new_rating'];
+            $changed = ($old !== null && $new !== null && (float)$old !== (float)$new);
+            echo $new !== null ? '<span'.($changed?' style="font-weight:600;color:#16a34a"':'').'>'.htmlspecialchars($new).'</span>' : '<span style="color:#aaa">—</span>';
+        ?></td>
+        <td><?= $rl['old_count'] !== null ? htmlspecialchars($rl['old_count']) : '<span style="color:#aaa">—</span>' ?></td>
+        <td><?php
+            $oc = $rl['old_count'];
+            $nc = $rl['new_count'];
+            $cnt_changed = ($oc !== null && $nc !== null && (int)$oc !== (int)$nc);
+            echo $nc !== null ? '<span'.($cnt_changed?' style="font-weight:600;color:#16a34a"':'').'>'.htmlspecialchars($nc).'</span>' : '<span style="color:#aaa">—</span>';
+        ?></td>
+        <td><?= htmlspecialchars($rl['source'] ?? '-') ?></td>
+        <td style="color:#888;font-size:12px;white-space:nowrap"><?= htmlspecialchars($rl['checked_at'] ?? '-') ?></td>
+    </tr>
+    <?php endforeach; ?>
+</table>
+</div>
+<?php if (empty($review_log)): ?>
+<div class="card" style="text-align:center;color:#888">No review update log entries found.</div>
+<?php endif; ?>
+<script>
+function triggerReviewCheck(btn) {
+    btn.disabled = true;
+    btn.textContent = 'Running…';
+    fetch('../api/reviews.php', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'check_all'})})
+        .then(r => r.json())
+        .then(data => {
+            btn.textContent = 'Done — reload to see results';
+            btn.disabled = false;
+        })
+        .catch(err => {
+            btn.textContent = 'Error — check console';
+            btn.disabled = false;
+            console.error(err);
+        });
+}
+</script>
 
 <?php endif; ?>
 

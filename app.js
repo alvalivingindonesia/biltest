@@ -106,6 +106,34 @@ const DataLayer = (() => {
     };
   }
 
+  function mapListing(row) {
+    return {
+      ...row,
+      listing_type: row.listing_type_key || row.listing_type,
+      area: row.area_key || row.area,
+      price_idr: row.price_idr ? parseInt(row.price_idr) : null,
+      price_usd: row.price_usd ? parseInt(row.price_usd) : null,
+      land_size_sqm: row.land_size_sqm ? parseInt(row.land_size_sqm) : null,
+      land_size_are: row.land_size_are ? parseFloat(row.land_size_are) : null,
+      building_size_sqm: row.building_size_sqm ? parseInt(row.building_size_sqm) : null,
+      bedrooms: row.bedrooms ? parseInt(row.bedrooms) : null,
+      bathrooms: row.bathrooms ? parseInt(row.bathrooms) : null,
+      features: typeof row.features === 'string' ? JSON.parse(row.features || '[]') : (row.features || []),
+      tags: row.tags || [],
+      images: row.images || [],
+      image: row.image || null,
+    };
+  }
+
+  function mapAgent(row) {
+    return {
+      ...row,
+      google_rating: row.google_rating ? parseFloat(row.google_rating) : null,
+      google_review_count: row.google_review_count ? parseInt(row.google_review_count) : 0,
+      listing_count: row.listing_count ? parseInt(row.listing_count) : 0,
+    };
+  }
+
   return {
     async getProviders(filters = {}) {
       const res = await apiFetch('providers', filters);
@@ -135,6 +163,23 @@ const DataLayer = (() => {
     async getProject(slug) {
       const res = await apiFetch('projects/' + slug);
       return mapProject(res.data);
+    },
+
+    async getListings(filters = {}) {
+      const res = await apiFetch('listings', filters);
+      return { data: (res.data || []).map(mapListing), meta: res.meta || { total: 0 } };
+    },
+    async getListing(slug) {
+      const res = await apiFetch('listings/' + slug);
+      return mapListing(res.data);
+    },
+    async getAgents(filters = {}) {
+      const res = await apiFetch('agents', filters);
+      return { data: (res.data || []).map(mapAgent), meta: res.meta || { total: 0 } };
+    },
+    async getAgent(slug) {
+      const res = await apiFetch('agents/' + slug);
+      return mapAgent(res.data);
     },
 
     async getGuides() {
@@ -173,9 +218,23 @@ function formatUSD(amount) {
   return `$${amount}`;
 }
 
+function formatIDR(amount) {
+  if (!amount) return null;
+  if (amount >= 1000000000) return 'Rp ' + (amount / 1000000000).toFixed(1) + 'B';
+  if (amount >= 1000000) return 'Rp ' + (amount / 1000000).toFixed(0) + 'M';
+  if (amount >= 1000) return 'Rp ' + (amount / 1000).toFixed(0) + 'K';
+  return 'Rp ' + amount;
+}
+
+function formatLandSize(sqm, are) {
+  if (are) return `${are} are (${sqm ? sqm.toLocaleString() + ' m²' : ''})`;
+  if (sqm) return `${sqm.toLocaleString()} m²`;
+  return '';
+}
+
 // ---- Dynamic filter data (loaded from DB) ----
 const FilterData = {
-  areas: [], groups: [], categories: [], project_types: [], project_statuses: [],
+  areas: [], groups: [], categories: [], project_types: [], project_statuses: [], listing_types: [], land_certificate_types: [],
   _loaded: false,
   async load() {
     if (this._loaded) return;
@@ -186,6 +245,8 @@ const FilterData = {
       this.categories = f.categories || [];
       this.project_types = f.project_types || [];
       this.project_statuses = f.project_statuses || [];
+      this.listing_types = f.listing_types || [];
+      this.land_certificate_types = f.land_certificate_types || [];
       this._loaded = true;
     } catch(e) { console.error('Failed to load filters:', e); }
   },
@@ -374,6 +435,9 @@ async function router() {
     if (href === 'home' && page === 'home') {
       a.classList.add('active');
     }
+    if (href === 'listings' && (page === 'listings' || page === 'listing')) {
+      a.classList.add('active');
+    }
   });
 
   // Render
@@ -398,6 +462,12 @@ async function router() {
     case 'submit-listing': await renderSubmitListing(view); break;
     case 'verify-result': renderVerifyResult(view, params); break;
     case 'reset-password': renderResetPassword(view, params); break;
+    case 'listings': await renderListings(view, params); break;
+    case 'listing': await renderListingDetail(view, segments[1]); break;
+    case 'agents': await renderAgents(view, params); break;
+    case 'agent': await renderAgentDetail(view, segments[1]); break;
+    case 'create-listing': await renderCreateListing(view); break;
+    case 'agent-signup': await renderAgentSignup(view); break;
     default: await renderHome(view);
   }
 
@@ -456,6 +526,14 @@ async function renderHome(el) {
             <div class="hero-cta-title">Developers & Projects</div>
             <div class="hero-cta-desc">Explore ${totalDevelopers} active developers and ${totalProjects} investment projects.</div>
             <div class="hero-cta-arrow">View projects ${iconArrowRight()}</div>
+          </a>
+          <a href="#listings" class="hero-cta-card" onclick="navigate('listings'); return false;">
+            <div class="hero-cta-icon hero-cta-icon--green">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </div>
+            <div class="hero-cta-title">Find Land & Property</div>
+            <div class="hero-cta-desc">Browse land, villas, and investment properties listed by local agents.</div>
+            <div class="hero-cta-arrow">Browse listings ${iconArrowRight()}</div>
           </a>
         </div>
       </div>
@@ -887,6 +965,10 @@ async function renderProviderDetail(el, slug) {
             </div>
 
             ${renderGoogleReviewBtn(b.google_maps_url)}
+            <button onclick="checkReviewUpdates('provider', ${b.id})" class="btn btn--ghost btn--sm" style="margin-top:var(--space-3)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              Check for Review Updates
+            </button>
           </div>
 
           <div class="detail-sidebar">
@@ -1065,6 +1147,721 @@ async function renderDeveloperDetail(el, slug) {
     </div>
   `;
   requestAnimationFrame(() => animateCards(el));
+}
+
+// =====================================================
+// RENDER: LISTING CARD
+// =====================================================
+
+function renderListingCard(l, index = 0) {
+  const imgUrl = l.image && l.image.url ? l.image.url : '';
+  const priceStr = l.price_usd ? formatUSD(l.price_usd) : (l.price_idr ? formatIDR(l.price_idr) : 'Price on request');
+  const sizeStr = formatLandSize(l.land_size_sqm, l.land_size_are);
+  const typeLabel = l.listing_type_label || l.listing_type_key || '';
+  const certLabel = l.certificate_type_label || '';
+
+  return `
+    <a href="#listing/${l.slug}" class="listing-card card" onclick="navigate('listing/${l.slug}');return false;" style="animation-delay:${index * 60}ms">
+      <div class="listing-card-image">
+        ${imgUrl ? '<img src="' + imgUrl + '" alt="' + l.title + '" loading="lazy">' : '<div class="listing-card-noimg"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></div>'}
+        <span class="listing-card-type">${typeLabel}</span>
+        ${l.is_featured ? '<span class="listing-card-featured">Featured</span>' : ''}
+      </div>
+      <div class="listing-card-body">
+        <div class="listing-card-price">${priceStr}${l.price_label ? ' <span class="listing-card-price-note">' + l.price_label + '</span>' : ''}</div>
+        <h3 class="listing-card-title">${l.title}</h3>
+        <div class="listing-card-meta">
+          ${sizeStr ? '<span>' + sizeStr + '</span>' : ''}
+          ${certLabel ? '<span>' + certLabel + '</span>' : ''}
+          ${l.bedrooms ? '<span>' + l.bedrooms + ' bed</span>' : ''}
+          ${l.bathrooms ? '<span>' + l.bathrooms + ' bath</span>' : ''}
+        </div>
+        <div class="listing-card-location">${l.area_label || ''}</div>
+        ${l.agent_name ? '<div class="listing-card-agent">Agent: ' + l.agent_name + '</div>' : ''}
+      </div>
+    </a>
+  `;
+}
+
+// =====================================================
+// RENDER: LISTINGS (Find Land / Property)
+// =====================================================
+
+async function renderListings(el, params = {}) {
+  await FilterData.load();
+
+  const filters = { ...params };
+  const [listRes] = await Promise.all([
+    DataLayer.getListings(filters),
+  ]);
+
+  const listings = listRes.data;
+  const total = listRes.meta.total;
+
+  const areaOptions = FilterData.areas.map(a => '<option value="' + a.key + '" ' + (params.area === a.key ? 'selected' : '') + '>' + a.label + '</option>').join('');
+  const typeOptions = FilterData.listing_types.map(t => '<option value="' + t.key + '" ' + (params.listing_type === t.key ? 'selected' : '') + '>' + t.label + '</option>').join('');
+  const certOptions = FilterData.land_certificate_types.map(c => '<option value="' + c.key + '" ' + (params.certificate_type === c.key ? 'selected' : '') + '>' + c.label + '</option>').join('');
+
+  el.innerHTML = `
+    <div class="page-header">
+      <div class="container">
+        <div class="page-header-breadcrumb">
+          <a href="#home" onclick="navigate('home');return false;">Home</a>
+          <span>/</span>
+          <span>Find Land & Property</span>
+        </div>
+        <h1 class="page-title">Find Land & Property</h1>
+        <p class="page-desc">${total} listing${total !== 1 ? 's' : ''} available across Lombok. Browse land for sale, villas, and investment properties.</p>
+      </div>
+    </div>
+    <div class="section">
+      <div class="container">
+        <div class="filters-bar">
+          <div class="filter-group">
+            <select id="fil-type" class="filter-select" aria-label="Property type">
+              <option value="">All types</option>
+              ${typeOptions}
+            </select>
+          </div>
+          <div class="filter-group">
+            <select id="fil-area" class="filter-select" aria-label="Area">
+              <option value="">All areas</option>
+              ${areaOptions}
+            </select>
+          </div>
+          <div class="filter-group">
+            <select id="fil-cert" class="filter-select" aria-label="Certificate">
+              <option value="">Any certificate</option>
+              ${certOptions}
+            </select>
+          </div>
+          <div class="filter-group">
+            <select id="fil-price" class="filter-select" aria-label="Price range">
+              <option value="">Any price</option>
+              <option value="0-50000" ${params.max_price_usd === '50000' ? 'selected' : ''}>Under $50k</option>
+              <option value="50000-100000">$50k - $100k</option>
+              <option value="100000-250000">$100k - $250k</option>
+              <option value="250000-500000">$250k - $500k</option>
+              <option value="500000-0">$500k+</option>
+            </select>
+          </div>
+        </div>
+        <div class="card-grid listings-grid" id="listings-grid">
+          ${listings.length > 0
+            ? listings.map((l, i) => renderListingCard(l, i)).join('')
+            : '<div class="empty-state"><h3 class="empty-state-title">No listings found</h3><p class="empty-state-desc">Try adjusting your filters or check back soon for new properties.</p></div>'}
+        </div>
+        ${total > (listRes.meta.per_page || 20) ? (
+          '<div class="pagination" style="margin-top:var(--space-8);text-align:center;">' +
+          Array.from({length: listRes.meta.total_pages || 1}, (_, i) =>
+            '<button class="pagination-btn ' + ((listRes.meta.page || 1) === i+1 ? 'active' : '') + '" onclick="applyListingFilters(' + (i+1) + ')">' + (i+1) + '</button>'
+          ).join('') +
+          '</div>'
+        ) : ''}
+      </div>
+    </div>
+
+    ${UserAuth.user ? `
+    <div class="section" style="padding-top:0">
+      <div class="container container--narrow" style="text-align:center">
+        <div class="help-cta">
+          <h3 class="help-cta-title">Are you an agent?</h3>
+          <p class="help-cta-desc">List your properties on Build in Lombok and reach foreign investors.</p>
+          <button onclick="navigate('create-listing')" class="btn btn--primary">Post a Listing</button>
+        </div>
+      </div>
+    </div>
+    ` : ''}
+  `;
+
+  function applyFilters(page) {
+    const type = el.querySelector('#fil-type').value;
+    const area = el.querySelector('#fil-area').value;
+    const cert = el.querySelector('#fil-cert').value;
+    const priceRange = el.querySelector('#fil-price').value;
+    const p = {};
+    if (type) p.listing_type = type;
+    if (area) p.area = area;
+    if (cert) p.certificate_type = cert;
+    if (priceRange) {
+      const [min, max] = priceRange.split('-');
+      if (min && min !== '0') p.min_price_usd = min;
+      if (max && max !== '0') p.max_price_usd = max;
+    }
+    if (page && page > 1) p.page = page;
+    navigate(buildHash('listings', p));
+  }
+
+  window.applyListingFilters = applyFilters;
+
+  ['fil-type', 'fil-area', 'fil-cert', 'fil-price'].forEach(id => {
+    const sel = el.querySelector('#' + id);
+    if (sel) sel.addEventListener('change', () => applyFilters(1));
+  });
+
+  requestAnimationFrame(() => animateCards(el));
+}
+
+// =====================================================
+// RENDER: LISTING DETAIL
+// =====================================================
+
+async function renderListingDetail(el, slug) {
+  if (!slug) { el.innerHTML = renderNotFound('listing'); return; }
+  let listing;
+  try { listing = await DataLayer.getListing(slug); }
+  catch(e) { el.innerHTML = renderNotFound('listing'); return; }
+
+  const images = listing.images || [];
+  const primaryImg = images.find(i => i.is_primary) || images[0];
+  const features = listing.features || [];
+  const priceStr = listing.price_usd ? formatUSD(listing.price_usd) : (listing.price_idr ? formatIDR(listing.price_idr) : 'Price on request');
+  const sizeStr = formatLandSize(listing.land_size_sqm, listing.land_size_are);
+  const typeLabel = listing.listing_type_label || '';
+  const certLabel = listing.certificate_type_label || '';
+  const wa = listing.contact_whatsapp || listing.agent_whatsapp || '';
+
+  el.innerHTML = `
+    <div class="page-header">
+      <div class="container">
+        <div class="page-header-breadcrumb">
+          <a href="#home" onclick="navigate('home');return false;">Home</a>
+          <span>/</span>
+          <a href="#listings" onclick="navigate('listings');return false;">Find Land</a>
+          <span>/</span>
+          <span>${listing.title}</span>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="container">
+        <div class="listing-detail-layout">
+          <div class="listing-detail-main">
+            ${images.length > 0 ? (
+              '<div class="listing-gallery">' +
+              '<div class="listing-gallery-main">' +
+              '<img src="' + (primaryImg ? primaryImg.url : images[0].url) + '" alt="' + listing.title + '" id="gallery-main-img">' +
+              '</div>' +
+              (images.length > 1 ?
+                '<div class="listing-gallery-thumbs">' +
+                images.map((img, idx) =>
+                  '<img src="' + img.url + '" alt="' + (img.alt_text || '') + '" class="listing-thumb ' + (idx === 0 ? 'active' : '') + '" onclick="var m=document.getElementById(\'gallery-main-img\');m.src=\'' + img.url + '\';document.querySelectorAll(\'.listing-thumb\').forEach(function(t){t.classList.remove(\'active\')});this.classList.add(\'active\');">' 
+                ).join('') +
+                '</div>'
+              : '') +
+              '</div>'
+            ) : ''}
+
+            <h1 class="listing-detail-title">${listing.title}</h1>
+            <div class="listing-detail-price">${priceStr}${listing.price_label ? ' <span class="price-note">' + listing.price_label + '</span>' : ''}</div>
+
+            <div class="listing-detail-tags">
+              ${typeLabel ? '<span class="detail-tag">' + typeLabel + '</span>' : ''}
+              ${certLabel ? '<span class="detail-tag">' + certLabel + '</span>' : ''}
+              ${listing.area_label ? '<span class="detail-tag">' + listing.area_label + '</span>' : ''}
+              ${listing.zoning ? '<span class="detail-tag">' + listing.zoning + '</span>' : ''}
+            </div>
+
+            <div class="listing-detail-specs">
+              ${sizeStr ? '<div class="spec-item"><span class="spec-label">Land Size</span><span class="spec-value">' + sizeStr + '</span></div>' : ''}
+              ${listing.building_size_sqm ? '<div class="spec-item"><span class="spec-label">Building</span><span class="spec-value">' + listing.building_size_sqm + ' m²</span></div>' : ''}
+              ${listing.bedrooms ? '<div class="spec-item"><span class="spec-label">Bedrooms</span><span class="spec-value">' + listing.bedrooms + '</span></div>' : ''}
+              ${listing.bathrooms ? '<div class="spec-item"><span class="spec-label">Bathrooms</span><span class="spec-value">' + listing.bathrooms + '</span></div>' : ''}
+              ${listing.year_built ? '<div class="spec-item"><span class="spec-label">Year Built</span><span class="spec-value">' + listing.year_built + '</span></div>' : ''}
+              ${listing.furnishing ? '<div class="spec-item"><span class="spec-label">Furnishing</span><span class="spec-value">' + listing.furnishing.replace(/_/g, ' ') + '</span></div>' : ''}
+            </div>
+
+            <div class="listing-detail-desc">
+              <h3>Description</h3>
+              <p>${listing.short_description || ''}</p>
+              ${listing.description ? '<div class="listing-full-desc">' + listing.description.replace(/\n/g, '<br>') + '</div>' : ''}
+            </div>
+
+            ${features.length > 0 ? '<div class="listing-features"><h3>Features</h3><div class="feature-list">' + features.map(f => '<span class="feature-tag">' + f + '</span>').join('') + '</div></div>' : ''}
+
+            ${listing.google_maps_url ? '<div class="listing-map-link" style="margin-top:var(--space-6)"><a href="' + listing.google_maps_url + '" target="_blank" rel="noopener noreferrer" class="btn btn--ghost btn--sm"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> View on Google Maps</a></div>' : ''}
+          </div>
+
+          <div class="listing-detail-sidebar">
+            ${listing.agent_name ? (
+              '<div class="card listing-agent-card">' +
+              '<h3 style="font-family:var(--font-display);margin-bottom:var(--space-3)">Listed by</h3>' +
+              '<a href="#agent/' + listing.agent_slug + '" onclick="navigate(\'agent/' + listing.agent_slug + '\');return false;" class="agent-card-link">' +
+              '<div class="agent-card-name">' + listing.agent_name + '</div>' +
+              (listing.agent_agency ? '<div class="agent-card-agency">' + listing.agent_agency + '</div>' : '') +
+              '</a>' +
+              (wa ? '<a href="https://wa.me/' + wa.replace(/[^0-9]/g, '') + '?text=' + encodeURIComponent('Hi, I\'m interested in: ' + listing.title) + '" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--full" style="margin-top:var(--space-4)">' + iconWhatsApp() + ' WhatsApp Agent</a>' : '') +
+              ((listing.contact_phone || listing.agent_phone) ? '<a href="tel:' + (listing.contact_phone || listing.agent_phone) + '" class="btn btn--ghost btn--full" style="margin-top:var(--space-2)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg> Call Agent</a>' : '') +
+              '</div>'
+            ) : ''}
+
+            ${renderFavBtn('listing', listing.id)}
+
+            ${listing.address ? '<div class="card" style="margin-top:var(--space-4)"><h4 style="font-size:var(--text-sm);font-weight:600;margin-bottom:var(--space-2)">Location</h4><p style="font-size:var(--text-sm);color:var(--color-text-muted)">' + listing.address + '</p></div>' : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// =====================================================
+// RENDER: AGENTS
+// =====================================================
+
+function renderAgentCard(agent, index = 0) {
+  return `
+    <a href="#agent/${agent.slug}" class="card agent-card" onclick="navigate('agent/${agent.slug}');return false;" style="animation-delay:${index * 60}ms">
+      <div class="agent-card-avatar">
+        ${agent.profile_photo_url
+          ? '<img src="' + agent.profile_photo_url + '" alt="' + agent.display_name + '">'
+          : '<div class="agent-avatar-placeholder">' + agent.display_name.charAt(0).toUpperCase() + '</div>'}
+      </div>
+      <div class="agent-card-info">
+        <h3 class="agent-card-name">${agent.display_name}</h3>
+        ${agent.agency_name ? '<div class="agent-card-agency">' + agent.agency_name + '</div>' : ''}
+        ${agent.google_rating ? renderGoogleRating(agent.google_rating, agent.google_review_count, 'card') : ''}
+        <div class="agent-card-meta">
+          ${agent.listing_count ? '<span>' + agent.listing_count + ' listing' + (agent.listing_count > 1 ? 's' : '') + '</span>' : ''}
+          ${agent.is_verified ? '<span class="agent-verified">Verified</span>' : ''}
+        </div>
+        ${agent.bio ? '<p class="agent-card-bio">' + (agent.bio.length > 120 ? agent.bio.substring(0, 120) + '...' : agent.bio) + '</p>' : ''}
+      </div>
+    </a>
+  `;
+}
+
+async function renderAgents(el, params = {}) {
+  await FilterData.load();
+  const agentRes = await DataLayer.getAgents(params);
+  const agents = agentRes.data;
+  const total = agentRes.meta.total;
+
+  const areaOptions = FilterData.areas.map(a => '<option value="' + a.key + '" ' + (params.area === a.key ? 'selected' : '') + '>' + a.label + '</option>').join('');
+
+  el.innerHTML = `
+    <div class="page-header">
+      <div class="container">
+        <div class="page-header-breadcrumb">
+          <a href="#home" onclick="navigate('home');return false;">Home</a>
+          <span>/</span>
+          <span>Agents</span>
+        </div>
+        <h1 class="page-title">Land & Property Agents</h1>
+        <p class="page-desc">${total} agent${total !== 1 ? 's' : ''} helping you find the perfect property in Lombok.</p>
+      </div>
+    </div>
+    <div class="section">
+      <div class="container">
+        <div class="filters-bar">
+          <div class="filter-group">
+            <select id="fil-agent-area" class="filter-select" aria-label="Area">
+              <option value="">All areas</option>
+              ${areaOptions}
+            </select>
+          </div>
+          <div class="filter-group">
+            <select id="fil-agent-verified" class="filter-select" aria-label="Verification">
+              <option value="">All agents</option>
+              <option value="1" ${params.verified === '1' ? 'selected' : ''}>Verified only</option>
+            </select>
+          </div>
+        </div>
+        <div class="agent-grid" id="agents-grid">
+          ${agents.length > 0
+            ? agents.map((a, i) => renderAgentCard(a, i)).join('')
+            : '<div class="empty-state"><h3 class="empty-state-title">No agents found</h3><p class="empty-state-desc">Check back soon as more agents join the platform.</p></div>'}
+        </div>
+      </div>
+    </div>
+
+    <div class="section" style="padding-top:0">
+      <div class="container container--narrow" style="text-align:center">
+        <div class="help-cta">
+          <h3 class="help-cta-title">Are you a property agent?</h3>
+          <p class="help-cta-desc">Sign up as an agent and list properties on Build in Lombok.</p>
+          <button onclick="navigate('agent-signup')" class="btn btn--primary">Register as Agent</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  el.querySelector('#fil-agent-area') && el.querySelector('#fil-agent-area').addEventListener('change', () => {
+    const p = {};
+    const area = el.querySelector('#fil-agent-area').value;
+    const verified = el.querySelector('#fil-agent-verified').value;
+    if (area) p.area = area;
+    if (verified) p.verified = verified;
+    navigate(buildHash('agents', p));
+  });
+  el.querySelector('#fil-agent-verified') && el.querySelector('#fil-agent-verified').addEventListener('change', () => {
+    const p = {};
+    const area = el.querySelector('#fil-agent-area').value;
+    const verified = el.querySelector('#fil-agent-verified').value;
+    if (area) p.area = area;
+    if (verified) p.verified = verified;
+    navigate(buildHash('agents', p));
+  });
+
+  requestAnimationFrame(() => animateCards(el));
+}
+
+// =====================================================
+// RENDER: AGENT DETAIL
+// =====================================================
+
+async function renderAgentDetail(el, slug) {
+  if (!slug) { el.innerHTML = renderNotFound('Agent'); return; }
+  let agent;
+  try { agent = await DataLayer.getAgent(slug); }
+  catch(e) { el.innerHTML = renderNotFound('Agent'); return; }
+
+  let agentListings = [];
+  try {
+    const res = await DataLayer.getListings({ agent_slug: slug });
+    agentListings = res.data;
+  } catch(e) { /* silent */ }
+
+  const wa = agent.whatsapp_number || '';
+
+  el.innerHTML = `
+    <div class="page-header">
+      <div class="container">
+        <div class="page-header-breadcrumb">
+          <a href="#home" onclick="navigate('home');return false;">Home</a>
+          <span>/</span>
+          <a href="#agents" onclick="navigate('agents');return false;">Agents</a>
+          <span>/</span>
+          <span>${agent.display_name}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:var(--space-4);flex-wrap:wrap;margin-top:var(--space-4)">
+          ${agent.profile_photo_url ? '<img src="' + agent.profile_photo_url + '" alt="' + agent.display_name + '" style="width:72px;height:72px;border-radius:50%;object-fit:cover;">' : '<div style="width:72px;height:72px;border-radius:50%;background:var(--color-primary);display:flex;align-items:center;justify-content:center;font-size:var(--text-2xl);font-weight:700;color:#fff;">' + agent.display_name.charAt(0).toUpperCase() + '</div>'}
+          <div>
+            <h1 class="page-title" style="margin:0">${agent.display_name}</h1>
+            ${agent.agency_name ? '<div style="color:var(--color-text-muted);margin-top:var(--space-1)">' + agent.agency_name + '</div>' : ''}
+            ${agent.is_verified ? '<span class="badge badge--verified" style="margin-top:var(--space-2);display:inline-block">Verified Agent</span>' : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="container">
+        <div class="detail-layout">
+          <div class="detail-main">
+            ${agent.google_rating ? '<div class="detail-rating-row">' + renderGoogleRating(agent.google_rating, agent.google_review_count, 'detail') + '</div>' : ''}
+            ${agent.bio ? '<h2 class="detail-section-title">About</h2><p class="detail-description">' + agent.bio + '</p>' : ''}
+            ${agentListings.length > 0 ? '<h2 class="detail-section-title" style="margin-bottom:var(--space-5)">Listings by ' + agent.display_name + '</h2><div class="card-grid listings-grid">' + agentListings.map((l, i) => renderListingCard(l, i)).join('') + '</div>' : '<p class="text-muted" style="color:var(--color-text-muted)">No active listings yet.</p>'}
+          </div>
+          <div class="detail-sidebar">
+            <div class="detail-card">
+              <div class="detail-card-title">Contact</div>
+              <div class="info-list mb-4">
+                ${agent.phone ? '<div class="info-row"><span class="info-icon">' + iconPhone() + '</span><span class="info-value"><a href="tel:' + agent.phone + '">' + agent.phone + '</a></span></div>' : ''}
+                ${agent.email ? '<div class="info-row"><span class="info-icon">' + iconGlobe() + '</span><span class="info-value">' + agent.email + '</span></div>' : ''}
+                ${agent.area_label ? '<div class="info-row"><span class="info-icon">' + iconMapPin() + '</span><span class="info-value">' + agent.area_label + '</span></div>' : ''}
+              </div>
+              ${wa ? '<a href="https://wa.me/' + wa.replace(/[^0-9]/g, '') + '" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--full">' + iconWhatsApp() + ' WhatsApp</a>' : ''}
+              <button onclick="checkReviewUpdates('agent', ${agent.id})" class="btn btn--ghost btn--full" style="margin-top:var(--space-2)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                Check for Review Updates
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  requestAnimationFrame(() => animateCards(el));
+}
+
+// =====================================================
+// RENDER: AGENT SIGNUP
+// =====================================================
+
+async function renderAgentSignup(el) {
+  if (!UserAuth.user) {
+    showAuthModal('login');
+    navigate('home');
+    return;
+  }
+
+  await FilterData.load();
+  const areaOptions = FilterData.areas.map(a => '<option value="' + a.key + '">' + a.label + '</option>').join('');
+
+  el.innerHTML = `
+    <div class="page-header">
+      <div class="container">
+        <div class="page-header-breadcrumb">
+          <a href="#home" onclick="navigate('home');return false;">Home</a>
+          <span>/</span>
+          <a href="#agents" onclick="navigate('agents');return false;">Agents</a>
+          <span>/</span>
+          <span>Register as Agent</span>
+        </div>
+        <h1 class="page-title">Register as a Property Agent</h1>
+        <p class="page-desc">Create your agent profile and start listing properties on Build in Lombok.</p>
+      </div>
+    </div>
+    <div class="section">
+      <div class="container container--narrow">
+        <div class="auth-error" id="agent-signup-error"></div>
+        <div class="auth-success" id="agent-signup-success"></div>
+        <form class="submit-form" id="agent-signup-form">
+          <div class="auth-field">
+            <label>Display Name *</label>
+            <input type="text" name="display_name" required value="${UserAuth.user.display_name || ''}">
+          </div>
+          <div class="auth-field">
+            <label>Agency / Company Name</label>
+            <input type="text" name="agency_name" placeholder="Your agency name (optional)">
+          </div>
+          <div class="auth-field">
+            <label>Phone *</label>
+            <input type="text" name="phone" required placeholder="+62...">
+          </div>
+          <div class="auth-field">
+            <label>WhatsApp Number *</label>
+            <input type="text" name="whatsapp_number" required placeholder="628...">
+          </div>
+          <div class="auth-field">
+            <label>Primary Area</label>
+            <select name="area_key">
+              <option value="">Select area...</option>
+              ${areaOptions}
+            </select>
+          </div>
+          <div class="auth-field">
+            <label>Bio</label>
+            <textarea name="bio" maxlength="1000" placeholder="Describe your experience and specialties..."></textarea>
+          </div>
+          <div class="auth-field">
+            <label>Google Maps / Business Link</label>
+            <input type="url" name="google_maps_url" placeholder="https://maps.google.com/...">
+          </div>
+          <button type="submit" class="auth-submit" style="align-self:flex-start">Register as Agent</button>
+        </form>
+      </div>
+    </div>
+  `;
+
+  el.querySelector('#agent-signup-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const btn = form.querySelector('.auth-submit');
+    const errEl = document.getElementById('agent-signup-error');
+    const sucEl = document.getElementById('agent-signup-success');
+    btn.disabled = true; btn.textContent = 'Submitting...';
+    errEl.classList.remove('visible'); sucEl.classList.remove('visible');
+    const fd = new FormData(form);
+    const data = {};
+    fd.forEach((v, k) => { data[k] = v; });
+    try {
+      const res = await UserAuth.apiCall('agent_signup', data);
+      sucEl.textContent = res.message || 'Your agent profile has been submitted for review.';
+      sucEl.classList.add('visible');
+      form.style.display = 'none';
+    } catch(err) {
+      errEl.textContent = err.message;
+      errEl.classList.add('visible');
+      btn.disabled = false; btn.textContent = 'Register as Agent';
+    }
+  });
+}
+
+// =====================================================
+// RENDER: CREATE LISTING
+// =====================================================
+
+async function renderCreateListing(el) {
+  if (!UserAuth.user) {
+    showAuthModal('login');
+    navigate('home');
+    return;
+  }
+
+  await FilterData.load();
+  const areaOptions = FilterData.areas.map(a => '<option value="' + a.key + '">' + a.label + '</option>').join('');
+  const typeOptions = FilterData.listing_types.map(t => '<option value="' + t.key + '">' + t.label + '</option>').join('');
+  const certOptions = FilterData.land_certificate_types.map(c => '<option value="' + c.key + '">' + c.label + '</option>').join('');
+
+  el.innerHTML = `
+    <div class="page-header">
+      <div class="container">
+        <div class="page-header-breadcrumb">
+          <a href="#home" onclick="navigate('home');return false;">Home</a>
+          <span>/</span>
+          <span>Post a Property</span>
+        </div>
+        <h1 class="page-title">Post a Property Listing</h1>
+        <p class="page-desc">Create a listing to reach foreign investors and buyers across Lombok.</p>
+      </div>
+    </div>
+    <div class="section">
+      <div class="container container--narrow">
+        <div class="auth-error" id="cl-error"></div>
+        <div class="auth-success" id="cl-success"></div>
+        <form class="submit-form" id="create-listing-form" enctype="multipart/form-data">
+          <div class="auth-field">
+            <label>Listing Title *</label>
+            <input type="text" name="title" required placeholder="e.g. 5 Are Freehold Land, Kuta Lombok">
+          </div>
+          <div class="form-row">
+            <div class="auth-field">
+              <label>Listing Type *</label>
+              <select name="listing_type_key" required>
+                <option value="">Select type...</option>
+                ${typeOptions}
+              </select>
+            </div>
+            <div class="auth-field">
+              <label>Area *</label>
+              <select name="area_key" required>
+                <option value="">Select area...</option>
+                ${areaOptions}
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="auth-field">
+              <label>Price (USD)</label>
+              <input type="number" name="price_usd" min="0" placeholder="e.g. 120000">
+            </div>
+            <div class="auth-field">
+              <label>Price (IDR)</label>
+              <input type="number" name="price_idr" min="0" placeholder="e.g. 1800000000">
+            </div>
+          </div>
+          <div class="auth-field">
+            <label>Price Label / Notes</label>
+            <input type="text" name="price_label" placeholder="e.g. negotiable, per are">
+          </div>
+          <div class="form-row">
+            <div class="auth-field">
+              <label>Land Size (sqm)</label>
+              <input type="number" name="land_size_sqm" min="0">
+            </div>
+            <div class="auth-field">
+              <label>Land Size (are)</label>
+              <input type="number" name="land_size_are" min="0" step="0.01">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="auth-field">
+              <label>Building Size (sqm)</label>
+              <input type="number" name="building_size_sqm" min="0">
+            </div>
+            <div class="auth-field">
+              <label>Certificate Type</label>
+              <select name="certificate_type_key">
+                <option value="">Select...</option>
+                ${certOptions}
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="auth-field">
+              <label>Bedrooms</label>
+              <input type="number" name="bedrooms" min="0">
+            </div>
+            <div class="auth-field">
+              <label>Bathrooms</label>
+              <input type="number" name="bathrooms" min="0">
+            </div>
+          </div>
+          <div class="auth-field">
+            <label>Short Description *</label>
+            <textarea name="short_description" required maxlength="500" placeholder="Brief summary of the listing..."></textarea>
+          </div>
+          <div class="auth-field">
+            <label>Full Description</label>
+            <textarea name="description" maxlength="5000" style="min-height:120px" placeholder="Detailed description, location details, access, views, etc."></textarea>
+          </div>
+          <div class="auth-field">
+            <label>Address</label>
+            <input type="text" name="address" placeholder="Street address or landmark">
+          </div>
+          <div class="auth-field">
+            <label>Google Maps URL</label>
+            <input type="url" name="google_maps_url" placeholder="https://maps.google.com/...">
+          </div>
+          <div class="form-row">
+            <div class="auth-field">
+              <label>Contact WhatsApp</label>
+              <input type="text" name="contact_whatsapp" placeholder="628...">
+            </div>
+            <div class="auth-field">
+              <label>Contact Phone</label>
+              <input type="text" name="contact_phone" placeholder="+62...">
+            </div>
+          </div>
+          <div class="auth-field">
+            <label>Images</label>
+            <div class="image-drop-zone" id="image-drop-zone" style="border:2px dashed var(--color-border);border-radius:var(--radius-md);padding:var(--space-8);text-align:center;cursor:pointer;transition:border-color var(--transition-interactive);">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto var(--space-3);display:block;opacity:0.4"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+              <p style="margin:0;font-size:var(--text-sm);color:var(--color-text-muted)">Drag & drop images here, or <label for="listing-images" style="color:var(--color-primary);cursor:pointer;font-weight:600">browse files</label></p>
+              <input type="file" id="listing-images" name="images" multiple accept="image/*" style="display:none">
+            </div>
+            <div id="image-preview" style="display:flex;flex-wrap:wrap;gap:var(--space-2);margin-top:var(--space-3);"></div>
+          </div>
+          <button type="submit" class="auth-submit" style="align-self:flex-start">Submit Listing for Review</button>
+        </form>
+      </div>
+    </div>
+  `;
+
+  // Image drag & drop
+  const dropZone = el.querySelector('#image-drop-zone');
+  const fileInput = el.querySelector('#listing-images');
+  const preview = el.querySelector('#image-preview');
+
+  function showPreviews(files) {
+    preview.innerHTML = '';
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = document.createElement('img');
+        img.src = e.target.result;
+        img.style.cssText = 'width:80px;height:80px;object-fit:cover;border-radius:var(--radius-sm);';
+        preview.appendChild(img);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.style.borderColor = 'var(--color-primary)'; });
+  dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = 'var(--color-border)'; });
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.style.borderColor = 'var(--color-border)';
+    fileInput.files = e.dataTransfer.files;
+    showPreviews(e.dataTransfer.files);
+  });
+  dropZone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => showPreviews(fileInput.files));
+
+  // Submit
+  el.querySelector('#create-listing-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const btn = form.querySelector('.auth-submit');
+    const errEl = document.getElementById('cl-error');
+    const sucEl = document.getElementById('cl-success');
+    btn.disabled = true; btn.textContent = 'Submitting...';
+    errEl.classList.remove('visible'); sucEl.classList.remove('visible');
+    const fd = new FormData(form);
+    const data = {};
+    fd.forEach((v, k) => { if (k !== 'images') data[k] = v; });
+    try {
+      const res = await UserAuth.apiCall('create_listing', data);
+      sucEl.textContent = res.message || 'Your listing has been submitted for review.';
+      sucEl.classList.add('visible');
+      form.style.display = 'none';
+    } catch(err) {
+      errEl.textContent = err.message;
+      errEl.classList.add('visible');
+      btn.disabled = false; btn.textContent = 'Submit Listing for Review';
+    }
+  });
 }
 
 // =====================================================
@@ -1677,6 +2474,7 @@ const UserAuth = (() => {
           <button class="user-dropdown-item" onclick="navigate('account');document.getElementById('user-dropdown').classList.remove('open');">My Account</button>
           <button class="user-dropdown-item" onclick="navigate('account?tab=favorites');document.getElementById('user-dropdown').classList.remove('open');">My Favorites</button>
           <button class="user-dropdown-item" onclick="navigate('submit-listing');document.getElementById('user-dropdown').classList.remove('open');">Submit a Listing</button>
+          <button class="user-dropdown-item" onclick="navigate('create-listing');document.getElementById('user-dropdown').classList.remove('open');">Post a Property</button>
           <button class="user-dropdown-item user-dropdown-item--danger" onclick="UserAuth.logout()">Log Out</button>
         </div>
       `;
@@ -1754,6 +2552,13 @@ const UserAuth = (() => {
     async resetPassword(token, password) {
       return await apiCall('reset_password', { token, password });
     },
+    async socialLogin(provider, data) {
+      const res = await apiCall('social_login', { provider, ...data });
+      currentUser = res.user;
+      await loadFavorites();
+      updateUI();
+      return res;
+    },
   };
 })();
 
@@ -1784,6 +2589,17 @@ function showAuthModal(mode = 'login') {
         </button>
         <h2>Sign In</h2>
         <p class="auth-subtitle">Access your favorites, claim listings, and more.</p>
+        <div class="auth-social-btns">
+          <button class="auth-social-btn auth-social-btn--google" id="btn-google-signin" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+            Continue with Google
+          </button>
+          <button class="auth-social-btn auth-social-btn--facebook" id="btn-facebook-signin" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+            Continue with Facebook
+          </button>
+        </div>
+        <div class="auth-divider"><span>or</span></div>
         <div class="auth-error" id="auth-error"></div>
         <form class="auth-form" id="auth-form">
           <div class="auth-field">
@@ -1802,6 +2618,49 @@ function showAuthModal(mode = 'login') {
         <div class="auth-switch">Don't have an account? <button onclick="authSwitchToRegister()">Create one</button></div>
       </div>
     `;
+    // Social login handlers
+    overlay.querySelector('#btn-google-signin').addEventListener('click', () => {
+      if (window.google && window.google.accounts) {
+        google.accounts.id.initialize({
+          client_id: '',
+          callback: async (response) => {
+            try {
+              await UserAuth.socialLogin('google', { credential: response.credential });
+              overlay.classList.remove('visible');
+              setTimeout(() => overlay.remove(), 200);
+              router();
+            } catch(err) {
+              overlay.querySelector('#auth-error').textContent = err.message;
+              overlay.querySelector('#auth-error').classList.add('visible');
+            }
+          },
+        });
+        google.accounts.id.prompt();
+      } else {
+        overlay.querySelector('#auth-error').textContent = 'Google Sign-In is not available right now.';
+        overlay.querySelector('#auth-error').classList.add('visible');
+      }
+    });
+    overlay.querySelector('#btn-facebook-signin').addEventListener('click', () => {
+      if (window.FB) {
+        FB.login(async (response) => {
+          if (response.authResponse) {
+            try {
+              await UserAuth.socialLogin('facebook', { access_token: response.authResponse.accessToken, user_id: response.authResponse.userID });
+              overlay.classList.remove('visible');
+              setTimeout(() => overlay.remove(), 200);
+              router();
+            } catch(err) {
+              overlay.querySelector('#auth-error').textContent = err.message;
+              overlay.querySelector('#auth-error').classList.add('visible');
+            }
+          }
+        }, { scope: 'email,public_profile' });
+      } else {
+        overlay.querySelector('#auth-error').textContent = 'Facebook Sign-In is not available right now.';
+        overlay.querySelector('#auth-error').classList.add('visible');
+      }
+    });
     overlay.querySelector('#auth-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const errEl = overlay.querySelector('#auth-error');
@@ -1833,6 +2692,17 @@ function showAuthModal(mode = 'login') {
         </button>
         <h2>Create Account</h2>
         <p class="auth-subtitle">Join Build in Lombok to save favorites and manage listings.</p>
+        <div class="auth-social-btns">
+          <button class="auth-social-btn auth-social-btn--google" id="btn-reg-google" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+            Sign up with Google
+          </button>
+          <button class="auth-social-btn auth-social-btn--facebook" id="btn-reg-facebook" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+            Sign up with Facebook
+          </button>
+        </div>
+        <div class="auth-divider"><span>or</span></div>
         <div class="auth-error" id="auth-error"></div>
         <div class="auth-success" id="auth-success"></div>
         <form class="auth-form" id="auth-form">
@@ -1853,6 +2723,63 @@ function showAuthModal(mode = 'login') {
         <div class="auth-switch">Already have an account? <button onclick="authSwitchToLogin()">Sign in</button></div>
       </div>
     `;
+    // Social handlers for register — reuse same flow
+    const handleSocialReg = (provider, getTokenData) => {
+      getTokenData().then(async (data) => {
+        if (!data) return;
+        try {
+          await UserAuth.socialLogin(provider, data);
+          overlay.classList.remove('visible');
+          setTimeout(() => overlay.remove(), 200);
+          router();
+        } catch(err) {
+          overlay.querySelector('#auth-error').textContent = err.message;
+          overlay.querySelector('#auth-error').classList.add('visible');
+        }
+      });
+    };
+    overlay.querySelector('#btn-reg-google').addEventListener('click', () => {
+      if (window.google && window.google.accounts) {
+        google.accounts.id.initialize({
+          client_id: '',
+          callback: async (response) => {
+            try {
+              await UserAuth.socialLogin('google', { credential: response.credential });
+              overlay.classList.remove('visible');
+              setTimeout(() => overlay.remove(), 200);
+              router();
+            } catch(err) {
+              overlay.querySelector('#auth-error').textContent = err.message;
+              overlay.querySelector('#auth-error').classList.add('visible');
+            }
+          },
+        });
+        google.accounts.id.prompt();
+      } else {
+        overlay.querySelector('#auth-error').textContent = 'Google Sign-In is not available right now.';
+        overlay.querySelector('#auth-error').classList.add('visible');
+      }
+    });
+    overlay.querySelector('#btn-reg-facebook').addEventListener('click', () => {
+      if (window.FB) {
+        FB.login(async (response) => {
+          if (response.authResponse) {
+            try {
+              await UserAuth.socialLogin('facebook', { access_token: response.authResponse.accessToken, user_id: response.authResponse.userID });
+              overlay.classList.remove('visible');
+              setTimeout(() => overlay.remove(), 200);
+              router();
+            } catch(err) {
+              overlay.querySelector('#auth-error').textContent = err.message;
+              overlay.querySelector('#auth-error').classList.add('visible');
+            }
+          }
+        }, { scope: 'email,public_profile' });
+      } else {
+        overlay.querySelector('#auth-error').textContent = 'Facebook Sign-In is not available right now.';
+        overlay.querySelector('#auth-error').classList.add('visible');
+      }
+    });
     overlay.querySelector('#auth-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const errEl = overlay.querySelector('#auth-error');
@@ -1950,6 +2877,26 @@ function renderGoogleReviewBtn(google_maps_url) {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>
     Write a Review on Google
   </a>`;
+}
+
+function showToast(message, type) {
+  const existing = document.querySelector('.app-toast');
+  if (existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.className = 'app-toast app-toast--' + (type || 'info');
+  toast.textContent = message;
+  toast.style.cssText = 'position:fixed;bottom:var(--space-6);left:50%;transform:translateX(-50%);background:var(--color-surface);border:1px solid var(--color-border);padding:var(--space-3) var(--space-5);border-radius:var(--radius-md);font-size:var(--text-sm);z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.15);transition:opacity .3s;';
+  document.body.appendChild(toast);
+  setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3000);
+}
+
+async function checkReviewUpdates(entityType, entityId) {
+  try {
+    await UserAuth.apiCall('check_reviews', { entity_type: entityType, entity_id: entityId });
+    showToast('Review update check submitted. Ratings will refresh shortly.', 'success');
+  } catch(e) {
+    showToast(e.message || 'Unable to check for review updates.', 'error');
+  }
 }
 
 
