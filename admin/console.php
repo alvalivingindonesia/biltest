@@ -446,6 +446,20 @@ $areas_list = $db->query("SELECT * FROM areas ORDER BY sort_order")->fetchAll();
 try { $regions_list = $db->query("SELECT * FROM area_regions ORDER BY sort_order")->fetchAll(); } catch (Exception $e) { $regions_list = []; }
 $ptypes_list = $db->query("SELECT * FROM project_types ORDER BY sort_order")->fetchAll();
 $pstatus_list = $db->query("SELECT * FROM project_statuses ORDER BY sort_order")->fetchAll();
+// Developer sidebar: only show categories that at least one developer uses
+try {
+    $dev_cats_sidebar = $db->query("SELECT DISTINCT c.`key`, c.`label` FROM developer_categories dc JOIN categories c ON c.`key`=dc.category_key ORDER BY c.sort_order")->fetchAll();
+} catch (Exception $e) { $dev_cats_sidebar = []; }
+// Agent categories for sidebar
+try {
+    $agent_cats_sidebar = $db->query("SELECT * FROM agent_categories ORDER BY sort_order")->fetchAll();
+} catch (Exception $e) {
+    $agent_cats_sidebar = [
+        ['key' => 'property_sales', 'label' => 'Property Sales'],
+        ['key' => 'property_management', 'label' => 'Property Management'],
+        ['key' => 'buyers_agent', 'label' => "Buyer's Agent"],
+    ];
+}
 
 // Count stats
 $prov_count = $db->query("SELECT COUNT(*) FROM providers")->fetchColumn();
@@ -571,17 +585,25 @@ function toggleSidebarSub(e,id){
     <div class="sidebar-group">
         <a href="?s=developers" class="sidebar-parent <?= $section==='developers'?'active':'' ?>" onclick="toggleSidebarSub(event,'sb-developers')">Developers (<?= $dev_count ?>) <span class="sb-arrow">▸</span></a>
         <div class="sidebar-sub" id="sb-developers" <?= $section==='developers'?'style="display:block"':'' ?>>
-            <?php foreach ($cats_list as $c): ?>
-                <a href="?s=developers&fc=<?= $c['key'] ?>" style="padding-left:32px;font-size:12px;"><?= htmlspecialchars($c['label']) ?></a>
+            <?php foreach ($dev_cats_sidebar as $dc): ?>
+                <a href="?s=developers&fc=<?= $dc['key'] ?>" style="padding-left:32px;font-size:12px;"><?= htmlspecialchars($dc['label']) ?></a>
+            <?php endforeach; ?>
+        </div>
+    </div>
+    <div class="sidebar-group">
+        <a href="?s=agents" class="sidebar-parent <?= $section==='agents'?'active':'' ?>" onclick="toggleSidebarSub(event,'sb-agents')">Agents (<?= $agent_count ?>) <span class="sb-arrow">▸</span></a>
+        <div class="sidebar-sub" id="sb-agents" <?= $section==='agents'?'style="display:block"':'' ?>>
+            <?php foreach ($agent_cats_sidebar as $ac): ?>
+                <a href="?s=agents&fcat=<?= $ac['key'] ?>" style="padding-left:32px;font-size:12px;"><?= htmlspecialchars($ac['label']) ?></a>
             <?php endforeach; ?>
         </div>
     </div>
     <a href="?s=projects" class="<?= $section==='projects'?'active':'' ?>">Projects (<?= $proj_count ?>)</a>
     <a href="?s=guides" class="<?= $section==='guides'?'active':'' ?>">Guides (<?= $guide_count ?>)</a>
+    <h2>Property Listings</h2>
+    <a href="?s=listings" class="<?= $section==='listings'?'active':'' ?>">All Listings (<?= $listing_count ?>)<?php if($listing_pending_count):?> <span style="background:#f59e0b;color:#fff;border-radius:10px;padding:0 6px;font-size:11px;margin-left:4px"><?=$listing_pending_count?></span><?php endif;?></a>
     <h2>User Management</h2>
     <a href="?s=users" class="<?= $section==='users'?'active':'' ?>">Users (<?= $user_count ?>)</a>
-    <a href="?s=agents" class="<?= $section==='agents'?'active':'' ?>">Agents (<?= $agent_count ?>)</a>
-    <a href="?s=listings" class="<?= $section==='listings'?'active':'' ?>">Listings (<?= $listing_count ?>)<?php if($listing_pending_count):?> <span style="background:#f59e0b;color:#fff;border-radius:10px;padding:0 6px;font-size:11px;margin-left:4px"><?=$listing_pending_count?></span><?php endif;?></a>
     <a href="?s=claims" class="<?= $section==='claims'?'active':'' ?>">Claims<?php if($claim_count):?> <span style="background:#f59e0b;color:#fff;border-radius:10px;padding:0 6px;font-size:11px;margin-left:4px"><?=$claim_count?></span><?php endif;?></a>
     <a href="?s=submissions" class="<?= $section==='submissions'?'active':'' ?>">Submissions<?php if($sub_count):?> <span style="background:#f59e0b;color:#fff;border-radius:10px;padding:0 6px;font-size:11px;margin-left:4px"><?=$sub_count?></span><?php endif;?></a>
     <h2>Configuration</h2>
@@ -1517,12 +1539,14 @@ elseif ($section === 'agents'):
     $q = $_GET['q'] ?? '';
     $f_verified = $_GET['fv'] ?? '';
     $f_active = $_GET['fa'] ?? '';
+    $f_cat = $_GET['fcat'] ?? '';
     $where = '1=1'; $params = [];
     if ($q) { $where .= " AND (u.email LIKE ? OR a.display_name LIKE ? OR a.agency_name LIKE ?)"; $params[] = "%{$q}%"; $params[] = "%{$q}%"; $params[] = "%{$q}%"; }
     if ($f_verified === '1') { $where .= " AND a.is_verified=1"; }
     elseif ($f_verified === '0') { $where .= " AND a.is_verified=0"; }
     if ($f_active === '1') { $where .= " AND a.is_active=1"; }
     elseif ($f_active === '0') { $where .= " AND a.is_active=0"; }
+    if ($f_cat) { $where .= " AND EXISTS(SELECT 1 FROM agent_category_map acm WHERE acm.agent_id=a.id AND acm.category_key=?)"; $params[] = $f_cat; }
     $agents = [];
     try {
         $stmt = $db->prepare("
@@ -1552,8 +1576,14 @@ elseif ($section === 'agents'):
         <option value="1" <?= $f_active==='1'?'selected':'' ?>>Active</option>
         <option value="0" <?= $f_active==='0'?'selected':'' ?>>Inactive</option>
     </select>
+    <select name="fcat">
+        <option value="">All Categories</option>
+        <?php foreach ($agent_cats_sidebar as $ac): ?>
+        <option value="<?= $ac['key'] ?>" <?= $f_cat===$ac['key']?'selected':'' ?>><?= htmlspecialchars($ac['label']) ?></option>
+        <?php endforeach; ?>
+    </select>
     <button class="btn btn-o">Filter</button>
-    <?php if ($q || $f_verified !== '' || $f_active !== ''): ?><a href="?s=agents" class="btn btn-o">Clear</a><?php endif; ?>
+    <?php if ($q || $f_verified !== '' || $f_active !== '' || $f_cat): ?><a href="?s=agents" class="btn btn-o">Clear</a><?php endif; ?>
 </form>
 <div class="card" style="padding:0;overflow-x:auto">
 <table>
@@ -1561,8 +1591,8 @@ elseif ($section === 'agents'):
     <?php foreach ($agents as $ag): ?>
     <tr>
         <td>
-            <?php if (!empty($ag['profile_image_url'])): ?>
-            <img src="<?= htmlspecialchars($ag['profile_image_url']) ?>" alt="" style="width:40px;height:40px;border-radius:50%;object-fit:cover;display:block">
+            <?php if (!empty($ag['profile_photo_url'])): ?>
+            <img src="<?= htmlspecialchars($ag['profile_photo_url']) ?>" alt="" style="width:40px;height:40px;border-radius:50%;object-fit:cover;display:block">
             <?php else: ?>
             <div style="width:40px;height:40px;background:#e5e7eb;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;color:#9ca3af">—</div>
             <?php endif; ?>

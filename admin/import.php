@@ -61,6 +61,7 @@ $CATEGORY_TREE = [
             'civil_engineer' => 'Civil Engineer',
             'quantity_surveyor' => 'Quantity Surveyor / Cost Consultant',
             'project_manager' => 'Project Manager / Construction Manager',
+            'legal_notary' => 'Lawyer / Notary',
         ],
     ],
     'specialist_contractors' => [
@@ -156,6 +157,11 @@ $KEYWORD_MAP = [
     'project_manager' => [
         'project manager', 'construction manager', 'manajer proyek',
         'manajer konstruksi', 'site manager',
+    ],
+    'legal_notary' => [
+        'lawyer', 'notary', 'notaris', 'pengacara', 'law firm', 'kantor hukum',
+        'legal', 'legal services', 'attorney', 'solicitor', 'advokat',
+        'konsultan hukum', 'legal consultant', 'ppat', 'conveyancer',
     ],
 
     // --- Specialist Contractors ---
@@ -991,7 +997,7 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                         "UPDATE agents SET display_name=?, slug=?, agency_name=?, bio=?,
                             google_maps_url=?, google_rating=?, google_review_count=?,
                             phone=?, whatsapp_number=?, website_url=?, email=?,
-                            areas_served=?, languages=?, profile_image_url=?,
+                            areas_served=?, languages=?, profile_photo_url=?,
                             is_verified=?, updated_at=CURRENT_TIMESTAMP
                          WHERE id=?"
                     );
@@ -1023,7 +1029,7 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                     "INSERT INTO agents (slug, display_name, agency_name, bio,
                         google_maps_url, google_rating, google_review_count,
                         phone, whatsapp_number, website_url, email,
-                        areas_served, languages, profile_image_url,
+                        areas_served, languages, profile_photo_url,
                         is_verified, is_active)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
                      ON DUPLICATE KEY UPDATE
