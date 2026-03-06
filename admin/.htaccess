@@ -16,9 +16,3 @@ Options -Indexes
     Header set X-Content-Type-Options "nosniff"
     Header set X-Frame-Options "DENY"
 </IfModule>
-
-# Prevent PHP files from being directly accessed by their source
-<FilesMatch "\.php$">
-    # Ensure PHP is processed, not served raw
-    SetHandler application/x-httpd-php
-</FilesMatch>
