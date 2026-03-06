@@ -74,6 +74,8 @@ const DataLayer = (() => {
       whatsapp_number: row.whatsapp_number || '',
       website_url: row.website_url || '',
       languages: row.languages || 'Bahasa only',
+      is_featured: parseInt(row.is_featured) === 1,
+      is_trusted: parseInt(row.is_trusted) === 1,
     };
   }
 
@@ -90,6 +92,7 @@ const DataLayer = (() => {
       google_review_count: row.google_review_count ? parseInt(row.google_review_count) : 0,
       languages: row.languages || 'Bahasa only',
       min_ticket_usd: row.min_ticket_usd ? parseInt(row.min_ticket_usd) : null,
+      is_featured: parseInt(row.is_featured) === 1,
     };
   }
 
@@ -103,6 +106,7 @@ const DataLayer = (() => {
       description_en: row.description || row.description_en || '',
       tags: row.tags || [],
       min_investment_usd: row.min_investment_usd ? parseInt(row.min_investment_usd) : null,
+      is_featured: parseInt(row.is_featured) === 1,
     };
   }
 
@@ -122,6 +126,7 @@ const DataLayer = (() => {
       tags: row.tags || [],
       images: row.images || [],
       image: row.image || null,
+      is_featured: parseInt(row.is_featured) === 1,
     };
   }
 
@@ -552,13 +557,13 @@ async function renderHome(el) {
     homeGuides = guidesData || [];
   } catch(e) { console.error('Failed to load home data:', e); }
 
-  // Random subset: show up to 6 trusted providers, 4 featured developers
+  // Random subset: show up to 6 trusted providers, 6 featured developers
   function shuffleAndSlice(arr, max) {
     const shuffled = [...arr].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, max);
   }
   const displayTrusted = shuffleAndSlice(trustedProviders, 6);
-  const displayFeaturedDevs = shuffleAndSlice(featuredDevs, 4);
+  const displayFeaturedDevs = shuffleAndSlice(featuredDevs, 6);
   const totalTrusted = trustedProviders.length;
   const totalFeaturedDevs = featuredDevs.length;
 
