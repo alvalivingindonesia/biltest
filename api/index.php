@@ -256,6 +256,11 @@ function handle_providers_list(): void {
         $where[] = 'p.area_key = ?';
         $params[] = $_GET['area'];
     }
+    // Filter: region (returns all areas within a region)
+    if (!empty($_GET['region'])) {
+        $where[] = 'p.area_key IN (SELECT `key` FROM areas WHERE region_key = ?)';
+        $params[] = $_GET['region'];
+    }
     // Filter: featured only
     if (isset($_GET['featured']) && $_GET['featured'] === '1') {
         $where[] = 'p.is_featured = 1';
@@ -289,8 +294,9 @@ function handle_providers_list(): void {
         "SELECT p.id, p.slug, p.name, p.group_key, p.area_key,
                 p.short_description, p.address, p.google_rating, p.google_review_count,
                 p.phone, p.whatsapp_number, p.website_url, p.languages,
+                p.instagram_url, p.facebook_url, p.profile_photo_url,
                 p.is_featured, p.badge,
-                g.label AS group_label, a.label AS area_label
+                g.label AS group_label, a.label AS area_label, a.region_key
          FROM providers p
          LEFT JOIN `groups` g ON g.`key` = p.group_key
          LEFT JOIN areas a ON a.`key` = p.area_key
@@ -359,6 +365,10 @@ function handle_developers_list(): void {
     if (!empty($_GET['area'])) {
         $where[] = 'EXISTS (SELECT 1 FROM developer_areas da WHERE da.developer_id = d.id AND da.area_key = ?)';
         $params[] = $_GET['area'];
+    }
+    if (!empty($_GET['region'])) {
+        $where[] = 'EXISTS (SELECT 1 FROM developer_areas da WHERE da.developer_id = d.id AND da.area_key IN (SELECT `key` FROM areas WHERE region_key = ?))';
+        $params[] = $_GET['region'];
     }
     if (!empty($_GET['project_type'])) {
         $where[] = 'EXISTS (SELECT 1 FROM developer_project_types dpt WHERE dpt.developer_id = d.id AND dpt.project_type_key = ?)';
@@ -471,6 +481,10 @@ function handle_projects_list(): void {
     if (!empty($_GET['area'])) {
         $where[] = 'p.area_key = ?';
         $params[] = $_GET['area'];
+    }
+    if (!empty($_GET['region'])) {
+        $where[] = 'p.area_key IN (SELECT `key` FROM areas WHERE region_key = ?)';
+        $params[] = $_GET['region'];
     }
     if (!empty($_GET['type'])) {
         $where[] = 'p.project_type_key = ?';
@@ -593,7 +607,13 @@ function handle_filters(): void {
 
     $groups = $db->query("SELECT `key`, label FROM `groups` ORDER BY sort_order")->fetchAll();
     $categories = $db->query("SELECT `key`, group_key, label FROM categories ORDER BY sort_order")->fetchAll();
-    $areas = $db->query("SELECT `key`, label FROM areas ORDER BY sort_order")->fetchAll();
+    $areas = $db->query("SELECT `key`, label, region_key FROM areas ORDER BY sort_order")->fetchAll();
+
+    // Regions
+    $regions = [];
+    try {
+        $regions = $db->query("SELECT region_key, label, sort_order FROM area_regions ORDER BY sort_order")->fetchAll();
+    } catch (Exception $e) { /* table may not exist yet */ }
     $project_types = $db->query("SELECT `key`, label FROM project_types ORDER BY sort_order")->fetchAll();
     $project_statuses = $db->query("SELECT `key`, label FROM project_statuses ORDER BY sort_order")->fetchAll();
     $listing_types = $db->query("SELECT `key`, label FROM listing_types ORDER BY sort_order")->fetchAll();
@@ -603,6 +623,7 @@ function handle_filters(): void {
         'groups' => $groups,
         'categories' => $categories,
         'areas' => $areas,
+        'regions' => $regions,
         'project_types' => $project_types,
         'project_statuses' => $project_statuses,
         'listing_types' => $listing_types,
@@ -689,6 +710,11 @@ function handle_listings_list(): void {
     if (!empty($_GET['area'])) {
         $where[] = 'l.area_key = ?';
         $params[] = $_GET['area'];
+    }
+    // Filter: region
+    if (!empty($_GET['region'])) {
+        $where[] = 'l.area_key IN (SELECT `key` FROM areas WHERE region_key = ?)';
+        $params[] = $_GET['region'];
     }
     // Filter: price range (USD)
     if (!empty($_GET['min_price_usd'])) {

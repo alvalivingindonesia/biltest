@@ -310,13 +310,27 @@ function detect_category(string $gmaps_category, string $business_name, array $k
 function detect_area_from_coords(float $lat, float $lng): string {
     // Bounding boxes: [south_lat, north_lat, west_lng, east_lng]
     $zones = [
-        'kuta'            => [-8.95, -8.87, 116.15, 116.35],  // South coast: Kuta, Gerupuk, Tanjung Aan
-        'selong_belanak'  => [-8.92, -8.85, 116.05, 116.15],  // Selong Belanak, Mawun area
-        'ekas'            => [-8.88, -8.78, 116.38, 116.55],  // Ekas Bay
-        'senggigi'        => [-8.55, -8.45, 116.02, 116.12],  // Senggigi coast
-        'gili_islands'    => [-8.38, -8.32, 116.02, 116.10],  // Gili T, Gili Air, Gili Meno
-        'north_lombok'    => [-8.42, -8.28, 116.10, 116.45],  // Tanjung, Bangsal, Senaru
-        'mataram'         => [-8.65, -8.52, 116.05, 116.18],  // Mataram city area
+        'kuta'            => [-8.95, -8.87, 116.18, 116.30],
+        'selong_belanak'  => [-8.92, -8.85, 116.05, 116.15],
+        'mawi'            => [-8.91, -8.88, 116.02, 116.06],
+        'mawun'           => [-8.92, -8.89, 116.07, 116.11],
+        'are_guling'      => [-8.92, -8.89, 116.14, 116.18],
+        'gerupuk'         => [-8.93, -8.89, 116.30, 116.38],
+        'tanjung_aan'     => [-8.93, -8.90, 116.27, 116.32],
+        'ekas'            => [-8.88, -8.78, 116.38, 116.55],
+        'senggigi'        => [-8.55, -8.45, 116.02, 116.12],
+        'gili_islands'    => [-8.38, -8.32, 116.02, 116.10],
+        'north_lombok'    => [-8.42, -8.28, 116.10, 116.45],
+        'senaru'          => [-8.35, -8.28, 116.35, 116.45],
+        'tanjung'         => [-8.42, -8.35, 116.10, 116.22],
+        'bangsal'         => [-8.40, -8.35, 116.05, 116.12],
+        'mataram'         => [-8.65, -8.52, 116.05, 116.18],
+        'sekotong'        => [-8.78, -8.68, 115.85, 116.05],
+        'lembar'          => [-8.75, -8.68, 116.05, 116.12],
+        'gerung'          => [-8.68, -8.60, 116.05, 116.12],
+        'praya'           => [-8.78, -8.68, 116.22, 116.35],
+        'labuhan_lombok'  => [-8.55, -8.48, 116.55, 116.68],
+        'selong'          => [-8.68, -8.60, 116.48, 116.58],
     ];
 
     foreach ($zones as $area_key => $box) {
@@ -331,6 +345,225 @@ function detect_area_from_coords(float $lat, float $lng): string {
     }
 
     return '';
+}
+
+// ─── REGION MAPPING ──────────────────────────────────────────────────
+$REGION_MAP = [
+    'south_lombok'  => ['kuta', 'selong_belanak', 'ekas', 'mawi', 'mawun', 'are_guling', 'gerupuk', 'tanjung_aan'],
+    'west_lombok'   => ['mataram', 'senggigi', 'sekotong', 'lembar', 'gerung'],
+    'central_lombok' => ['praya', 'jonggat', 'batukliang', 'other_lombok'],
+    'east_lombok'   => ['labuhan_lombok', 'selong'],
+    'north_lombok'  => ['north_lombok', 'senaru', 'tanjung', 'bangsal'],
+    'gili_islands'  => ['gili_islands'],
+];
+
+function get_region_for_area(string $area_key): string {
+    global $REGION_MAP;
+    foreach ($REGION_MAP as $region => $areas) {
+        if (in_array($area_key, $areas)) return $region;
+    }
+    return 'central_lombok';
+}
+
+// ─── AREA OPTIONS (grouped by region) ────────────────────────────────
+$AREA_OPTIONS = [
+    'south_lombok' => [
+        'label' => 'South Lombok',
+        'areas' => [
+            'kuta' => 'Kuta',
+            'selong_belanak' => 'Selong Belanak',
+            'mawi' => 'Mawi',
+            'mawun' => 'Mawun',
+            'are_guling' => 'Are Guling',
+            'gerupuk' => 'Gerupuk',
+            'tanjung_aan' => 'Tanjung Aan',
+            'ekas' => 'Ekas',
+        ],
+    ],
+    'west_lombok' => [
+        'label' => 'West Lombok',
+        'areas' => [
+            'mataram' => 'Mataram',
+            'senggigi' => 'Senggigi',
+            'sekotong' => 'Sekotong',
+            'lembar' => 'Lembar',
+            'gerung' => 'Gerung',
+        ],
+    ],
+    'central_lombok' => [
+        'label' => 'Central Lombok',
+        'areas' => [
+            'praya' => 'Praya',
+            'jonggat' => 'Jonggat',
+            'batukliang' => 'Batukliang',
+            'other_lombok' => 'Other Central',
+        ],
+    ],
+    'east_lombok' => [
+        'label' => 'East Lombok',
+        'areas' => [
+            'labuhan_lombok' => 'Labuhan Lombok',
+            'selong' => 'Selong',
+        ],
+    ],
+    'north_lombok' => [
+        'label' => 'North Lombok',
+        'areas' => [
+            'north_lombok' => 'North Lombok (General)',
+            'senaru' => 'Senaru',
+            'tanjung' => 'Tanjung',
+            'bangsal' => 'Bangsal',
+        ],
+    ],
+    'gili_islands' => [
+        'label' => 'Gili Islands',
+        'areas' => [
+            'gili_islands' => 'Gili Islands',
+        ],
+    ],
+];
+
+/**
+ * Extract social media links from a Google Maps HTML chunk.
+ * Looks for links to Instagram, Facebook, YouTube, TikTok, LinkedIn.
+ */
+function extract_social_links_from_chunk(string $chunk): array {
+    $socials = [
+        'instagram_url' => '',
+        'facebook_url'  => '',
+        'youtube_url'   => '',
+        'tiktok_url'    => '',
+        'linkedin_url'  => '',
+    ];
+
+    // Extract all href values from the chunk
+    preg_match_all('/href="([^"]+)"/i', $chunk, $href_matches);
+    $urls = $href_matches[1] ?? [];
+
+    // Also check visible text for social URLs
+    preg_match_all('#(https?://(?:www\.)?(?:instagram|facebook|fb|youtube|tiktok|linkedin)\.com/[^\s<"]+)#i', $chunk, $text_urls);
+    $urls = array_merge($urls, $text_urls[1] ?? []);
+
+    foreach ($urls as $url) {
+        $url = html_entity_decode($url, ENT_QUOTES, 'UTF-8');
+        $host = strtolower(parse_url($url, PHP_URL_HOST) ?? '');
+
+        if (!$socials['instagram_url'] && (strpos($host, 'instagram.com') !== false)) {
+            $socials['instagram_url'] = $url;
+        } elseif (!$socials['facebook_url'] && (strpos($host, 'facebook.com') !== false || strpos($host, 'fb.com') !== false)) {
+            $socials['facebook_url'] = $url;
+        } elseif (!$socials['youtube_url'] && (strpos($host, 'youtube.com') !== false || strpos($host, 'youtu.be') !== false)) {
+            $socials['youtube_url'] = $url;
+        } elseif (!$socials['tiktok_url'] && (strpos($host, 'tiktok.com') !== false)) {
+            $socials['tiktok_url'] = $url;
+        } elseif (!$socials['linkedin_url'] && (strpos($host, 'linkedin.com') !== false)) {
+            $socials['linkedin_url'] = $url;
+        }
+    }
+
+    return $socials;
+}
+
+/**
+ * Extract the thumbnail/profile image URL from a Google Maps listing chunk.
+ * Google Maps uses img tags or background-image styles within the article.
+ */
+function extract_gmaps_thumbnail(string $chunk): string {
+    // Method 1: <img> with src containing googleusercontent or ggpht (Maps photos)
+    if (preg_match('/<img[^>]+src="(https:\/\/lh[35]\.googleusercontent\.com\/[^"]+)"/i', $chunk, $m)) {
+        return html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
+    }
+    // Method 2: background-image: url(...) with google photo CDN
+    if (preg_match('/background-image:\s*url\(["\']?(https:\/\/lh[35]\.googleusercontent\.com\/[^"\')]+)/i', $chunk, $m)) {
+        return html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
+    }
+    // Method 3: Any img with maps-related source
+    if (preg_match('/<img[^>]+src="(https:\/\/streetviewpixels[^"]+)"/i', $chunk, $m)) {
+        return html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
+    }
+    return '';
+}
+
+/**
+ * Scrape a provider/developer website for social links, description, and profile image.
+ * Uses cURL with a short timeout to avoid blocking the import.
+ */
+function scrape_website(string $url): array {
+    $result = [
+        'instagram_url' => '',
+        'facebook_url'  => '',
+        'youtube_url'   => '',
+        'tiktok_url'    => '',
+        'linkedin_url'  => '',
+        'profile_photo_url' => '',
+        'profile_description' => '',
+        'scraped' => false,
+    ];
+
+    if (empty($url)) return $result;
+
+    // Normalize URL
+    if (!preg_match('#^https?://#i', $url)) {
+        $url = 'https://' . $url;
+    }
+
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $url,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS => 3,
+        CURLOPT_TIMEOUT => 8,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        CURLOPT_HTTPHEADER => ['Accept: text/html,application/xhtml+xml', 'Accept-Language: en-US,en;q=0.9,id;q=0.8'],
+    ]);
+    $html = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($html === false || $http_code >= 400 || strlen($html) < 200) {
+        return $result;
+    }
+
+    $result['scraped'] = true;
+
+    // ── Extract social links ──
+    $social_patterns = [
+        'instagram_url' => '#https?://(?:www\.)?instagram\.com/[a-zA-Z0-9_.]+/?#i',
+        'facebook_url'  => '#https?://(?:www\.)?(?:facebook|fb)\.com/[a-zA-Z0-9_./-]+/?#i',
+        'youtube_url'   => '#https?://(?:www\.)?youtube\.com/(?:c/|channel/|@)[a-zA-Z0-9_.-]+/?#i',
+        'tiktok_url'    => '#https?://(?:www\.)?tiktok\.com/@[a-zA-Z0-9_.]+/?#i',
+        'linkedin_url'  => '#https?://(?:www\.)?linkedin\.com/(?:company|in)/[a-zA-Z0-9_.-]+/?#i',
+    ];
+
+    foreach ($social_patterns as $key => $pattern) {
+        if (preg_match($pattern, $html, $sm)) {
+            $result[$key] = rtrim($sm[0], '/');
+        }
+    }
+
+    // ── Extract meta description ──
+    if (preg_match('/<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']{10,500})["\']/', $html, $dm)) {
+        $result['profile_description'] = html_entity_decode(trim($dm[1]), ENT_QUOTES, 'UTF-8');
+    } elseif (preg_match('/<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']{10,500})["\']/', $html, $dm)) {
+        $result['profile_description'] = html_entity_decode(trim($dm[1]), ENT_QUOTES, 'UTF-8');
+    }
+
+    // ── Extract OG image or logo ──
+    if (preg_match('/<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']/', $html, $im)) {
+        $img = html_entity_decode(trim($im[1]), ENT_QUOTES, 'UTF-8');
+        // Make relative URLs absolute
+        if (strpos($img, '//') === 0) $img = 'https:' . $img;
+        elseif (strpos($img, '/') === 0) {
+            $parsed = parse_url($url);
+            $img = ($parsed['scheme'] ?? 'https') . '://' . ($parsed['host'] ?? '') . $img;
+        }
+        $result['profile_photo_url'] = $img;
+    }
+
+    return $result;
 }
 
 /**
@@ -457,16 +690,30 @@ function parse_gmaps_html(string $html): array {
         $search_text .= ' ' . $seg_text_lower;
 
         $area_patterns = [
-            'selong_belanak'  => ['selong belanak', 'belanak', 'mawun', 'tampah'],
-            'kuta'            => ['kuta', 'kuta lombok', 'kuta selatan', 'tanjung aan', 'gerupuk', 'are guling'],
+            'mawi'            => ['mawi', 'mawi beach'],
+            'mawun'           => ['mawun', 'mawun beach'],
+            'are_guling'      => ['are guling'],
+            'gerupuk'         => ['gerupuk'],
+            'tanjung_aan'     => ['tanjung aan'],
+            'selong_belanak'  => ['selong belanak', 'belanak', 'tampah'],
+            'kuta'            => ['kuta', 'kuta lombok', 'kuta selatan'],
             'senggigi'        => ['senggigi', 'batu layar', 'batulayar', 'mangsit', 'kerandangan', 'lendang luar'],
             'ekas'            => ['ekas', 'awang', 'tanjung ringgit', 'kaliantan'],
-            'north_lombok'    => ['tanjung', 'gondang', 'senaru', 'bayan', 'lombok utara', 'north lombok', 'medana', 'sire', 'bangsal', 'pemenang'],
+            'senaru'          => ['senaru', 'bayan'],
+            'tanjung'         => ['tanjung', 'gondang', 'medana', 'sire', 'pemenang'],
+            'bangsal'         => ['bangsal'],
+            'north_lombok'    => ['lombok utara', 'north lombok'],
             'gili_islands'    => ['gili trawangan', 'gili air', 'gili meno', 'gili'],
             'mataram'         => ['mataram', 'ampenan', 'cakranegara', 'bertais', 'pagutan', 'sekarbela', 'kediri', 'labuapi'],
-            'other_lombok'    => ['praya', 'lombok tengah', 'central lombok', 'lombok barat', 'west lombok',
-                                  'gerung', 'lembar', 'sekotong', 'lombok timur', 'east lombok', 'labuhan',
-                                  'sukarara', 'jonggat', 'kopang', 'pujut', 'batukliang'],
+            'sekotong'        => ['sekotong'],
+            'lembar'          => ['lembar'],
+            'gerung'          => ['gerung'],
+            'praya'           => ['praya', 'pujut', 'kopang', 'sukarara'],
+            'jonggat'         => ['jonggat'],
+            'batukliang'      => ['batukliang'],
+            'labuhan_lombok'  => ['labuhan lombok', 'labuhan', 'lombok timur', 'east lombok'],
+            'selong'          => ['selong city', 'selong kota'],
+            'other_lombok'    => ['lombok tengah', 'central lombok', 'lombok barat', 'west lombok'],
         ];
         foreach ($area_patterns as $area_key => $keywords) {
             foreach ($keywords as $kw) {
@@ -487,6 +734,12 @@ function parse_gmaps_html(string $html): array {
             $detected_area = 'mataram';
         }
 
+        // ── Social media links from Maps listing ──
+        $socials = extract_social_links_from_chunk($chunk);
+
+        // ── Thumbnail image from Maps listing ──
+        $thumbnail = extract_gmaps_thumbnail($chunk);
+
         $listings[] = [
             'name' => $name,
             'rating' => $rating,
@@ -499,6 +752,12 @@ function parse_gmaps_html(string $html): array {
             'longitude' => $longitude,
             'website_url' => $website_url,
             'detected_area' => $detected_area,
+            'instagram_url' => $socials['instagram_url'],
+            'facebook_url' => $socials['facebook_url'],
+            'youtube_url' => $socials['youtube_url'],
+            'tiktok_url' => $socials['tiktok_url'],
+            'linkedin_url' => $socials['linkedin_url'],
+            'thumbnail_url' => $thumbnail,
         ];
     }
 
@@ -520,8 +779,11 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
             $insert_dev = $db->prepare(
                 "INSERT INTO developers (slug, name, short_description, description,
                     google_maps_url, google_rating, google_review_count,
-                    phone, whatsapp_number, website_url, languages, is_featured, badge, is_active)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, 1)
+                    phone, whatsapp_number, website_url,
+                    instagram_url, facebook_url, tiktok_url, youtube_url, linkedin_url,
+                    profile_photo_url, profile_description,
+                    languages, is_featured, badge, is_active)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, 1)
                  ON DUPLICATE KEY UPDATE
                     google_rating = VALUES(google_rating),
                     google_review_count = VALUES(google_review_count),
@@ -551,6 +813,13 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                 $phone = trim($item['phone']);
                 $whatsapp = trim($item['whatsapp'] ?? '');
                 $website = trim($item['website_url'] ?? '');
+                $instagram = trim($item['instagram_url'] ?? '');
+                $facebook = trim($item['facebook_url'] ?? '');
+                $tiktok = trim($item['tiktok_url'] ?? '');
+                $youtube = trim($item['youtube_url'] ?? '');
+                $linkedin = trim($item['linkedin_url'] ?? '');
+                $profile_photo = trim($item['profile_photo_url'] ?? '');
+                $profile_desc = trim($item['profile_description'] ?? '');
                 $languages = trim($item['languages'] ?? 'Bahasa only');
                 $area = $item['area_key'] ?: 'mataram';
 
@@ -559,15 +828,19 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                     $upd = $db->prepare(
                         "UPDATE developers SET name=?, short_description=?, description=?,
                             google_maps_url=?, google_rating=?, google_review_count=?,
-                            phone=?, whatsapp_number=?, website_url=?, languages=?,
-                            updated_at=CURRENT_TIMESTAMP
+                            phone=?, whatsapp_number=?, website_url=?,
+                            instagram_url=?, facebook_url=?, tiktok_url=?, youtube_url=?, linkedin_url=?,
+                            profile_photo_url=?, profile_description=?,
+                            languages=?, updated_at=CURRENT_TIMESTAMP
                          WHERE id=?"
                     );
                     $upd->execute([
                         $name, $short_desc, $description,
                         $gmaps_url, $rating, $review_count,
-                        $phone, $whatsapp, $website, $languages,
-                        (int)$item['existing_id'],
+                        $phone, $whatsapp, $website,
+                        $instagram, $facebook, $tiktok, $youtube, $linkedin,
+                        $profile_photo, $profile_desc,
+                        $languages, (int)$item['existing_id'],
                     ]);
                     // Update area
                     $del_area = $db->prepare("DELETE FROM developer_areas WHERE developer_id = ?");
@@ -593,7 +866,10 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                 $insert_dev->execute([
                     $slug, $name, $short_desc, $description,
                     $gmaps_url, $rating, $review_count,
-                    $phone, $whatsapp, $website, $languages,
+                    $phone, $whatsapp, $website,
+                    $instagram, $facebook, $tiktok, $youtube, $linkedin,
+                    $profile_photo, $profile_desc,
+                    $languages,
                 ]);
 
                 $dev_id = $db->lastInsertId();
@@ -622,8 +898,11 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
             $insert_provider = $db->prepare(
                 "INSERT INTO providers (slug, name, group_key, category_key, area_key, short_description, description,
                     address, latitude, longitude, google_maps_url, google_rating, google_review_count,
-                    phone, whatsapp_number, website_url, languages, is_featured, badge, is_active)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, 1)
+                    phone, whatsapp_number, website_url,
+                    instagram_url, facebook_url, tiktok_url, youtube_url, linkedin_url,
+                    profile_photo_url, profile_description,
+                    languages, is_featured, badge, is_active)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, 1)
                  ON DUPLICATE KEY UPDATE
                     google_rating = VALUES(google_rating),
                     google_review_count = VALUES(google_review_count),
@@ -659,6 +938,13 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                 $phone = trim($item['phone']);
                 $whatsapp = trim($item['whatsapp'] ?? '');
                 $website = trim($item['website_url'] ?? '');
+                $instagram = trim($item['instagram_url'] ?? '');
+                $facebook = trim($item['facebook_url'] ?? '');
+                $tiktok = trim($item['tiktok_url'] ?? '');
+                $youtube = trim($item['youtube_url'] ?? '');
+                $linkedin = trim($item['linkedin_url'] ?? '');
+                $profile_photo = trim($item['profile_photo_url'] ?? '');
+                $profile_desc = trim($item['profile_description'] ?? '');
                 $languages = trim($item['languages'] ?? 'Bahasa only');
 
                 if (!$group || !$category) {
@@ -673,16 +959,20 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                         "UPDATE providers SET name=?, group_key=?, category_key=?, area_key=?,
                             short_description=?, description=?, address=?, latitude=?, longitude=?,
                             google_maps_url=?, google_rating=?, google_review_count=?,
-                            phone=?, whatsapp_number=?, website_url=?, languages=?,
-                            updated_at=CURRENT_TIMESTAMP
+                            phone=?, whatsapp_number=?, website_url=?,
+                            instagram_url=?, facebook_url=?, tiktok_url=?, youtube_url=?, linkedin_url=?,
+                            profile_photo_url=?, profile_description=?,
+                            languages=?, updated_at=CURRENT_TIMESTAMP
                          WHERE id=?"
                     );
                     $upd->execute([
                         $name, $group, $category, $area,
                         $short_desc, $description, $address, $lat, $lng,
                         $gmaps_url, $rating, $review_count,
-                        $phone, $whatsapp, $website, $languages,
-                        $ex_id,
+                        $phone, $whatsapp, $website,
+                        $instagram, $facebook, $tiktok, $youtube, $linkedin,
+                        $profile_photo, $profile_desc,
+                        $languages, $ex_id,
                     ]);
                     // Update junction table
                     $db->prepare("DELETE FROM provider_categories WHERE provider_id=?")->execute([$ex_id]);
@@ -708,7 +998,10 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                     $slug, $name, $group, $category, $area,
                     $short_desc, $description, $address, $lat, $lng,
                     $gmaps_url, $rating, $review_count,
-                    $phone, $whatsapp, $website, $languages,
+                    $phone, $whatsapp, $website,
+                    $instagram, $facebook, $tiktok, $youtube, $linkedin,
+                    $profile_photo, $profile_desc,
+                    $languages,
                 ]);
 
                 $provider_id = $db->lastInsertId();
@@ -783,9 +1076,37 @@ if (isset($_POST['parse']) && isset($_FILES['gmaps_file'])) {
             $item['detected_group'] = $detection['group_key'];
             $item['detected_category'] = $detection['category_key'];
             $item['confidence'] = $detection['confidence'];
-            // Carry through parsed website + area
+            // Carry through parsed website + area + socials + thumbnail
             $item['website_url'] = $item['website_url'] ?? '';
             $item['detected_area'] = $item['detected_area'] ?? 'mataram';
+            $item['detected_region'] = get_region_for_area($item['detected_area']);
+
+            // Carry social links from Maps
+            foreach (['instagram_url','facebook_url','youtube_url','tiktok_url','linkedin_url','thumbnail_url'] as $sk) {
+                $item[$sk] = $item[$sk] ?? '';
+            }
+            $item['profile_description'] = '';
+            $item['profile_photo_url'] = $item['thumbnail_url']; // default to Maps thumbnail
+            $item['website_scraped'] = false;
+
+            // ── Website scraping: enrich with data from their website ──
+            $scan_websites = !empty($_POST['scan_websites']);
+            if ($scan_websites && !empty($item['website_url'])) {
+                $web_data = scrape_website($item['website_url']);
+                $item['website_scraped'] = $web_data['scraped'];
+                // Merge: website data fills in blanks, doesn't overwrite Maps data
+                foreach (['instagram_url','facebook_url','youtube_url','tiktok_url','linkedin_url'] as $sk) {
+                    if (empty($item[$sk]) && !empty($web_data[$sk])) {
+                        $item[$sk] = $web_data[$sk];
+                    }
+                }
+                if (!empty($web_data['profile_description'])) {
+                    $item['profile_description'] = $web_data['profile_description'];
+                }
+                if (!empty($web_data['profile_photo_url'])) {
+                    $item['profile_photo_url'] = $web_data['profile_photo_url'];
+                }
+            }
 
             if ($detection['confidence'] === 'high') {
                 $auto_approved[] = $item;
@@ -985,6 +1306,12 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
                 <input type="number" name="min_rating" value="3.0" min="1" max="5" step="0.1" style="width:80px;">
             </div>
             <div class="form-group">
+                <label>Website Scan</label>
+                <label style="font-size:0.85rem;font-weight:400;text-transform:none;letter-spacing:0;cursor:pointer;display:flex;align-items:center;gap:4px;">
+                    <input type="checkbox" name="scan_websites" value="1" checked style="width:16px;height:16px;"> Scan websites for socials & info
+                </label>
+            </div>
+            <div class="form-group">
                 <label>&nbsp;</label>
                 <button type="submit" name="parse" class="btn btn-primary">Parse & Preview</button>
             </div>
@@ -1057,6 +1384,7 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
         <thead>
             <tr>
                 <th style="width:40px;">✓</th>
+                <th>Photo</th>
                 <th>Name</th>
                 <th>Status</th>
                 <th>Rating</th>
@@ -1067,10 +1395,11 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
                 <th>Match</th>
                 <?php endif; ?>
                 <th>Short Description</th>
+                <th>Socials</th>
                 <th>Address</th>
                 <th>Phone</th>
                 <th>Website</th>
-                <th>Area</th>
+                <th>Region / Area</th>
             </tr>
         </thead>
         <tbody>
@@ -1115,6 +1444,16 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
                         <input type="hidden" name="items[<?= $idx ?>][existing_id]" value="<?= (int)$ex['id'] ?>">
                     <?php endif; ?>
                 </td>
+                <td style="width:50px;">
+                    <?php $photo = $item['profile_photo_url'] ?? ''; ?>
+                    <?php if ($photo): ?>
+                        <img src="<?= htmlspecialchars($photo) ?>" alt="" style="width:40px;height:40px;border-radius:4px;object-fit:cover;">
+                    <?php else: ?>
+                        <span style="display:inline-block;width:40px;height:40px;background:#e5e5e5;border-radius:4px;text-align:center;line-height:40px;color:#999;font-size:0.7rem;">No img</span>
+                    <?php endif; ?>
+                    <input type="hidden" name="items[<?= $idx ?>][profile_photo_url]" value="<?= htmlspecialchars($photo) ?>">
+                    <input type="hidden" name="items[<?= $idx ?>][profile_description]" value="<?= htmlspecialchars($item['profile_description'] ?? '') ?>">
+                </td>
                 <td>
                     <input type="text" class="small-input editable" name="items[<?= $idx ?>][name]"
                            value="<?= htmlspecialchars($item['name']) ?>" style="min-width:160px;">
@@ -1124,6 +1463,11 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
                     <input type="hidden" name="items[<?= $idx ?>][latitude]" value="<?= $item['latitude'] ?>">
                     <input type="hidden" name="items[<?= $idx ?>][longitude]" value="<?= $item['longitude'] ?>">
                     <input type="hidden" name="items[<?= $idx ?>][gmaps_category]" value="<?= htmlspecialchars($item['gmaps_category']) ?>">
+                    <?php if (!empty($item['profile_description'])): ?>
+                        <div style="font-size:0.68rem;color:#666;margin-top:2px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="<?= htmlspecialchars($item['profile_description']) ?>">
+                            <?= htmlspecialchars(mb_substr($item['profile_description'], 0, 60)) ?>&hellip;
+                        </div>
+                    <?php endif; ?>
                 </td>
                 <td style="white-space:nowrap;">
                     <?php if ($is_dup): ?>
@@ -1176,7 +1520,26 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
                     <input type="text" class="small-input editable" name="items[<?= $idx ?>][short_description]"
                            value="<?= htmlspecialchars($item['gmaps_category'] . ' in ' . ($item['address'] ?: 'Lombok')) ?>"
                            style="min-width:180px;">
-                    <input type="hidden" name="items[<?= $idx ?>][description]" value="">
+                    <input type="hidden" name="items[<?= $idx ?>][description]" value="<?= htmlspecialchars($item['profile_description'] ?? '') ?>">
+                </td>
+                <td style="white-space:nowrap;font-size:0.72rem;">
+                    <?php
+                    $social_icons = [];
+                    if (!empty($item['instagram_url'])) $social_icons[] = '<a href="'.htmlspecialchars($item['instagram_url']).'" target="_blank" rel="noopener" title="Instagram" style="color:#E1306C;">IG</a>';
+                    if (!empty($item['facebook_url'])) $social_icons[] = '<a href="'.htmlspecialchars($item['facebook_url']).'" target="_blank" rel="noopener" title="Facebook" style="color:#1877F2;">FB</a>';
+                    if (!empty($item['youtube_url'])) $social_icons[] = '<a href="'.htmlspecialchars($item['youtube_url']).'" target="_blank" rel="noopener" title="YouTube" style="color:#FF0000;">YT</a>';
+                    if (!empty($item['tiktok_url'])) $social_icons[] = '<a href="'.htmlspecialchars($item['tiktok_url']).'" target="_blank" rel="noopener" title="TikTok" style="color:#000;">TT</a>';
+                    if (!empty($item['linkedin_url'])) $social_icons[] = '<a href="'.htmlspecialchars($item['linkedin_url']).'" target="_blank" rel="noopener" title="LinkedIn" style="color:#0A66C2;">LI</a>';
+                    echo $social_icons ? implode(' ', $social_icons) : '<span style="color:#ccc;">—</span>';
+                    ?>
+                    <?php if (!empty($item['website_scraped'])): ?>
+                        <br><span style="font-size:0.6rem;color:#16a34a;">✓ site scraped</span>
+                    <?php endif; ?>
+                    <input type="hidden" name="items[<?= $idx ?>][instagram_url]" value="<?= htmlspecialchars($item['instagram_url'] ?? '') ?>">
+                    <input type="hidden" name="items[<?= $idx ?>][facebook_url]" value="<?= htmlspecialchars($item['facebook_url'] ?? '') ?>">
+                    <input type="hidden" name="items[<?= $idx ?>][youtube_url]" value="<?= htmlspecialchars($item['youtube_url'] ?? '') ?>">
+                    <input type="hidden" name="items[<?= $idx ?>][tiktok_url]" value="<?= htmlspecialchars($item['tiktok_url'] ?? '') ?>">
+                    <input type="hidden" name="items[<?= $idx ?>][linkedin_url]" value="<?= htmlspecialchars($item['linkedin_url'] ?? '') ?>">
                 </td>
                 <td>
                     <input type="text" class="small-input editable" name="items[<?= $idx ?>][address]"
@@ -1204,20 +1567,13 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
                 </td>
                 <td>
                     <?php $det_area = $item['detected_area'] ?? 'mataram'; ?>
-                    <select class="small-select" name="items[<?= $idx ?>][area_key]" style="max-width:120px;">
-                        <?php
-                        $area_opts = [
-                            'mataram' => 'Mataram',
-                            'kuta' => 'Kuta',
-                            'senggigi' => 'Senggigi',
-                            'selong_belanak' => 'Selong Belanak',
-                            'ekas' => 'Ekas',
-                            'north_lombok' => 'North Lombok',
-                            'gili_islands' => 'Gili Islands',
-                            'other_lombok' => 'Other Lombok',
-                        ];
-                        foreach ($area_opts as $ak => $al): ?>
-                            <option value="<?= $ak ?>" <?= $det_area === $ak ? 'selected' : '' ?>><?= $al ?></option>
+                    <select class="small-select" name="items[<?= $idx ?>][area_key]" style="max-width:150px;">
+                        <?php foreach ($AREA_OPTIONS as $rk => $rdata): ?>
+                            <optgroup label="<?= $rdata['label'] ?>">
+                            <?php foreach ($rdata['areas'] as $ak => $al): ?>
+                                <option value="<?= $ak ?>" <?= $det_area === $ak ? 'selected' : '' ?>><?= $al ?></option>
+                            <?php endforeach; ?>
+                            </optgroup>
                         <?php endforeach; ?>
                     </select>
                 </td>

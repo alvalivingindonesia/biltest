@@ -234,13 +234,14 @@ function formatLandSize(sqm, are) {
 
 // ---- Dynamic filter data (loaded from DB) ----
 const FilterData = {
-  areas: [], groups: [], categories: [], project_types: [], project_statuses: [], listing_types: [], land_certificate_types: [],
+  areas: [], regions: [], groups: [], categories: [], project_types: [], project_statuses: [], listing_types: [], land_certificate_types: [],
   _loaded: false,
   async load() {
     if (this._loaded) return;
     try {
       const f = await DataLayer.getFilters();
       this.areas = f.areas || [];
+      this.regions = f.regions || [];
       this.groups = f.groups || [];
       this.categories = f.categories || [];
       this.project_types = f.project_types || [];
@@ -251,9 +252,38 @@ const FilterData = {
     } catch(e) { console.error('Failed to load filters:', e); }
   },
   labelMap(arr) {
-    const m = {}; arr.forEach(i => { m[i.key] = i.label; }); return m;
+    const m = {}; arr.forEach(i => { m[i.key || i.region_key] = i.label; }); return m;
   }
 };
+
+/** Build area <option> tags grouped by region */
+function buildAreaOptions(selectedValue) {
+  const regions = FilterData.regions;
+  const areas = FilterData.areas;
+  if (!regions.length) {
+    // Fallback: flat list if regions not loaded
+    return areas.map(a => '<option value="' + (a.key) + '"' + (selectedValue === a.key ? ' selected' : '') + '>' + a.label + '</option>').join('');
+  }
+  let html = '';
+  const regionMap = {};
+  regions.forEach(r => { regionMap[r.region_key] = { label: r.label, areas: [] }; });
+  areas.forEach(a => {
+    const rk = a.region_key || 'other';
+    if (!regionMap[rk]) regionMap[rk] = { label: rk.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), areas: [] };
+    regionMap[rk].areas.push(a);
+  });
+  // Also add region-level options for filtering
+  for (const [rk, rd] of Object.entries(regionMap)) {
+    if (!rd.areas.length) continue;
+    html += '<optgroup label="' + rd.label + '">';
+    html += '<option value="region:' + rk + '"' + (selectedValue === 'region:' + rk ? ' selected' : '') + '>▶ All ' + rd.label + '</option>';
+    rd.areas.forEach(a => {
+      html += '<option value="' + a.key + '"' + (selectedValue === a.key ? ' selected' : '') + '>' + a.label + '</option>';
+    });
+    html += '</optgroup>';
+  }
+  return html;
+}
 
 function formatAreaLabel(area) {
   const m = FilterData.labelMap(FilterData.areas);
@@ -724,7 +754,13 @@ async function renderDirectory(el, params = {}) {
 
     // Build API params
     const apiParams = {};
-    if (filters.area) apiParams.area = filters.area;
+    if (filters.area) {
+      if (filters.area.startsWith('region:')) {
+        apiParams.region = filters.area.replace('region:', '');
+      } else {
+        apiParams.area = filters.area;
+      }
+    }
     if (filters.group) apiParams.group = filters.group;
     if (filters.category) apiParams.category = filters.category;
     if (filters.search) apiParams.q = filters.search;
@@ -815,7 +851,7 @@ async function renderDirectory(el, params = {}) {
                 <label class="filter-label" for="f-area">Area</label>
                 <select id="f-area" class="filter-select" onchange="updateDirectoryFilter('area', this.value)">
                   <option value="">All areas</option>
-                  ${buildFilterOptions(FilterData.areas, filters.area)}
+                  ${buildAreaOptions(filters.area)}
                 </select>
               </div>
               <div class="filter-group">
@@ -1191,6 +1227,11 @@ async function renderListings(el, params = {}) {
   await FilterData.load();
 
   const filters = { ...params };
+  // Parse region from area value
+  if (filters.area && filters.area.startsWith('region:')) {
+    filters.region = filters.area.replace('region:', '');
+    delete filters.area;
+  }
   const [listRes] = await Promise.all([
     DataLayer.getListings(filters),
   ]);
@@ -1198,7 +1239,7 @@ async function renderListings(el, params = {}) {
   const listings = listRes.data;
   const total = listRes.meta.total;
 
-  const areaOptions = FilterData.areas.map(a => '<option value="' + a.key + '" ' + (params.area === a.key ? 'selected' : '') + '>' + a.label + '</option>').join('');
+  const areaOptions = buildAreaOptions(params.area || '');
   const typeOptions = FilterData.listing_types.map(t => '<option value="' + t.key + '" ' + (params.listing_type === t.key ? 'selected' : '') + '>' + t.label + '</option>').join('');
   const certOptions = FilterData.land_certificate_types.map(c => '<option value="' + c.key + '" ' + (params.certificate_type === c.key ? 'selected' : '') + '>' + c.label + '</option>').join('');
 
@@ -1437,7 +1478,7 @@ async function renderAgents(el, params = {}) {
   const agents = agentRes.data;
   const total = agentRes.meta.total;
 
-  const areaOptions = FilterData.areas.map(a => '<option value="' + a.key + '" ' + (params.area === a.key ? 'selected' : '') + '>' + a.label + '</option>').join('');
+  const areaOptions = buildAreaOptions(params.area || '');
 
   el.innerHTML = `
     <div class="page-header">
@@ -1586,7 +1627,7 @@ async function renderAgentSignup(el) {
   }
 
   await FilterData.load();
-  const areaOptions = FilterData.areas.map(a => '<option value="' + a.key + '">' + a.label + '</option>').join('');
+  const areaOptions = buildAreaOptions('');
 
   el.innerHTML = `
     <div class="page-header">
@@ -1680,7 +1721,7 @@ async function renderCreateListing(el) {
   }
 
   await FilterData.load();
-  const areaOptions = FilterData.areas.map(a => '<option value="' + a.key + '">' + a.label + '</option>').join('');
+  const areaOptions = buildAreaOptions('');
   const typeOptions = FilterData.listing_types.map(t => '<option value="' + t.key + '">' + t.label + '</option>').join('');
   const certOptions = FilterData.land_certificate_types.map(c => '<option value="' + c.key + '">' + c.label + '</option>').join('');
 
@@ -1940,7 +1981,13 @@ async function renderProjects(el, params = {}) {
     if (_cachedDevelopers.length === 0) {
       try { const dr = await DataLayer.getDevelopers({ per_page: 100 }); _cachedDevelopers = dr.data; } catch(e) {}
     }
-    if (filters.area) apiParams.area = filters.area;
+    if (filters.area) {
+      if (filters.area.startsWith('region:')) {
+        apiParams.region = filters.area.replace('region:', '');
+      } else {
+        apiParams.area = filters.area;
+      }
+    }
     if (filters.project_type) apiParams.type = filters.project_type;
     if (filters.status) apiParams.status = filters.status;
     if (filters.sort === 'investment_low') { apiParams.sort = 'min_investment_usd'; apiParams.dir = 'ASC'; }
@@ -1998,7 +2045,7 @@ async function renderProjects(el, params = {}) {
                 <label class="filter-label" for="pf-area">Area</label>
                 <select id="pf-area" class="filter-select" onchange="updateProjectFilter('area', this.value)">
                   <option value="">All areas</option>
-                  ${buildFilterOptions(FilterData.areas, filters.area)}
+                  ${buildAreaOptions(filters.area)}
                 </select>
               </div>
               <div class="filter-group">
