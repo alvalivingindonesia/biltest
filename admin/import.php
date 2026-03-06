@@ -639,16 +639,43 @@ function scrape_website(string $url): array {
         }
     }
 
-    // ── Extract OG image or logo ──
+    // ── Extract profile image: OG image → twitter:image → inline <img> fallback ──
+    $found_img = '';
+    // Priority 1: og:image
     if (preg_match('/<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']/', $html, $im)) {
-        $img = html_entity_decode(trim($im[1]), ENT_QUOTES, 'UTF-8');
-        // Make relative URLs absolute
-        if (strpos($img, '//') === 0) $img = 'https:' . $img;
-        elseif (strpos($img, '/') === 0) {
-            $parsed = parse_url($url);
-            $img = ($parsed['scheme'] ?? 'https') . '://' . ($parsed['host'] ?? '') . $img;
+        $found_img = html_entity_decode(trim($im[1]), ENT_QUOTES, 'UTF-8');
+    }
+    // Priority 2: twitter:image
+    if (!$found_img && preg_match('/<meta[^>]+name=["\']twitter:image["\'][^>]+content=["\']([^"\']+)["\']/', $html, $im)) {
+        $found_img = html_entity_decode(trim($im[1]), ENT_QUOTES, 'UTF-8');
+    }
+    // Priority 3: first suitable <img> — skip tiny icons, hero banners, tracking pixels
+    if (!$found_img) {
+        preg_match_all('/<img[^>]+>/i', $html, $img_tags);
+        foreach ($img_tags[0] as $img_tag) {
+            // Extract src
+            if (!preg_match('/src=["\']([^"\']+)["\']/i', $img_tag, $src_m)) continue;
+            $candidate = html_entity_decode($src_m[1], ENT_QUOTES, 'UTF-8');
+            // Skip data URIs, tracking pixels, SVGs, tiny icons
+            if (preg_match('/^data:|\.svg|pixel|track|spacer|blank|1x1|favicon|icon/i', $candidate)) continue;
+            // Skip if explicit tiny dimensions (width/height < 50)
+            if (preg_match('/width=["\']?(\d+)/i', $img_tag, $wm) && (int)$wm[1] < 50) continue;
+            if (preg_match('/height=["\']?(\d+)/i', $img_tag, $hm) && (int)$hm[1] < 50) continue;
+            // Skip enormous hero hints (class/id containing hero, banner, slider, bg)
+            if (preg_match('/(?:class|id)=["\'][^"\']*(?:hero|banner|slider|carousel|background|bg-)[^"\']*["\']/i', $img_tag)) continue;
+            // Accept this image
+            $found_img = $candidate;
+            break;
         }
-        $result['profile_photo_url'] = $img;
+    }
+    // Normalize URL
+    if ($found_img) {
+        if (strpos($found_img, '//') === 0) $found_img = 'https:' . $found_img;
+        elseif (strpos($found_img, '/') === 0) {
+            $parsed = parse_url($url);
+            $found_img = ($parsed['scheme'] ?? 'https') . '://' . ($parsed['host'] ?? '') . $found_img;
+        }
+        $result['profile_photo_url'] = $found_img;
     }
 
     return $result;
