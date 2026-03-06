@@ -224,6 +224,31 @@ $KEYWORD_MAP = [
     ],
 ];
 
+// ─── AGENT KEYWORD MAP ───────────────────────────────────────────────
+// Keywords that indicate a Google Maps entry is a real estate agent/agency
+$AGENT_KEYWORDS = [
+    'real estate agent', 'real estate agency', 'real estate', 'property agent',
+    'property agency', 'estate agent', 'agen properti', 'agen real estate',
+    'property consultant', 'konsultan properti', 'broker properti',
+    'real estate broker', 'property broker', 'property company',
+    'kantor properti', 'jual beli properti', 'jual beli tanah',
+    'land agent', 'land broker', 'land for sale',
+    'property investment', 'investasi properti',
+    'rumah dijual', 'tanah dijual', 'villa for sale', 'jual villa',
+    'real estate office', 'properti lombok', 'lombok property',
+    'lombok real estate', 'bali real estate', 'property management',
+];
+
+// ─── DEVELOPER KEYWORD MAP ───────────────────────────────────────────
+// Keywords that indicate a Google Maps entry is a developer (property developer)
+$DEVELOPER_KEYWORDS = [
+    'property developer', 'real estate developer', 'developer', 'pengembang',
+    'housing developer', 'villa developer', 'resort developer',
+    'property development', 'pengembang properti', 'pengembang perumahan',
+    'residential developer', 'construction and development',
+    'builder and developer', 'development company',
+];
+
 // ─── FUNCTIONS ───────────────────────────────────────────────────────
 
 function get_db(): PDO {
@@ -301,6 +326,44 @@ function detect_category(string $gmaps_category, string $business_name, array $k
     elseif ($best_score >= 40) $confidence = 'medium';
 
     return ['group_key' => $group_key, 'category_key' => $best_cat, 'confidence' => $confidence];
+}
+
+/**
+ * Auto-detect entity type: 'agent', 'developer', or 'provider'.
+ * Checks agent/developer keywords first (more specific), then falls back to provider.
+ * Returns ['type' => 'agent'|'developer'|'provider', 'type_confidence' => 'high'|'medium'|'low']
+ */
+function detect_entity_type(string $gmaps_category, string $business_name, array $agent_keywords, array $developer_keywords): array {
+    $combined = strtolower(html_entity_decode($gmaps_category . ' ' . $business_name));
+    
+    // Check agent keywords (highest priority — most specific)
+    $agent_score = 0;
+    foreach ($agent_keywords as $kw) {
+        if (stripos($combined, $kw) !== false) {
+            $s = 50 + (strlen($kw) / max(strlen($combined), 1)) * 50;
+            $agent_score = max($agent_score, $s);
+        }
+    }
+    
+    // Check developer keywords
+    $dev_score = 0;
+    foreach ($developer_keywords as $kw) {
+        if (stripos($combined, $kw) !== false) {
+            $s = 50 + (strlen($kw) / max(strlen($combined), 1)) * 50;
+            $dev_score = max($dev_score, $s);
+        }
+    }
+    
+    // Agent beats developer if both match (e.g. "real estate agent" matches both "real estate" and "agent")
+    if ($agent_score >= $dev_score && $agent_score >= 50) {
+        return ['type' => 'agent', 'type_confidence' => ($agent_score >= 70 ? 'high' : 'medium')];
+    }
+    if ($dev_score >= 50) {
+        return ['type' => 'developer', 'type_confidence' => ($dev_score >= 70 ? 'high' : 'medium')];
+    }
+    
+    // Default: provider
+    return ['type' => 'provider', 'type_confidence' => 'low'];
 }
 
 /**
@@ -884,62 +947,101 @@ function parse_gmaps_html(string $html): array {
 $save_message = '';
 $save_errors = [];
 if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
-    $import_type = $_POST['import_type'] ?? 'provider';
     try {
         $db = get_db();
         $db->beginTransaction();
 
-        if ($import_type === 'developer') {
-            // ─── DEVELOPER SAVE ──────────────────────────────
-            $insert_dev = $db->prepare(
-                "INSERT INTO developers (slug, name, short_description, description,
-                    google_maps_url, google_rating, google_review_count,
-                    phone, whatsapp_number, website_url,
-                    instagram_url, facebook_url, tiktok_url, youtube_url, linkedin_url,
-                    profile_photo_url, profile_description,
-                    languages, is_featured, badge, is_active)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
-                 ON DUPLICATE KEY UPDATE
-                    google_rating = VALUES(google_rating),
-                    google_review_count = VALUES(google_review_count),
-                    updated_at = CURRENT_TIMESTAMP"
-            );
+        $saved_counts = ['provider' => 0, 'developer' => 0, 'agent' => 0];
+        $updated_counts = ['provider' => 0, 'developer' => 0, 'agent' => 0];
 
-            $insert_tag = $db->prepare(
-                "INSERT IGNORE INTO developer_tags (developer_id, tag) VALUES (?, ?)"
-            );
+        foreach ($_POST['items'] as $idx => $item) {
+            if (empty($item['selected'])) continue;
 
-            $insert_area = $db->prepare(
-                "INSERT IGNORE INTO developer_areas (developer_id, area_key) VALUES (?, ?)"
-            );
+            $item_type = $item['item_type'] ?? 'provider';
+            $name = trim($item['name']);
+            $slug = slugify($name);
+            $short_desc = trim($item['short_description']);
+            $description = trim($item['description']) ?: $short_desc;
+            $gmaps_url = trim($item['gmaps_url']);
+            $rating = (float)$item['rating'];
+            $review_count = (int)preg_replace('/[^\d]/', '', $item['reviews']);
+            $phone = trim($item['phone']);
+            $whatsapp = trim($item['whatsapp'] ?? '');
+            $website = trim($item['website_url'] ?? '');
+            $instagram = trim($item['instagram_url'] ?? '');
+            $facebook = trim($item['facebook_url'] ?? '');
+            $tiktok = trim($item['tiktok_url'] ?? '');
+            $youtube = trim($item['youtube_url'] ?? '');
+            $linkedin = trim($item['linkedin_url'] ?? '');
+            $profile_photo = trim($item['profile_photo_url'] ?? '');
+            $profile_desc = trim($item['profile_description'] ?? '');
+            $languages = trim($item['languages'] ?? 'Bahasa only');
+            $area = $item['area_key'] ?: 'mataram';
+            $address = trim($item['address'] ?? '');
+            $lat = $item['latitude'] ?: null;
+            $lng = $item['longitude'] ?: null;
+            $is_featured = !empty($item['is_featured']) ? 1 : 0;
+            $is_trusted = !empty($item['is_trusted']) ? 1 : 0;
+            $is_verified = !empty($item['is_verified']) ? 1 : 0;
 
-            $saved_count = 0;
-            $updated_count = 0;
-            foreach ($_POST['items'] as $idx => $item) {
-                if (empty($item['selected'])) continue;
+            // ── AGENT SAVE ──────────────────────────────
+            if ($item_type === 'agent') {
+                if (!empty($item['overwrite']) && !empty($item['existing_id'])) {
+                    $upd = $db->prepare(
+                        "UPDATE agents SET display_name=?, slug=?, agency_name=?, bio=?,
+                            google_maps_url=?, google_rating=?, google_review_count=?,
+                            phone=?, whatsapp_number=?, website_url=?, email=?,
+                            areas_served=?, languages=?, profile_image_url=?,
+                            is_verified=?, updated_at=CURRENT_TIMESTAMP
+                         WHERE id=?"
+                    );
+                    $upd->execute([
+                        $name, $slug, $short_desc, $description,
+                        $gmaps_url, $rating, $review_count,
+                        $phone, $whatsapp, $website, '',
+                        $area, $languages, $profile_photo, $is_verified,
+                        (int)$item['existing_id'],
+                    ]);
+                    $updated_counts['agent']++;
+                    continue;
+                }
 
-                $name = trim($item['name']);
-                $slug = slugify($name);
-                $short_desc = trim($item['short_description']);
-                $description = trim($item['description']) ?: $short_desc;
-                $gmaps_url = trim($item['gmaps_url']);
-                $rating = (float)$item['rating'];
-                $review_count = (int)$item['reviews'];
-                $phone = trim($item['phone']);
-                $whatsapp = trim($item['whatsapp'] ?? '');
-                $website = trim($item['website_url'] ?? '');
-                $instagram = trim($item['instagram_url'] ?? '');
-                $facebook = trim($item['facebook_url'] ?? '');
-                $tiktok = trim($item['tiktok_url'] ?? '');
-                $youtube = trim($item['youtube_url'] ?? '');
-                $linkedin = trim($item['linkedin_url'] ?? '');
-                $profile_photo = trim($item['profile_photo_url'] ?? '');
-                $profile_desc = trim($item['profile_description'] ?? '');
-                $languages = trim($item['languages'] ?? 'Bahasa only');
-                $is_featured = !empty($item['is_featured']) ? 1 : 0;
-                $area = $item['area_key'] ?: 'mataram';
+                // Duplicate slug check
+                $check = $db->prepare("SELECT COUNT(*) FROM agents WHERE slug = ?");
+                $check->execute([$slug]);
+                if ($check->fetchColumn() > 0) {
+                    $suffix = 2;
+                    while (true) {
+                        $check->execute([$slug . '-' . $suffix]);
+                        if ($check->fetchColumn() == 0) break;
+                        $suffix++;
+                    }
+                    $slug .= '-' . $suffix;
+                }
 
-                // Overwrite existing record
+                $db->prepare(
+                    "INSERT INTO agents (slug, display_name, agency_name, bio,
+                        google_maps_url, google_rating, google_review_count,
+                        phone, whatsapp_number, website_url, email,
+                        areas_served, languages, profile_image_url,
+                        is_verified, is_active)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                     ON DUPLICATE KEY UPDATE
+                        google_rating = VALUES(google_rating),
+                        google_review_count = VALUES(google_review_count),
+                        updated_at = CURRENT_TIMESTAMP"
+                )->execute([
+                    $slug, $name, $short_desc, $description,
+                    $gmaps_url, $rating, $review_count,
+                    $phone, $whatsapp, $website, '',
+                    $area, $languages, $profile_photo, $is_verified,
+                ]);
+                $saved_counts['agent']++;
+
+            // ── DEVELOPER SAVE ──────────────────────────
+            } elseif ($item_type === 'developer') {
+                $is_featured_dev = $is_featured;
+
                 if (!empty($item['overwrite']) && !empty($item['existing_id'])) {
                     $upd = $db->prepare(
                         "UPDATE developers SET name=?, short_description=?, description=?,
@@ -956,17 +1058,17 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                         $phone, $whatsapp, $website,
                         $instagram, $facebook, $tiktok, $youtube, $linkedin,
                         $profile_photo, $profile_desc,
-                        $languages, $is_featured, (int)$item['existing_id'],
+                        $languages, $is_featured_dev, (int)$item['existing_id'],
                     ]);
-                    // Update area
                     $del_area = $db->prepare("DELETE FROM developer_areas WHERE developer_id = ?");
                     $del_area->execute([(int)$item['existing_id']]);
-                    $insert_area->execute([(int)$item['existing_id'], $area]);
-                    $updated_count++;
+                    $db->prepare("INSERT IGNORE INTO developer_areas (developer_id, area_key) VALUES (?, ?)")
+                       ->execute([(int)$item['existing_id'], $area]);
+                    $updated_counts['developer']++;
                     continue;
                 }
 
-                // New record: duplicate slug check
+                // Duplicate slug check
                 $check = $db->prepare("SELECT COUNT(*) FROM developers WHERE slug = ?");
                 $check->execute([$slug]);
                 if ($check->fetchColumn() > 0) {
@@ -979,99 +1081,49 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                     $slug .= '-' . $suffix;
                 }
 
-                $insert_dev->execute([
+                $db->prepare(
+                    "INSERT INTO developers (slug, name, short_description, description,
+                        google_maps_url, google_rating, google_review_count,
+                        phone, whatsapp_number, website_url,
+                        instagram_url, facebook_url, tiktok_url, youtube_url, linkedin_url,
+                        profile_photo_url, profile_description,
+                        languages, is_featured, badge, is_active)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
+                     ON DUPLICATE KEY UPDATE
+                        google_rating = VALUES(google_rating),
+                        google_review_count = VALUES(google_review_count),
+                        updated_at = CURRENT_TIMESTAMP"
+                )->execute([
                     $slug, $name, $short_desc, $description,
                     $gmaps_url, $rating, $review_count,
                     $phone, $whatsapp, $website,
                     $instagram, $facebook, $tiktok, $youtube, $linkedin,
                     $profile_photo, $profile_desc,
-                    $languages, $is_featured,
+                    $languages, $is_featured_dev,
                 ]);
 
                 $dev_id = $db->lastInsertId();
-
-                // Add area
                 if ($area) {
-                    $insert_area->execute([$dev_id, $area]);
+                    $db->prepare("INSERT IGNORE INTO developer_areas (developer_id, area_key) VALUES (?, ?)")
+                       ->execute([$dev_id, $area]);
                 }
-
-                // Add tag from Google Maps category
                 if (!empty($item['gmaps_category'])) {
-                    $insert_tag->execute([$dev_id, $item['gmaps_category']]);
+                    $db->prepare("INSERT IGNORE INTO developer_tags (developer_id, tag) VALUES (?, ?)")
+                       ->execute([$dev_id, $item['gmaps_category']]);
                 }
+                $saved_counts['developer']++;
 
-                $saved_count++;
-            }
-
-            $db->commit();
-            $parts = [];
-            if ($saved_count) $parts[] = "saved {$saved_count} new";
-            if ($updated_count) $parts[] = "updated {$updated_count} existing";
-            $save_message = "Successfully " . implode(' and ', $parts) . " developer(s).";
-
-        } else {
-            // ─── PROVIDER SAVE ────────────────────────────────
-            $insert_provider = $db->prepare(
-                "INSERT INTO providers (slug, name, group_key, category_key, area_key, short_description, description,
-                    address, latitude, longitude, google_maps_url, google_rating, google_review_count,
-                    phone, whatsapp_number, website_url,
-                    instagram_url, facebook_url, tiktok_url, youtube_url, linkedin_url,
-                    profile_photo_url, profile_description,
-                    languages, is_featured, is_trusted, badge, is_active)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
-                 ON DUPLICATE KEY UPDATE
-                    google_rating = VALUES(google_rating),
-                    google_review_count = VALUES(google_review_count),
-                    updated_at = CURRENT_TIMESTAMP"
-            );
-
-            $insert_tag = $db->prepare(
-                "INSERT IGNORE INTO provider_tags (provider_id, tag) VALUES (?, ?)"
-            );
-
-            $insert_pcat = $db->prepare(
-                "INSERT IGNORE INTO provider_categories (provider_id, category_key) VALUES (?, ?)"
-            );
-
-            $saved_count = 0;
-            $updated_count = 0;
-            foreach ($_POST['items'] as $idx => $item) {
-                if (empty($item['selected'])) continue;
-
-                $name = trim($item['name']);
-                $slug = slugify($name);
+            // ── PROVIDER SAVE ───────────────────────────
+            } else {
                 $group = $item['group_key'];
                 $category_keys = $item['category_keys'] ?? [];
                 $category = $category_keys[0] ?? '';
-                $area = $item['area_key'] ?: 'mataram';
-                $short_desc = trim($item['short_description']);
-                $description = trim($item['description']) ?: $short_desc;
-                $address = trim($item['address']);
-                $lat = $item['latitude'] ?: null;
-                $lng = $item['longitude'] ?: null;
-                $gmaps_url = trim($item['gmaps_url']);
-                $rating = (float)$item['rating'];
-                $review_count = (int)$item['reviews'];
-                $phone = trim($item['phone']);
-                $whatsapp = trim($item['whatsapp'] ?? '');
-                $website = trim($item['website_url'] ?? '');
-                $instagram = trim($item['instagram_url'] ?? '');
-                $facebook = trim($item['facebook_url'] ?? '');
-                $tiktok = trim($item['tiktok_url'] ?? '');
-                $youtube = trim($item['youtube_url'] ?? '');
-                $linkedin = trim($item['linkedin_url'] ?? '');
-                $profile_photo = trim($item['profile_photo_url'] ?? '');
-                $profile_desc = trim($item['profile_description'] ?? '');
-                $languages = trim($item['languages'] ?? 'Bahasa only');
-                $is_featured = !empty($item['is_featured']) ? 1 : 0;
-                $is_trusted = !empty($item['is_trusted']) ? 1 : 0;
 
                 if (!$group || empty($category_keys)) {
                     $save_errors[] = "Skipped '{$name}': no category assigned.";
                     continue;
                 }
 
-                // Overwrite existing record
                 if (!empty($item['overwrite']) && !empty($item['existing_id'])) {
                     $ex_id = (int)$item['existing_id'];
                     $upd = $db->prepare(
@@ -1093,16 +1145,16 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                         $profile_photo, $profile_desc,
                         $languages, $is_featured, $is_trusted, $ex_id,
                     ]);
-                    // Update junction table
                     $db->prepare("DELETE FROM provider_categories WHERE provider_id=?")->execute([$ex_id]);
+                    $cat_ins = $db->prepare("INSERT IGNORE INTO provider_categories (provider_id, category_key) VALUES (?, ?)");
                     foreach ($category_keys as $ckey) {
-                        if ($ckey) $insert_pcat->execute([$ex_id, $ckey]);
+                        if ($ckey) $cat_ins->execute([$ex_id, $ckey]);
                     }
-                    $updated_count++;
+                    $updated_counts['provider']++;
                     continue;
                 }
 
-                // New record: duplicate slug check
+                // Duplicate slug check
                 $check = $db->prepare("SELECT COUNT(*) FROM providers WHERE slug = ?");
                 $check->execute([$slug]);
                 if ($check->fetchColumn() > 0) {
@@ -1115,7 +1167,19 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                     $slug .= '-' . $suffix;
                 }
 
-                $insert_provider->execute([
+                $db->prepare(
+                    "INSERT INTO providers (slug, name, group_key, category_key, area_key, short_description, description,
+                        address, latitude, longitude, google_maps_url, google_rating, google_review_count,
+                        phone, whatsapp_number, website_url,
+                        instagram_url, facebook_url, tiktok_url, youtube_url, linkedin_url,
+                        profile_photo_url, profile_description,
+                        languages, is_featured, is_trusted, badge, is_active)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
+                     ON DUPLICATE KEY UPDATE
+                        google_rating = VALUES(google_rating),
+                        google_review_count = VALUES(google_review_count),
+                        updated_at = CURRENT_TIMESTAMP"
+                )->execute([
                     $slug, $name, $group, $category, $area,
                     $short_desc, $description, $address, $lat, $lng,
                     $gmaps_url, $rating, $review_count,
@@ -1126,25 +1190,27 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                 ]);
 
                 $provider_id = $db->lastInsertId();
-
-                // Write to junction table (all selected categories)
+                $cat_ins = $db->prepare("INSERT IGNORE INTO provider_categories (provider_id, category_key) VALUES (?, ?)");
                 foreach ($category_keys as $ckey) {
-                    if ($ckey) $insert_pcat->execute([$provider_id, $ckey]);
+                    if ($ckey) $cat_ins->execute([$provider_id, $ckey]);
                 }
-
                 if (!empty($item['gmaps_category'])) {
-                    $insert_tag->execute([$provider_id, $item['gmaps_category']]);
+                    $db->prepare("INSERT IGNORE INTO provider_tags (provider_id, tag) VALUES (?, ?)")
+                       ->execute([$provider_id, $item['gmaps_category']]);
                 }
-
-                $saved_count++;
+                $saved_counts['provider']++;
             }
-
-            $db->commit();
-            $parts = [];
-            if ($saved_count) $parts[] = "saved {$saved_count} new";
-            if ($updated_count) $parts[] = "updated {$updated_count} existing";
-            $save_message = "Successfully " . implode(' and ', $parts) . " provider(s).";
         }
+
+        $db->commit();
+        $parts = [];
+        foreach ($saved_counts as $type => $cnt) {
+            if ($cnt) $parts[] = "saved {$cnt} new {$type}(s)";
+        }
+        foreach ($updated_counts as $type => $cnt) {
+            if ($cnt) $parts[] = "updated {$cnt} existing {$type}(s)";
+        }
+        $save_message = "Successfully " . (implode(', ', $parts) ?: "processed items") . ".";
     } catch (Exception $e) {
         if (isset($db) && $db->inTransaction()) $db->rollBack();
         $save_message = "Database error: " . $e->getMessage();
@@ -1194,11 +1260,20 @@ if (isset($_POST['parse']) && isset($_FILES['gmaps_file'])) {
                 continue;
             }
 
-            // Detect category
+            // Detect category (for providers)
             $detection = detect_category($item['gmaps_category'], $item['name'], $KEYWORD_MAP, $CATEGORY_TREE);
             $item['detected_group'] = $detection['group_key'];
             $item['detected_category'] = $detection['category_key'];
             $item['confidence'] = $detection['confidence'];
+            
+            // Auto-detect entity type: agent, developer, or provider
+            $type_det = detect_entity_type($item['gmaps_category'], $item['name'], $AGENT_KEYWORDS, $DEVELOPER_KEYWORDS);
+            $item['detected_type'] = $type_det['type'];
+            $item['type_confidence'] = $type_det['type_confidence'];
+            // If provider category matched with high confidence, keep as provider even if type detection says low
+            if ($type_det['type'] === 'provider' && $detection['confidence'] === 'high') {
+                $item['type_confidence'] = 'high';
+            }
             // Carry through parsed website + area + socials + thumbnail
             $item['website_url'] = $item['website_url'] ?? '';
             $item['detected_area'] = $item['detected_area'] ?? 'mataram';
@@ -1256,32 +1331,46 @@ if (isset($_POST['parse']) && isset($_FILES['gmaps_file'])) {
         }
 
         // ─── Check for existing DB entries ─────────────────────────
-        $import_type = $_POST['import_type'] ?? 'provider';
         $all_passed = array_merge($auto_approved, $needs_review);
         $existing_count = 0;
         try {
             $db = get_db();
-            $table = ($import_type === 'developer') ? 'developers' : 'providers';
+            $check_tables = ['provider' => 'providers', 'developer' => 'developers', 'agent' => 'agents'];
             foreach ($all_passed as &$item) {
                 $item['existing'] = null;
-                // Match by google_maps_url first (most reliable)
-                if (!empty($item['gmaps_url'])) {
-                    $stmt = $db->prepare("SELECT * FROM `{$table}` WHERE google_maps_url = ? LIMIT 1");
-                    $stmt->execute([$item['gmaps_url']]);
+                $item['existing_table'] = null;
+                $item['existing_type_mismatch'] = false;
+                // Check all 3 tables for duplicates
+                foreach ($check_tables as $ttype => $tname) {
+                    $name_col = ($ttype === 'agent') ? 'display_name' : 'name';
+                    // Match by google_maps_url first (most reliable)
+                    if (!empty($item['gmaps_url'])) {
+                        $stmt = $db->prepare("SELECT * FROM `{$tname}` WHERE google_maps_url = ? LIMIT 1");
+                        $stmt->execute([$item['gmaps_url']]);
+                        $existing = $stmt->fetch();
+                        if ($existing) {
+                            $item['existing'] = $existing;
+                            $item['existing_table'] = $ttype;
+                            if ($ttype !== $item['detected_type']) {
+                                $item['existing_type_mismatch'] = true;
+                            }
+                            $existing_count++;
+                            break;
+                        }
+                    }
+                    // Fallback: match by name
+                    $stmt = $db->prepare("SELECT * FROM `{$tname}` WHERE LOWER({$name_col}) = LOWER(?) LIMIT 1");
+                    $stmt->execute([trim($item['name'])]);
                     $existing = $stmt->fetch();
                     if ($existing) {
                         $item['existing'] = $existing;
+                        $item['existing_table'] = $ttype;
+                        if ($ttype !== $item['detected_type']) {
+                            $item['existing_type_mismatch'] = true;
+                        }
                         $existing_count++;
-                        continue;
+                        break;
                     }
-                }
-                // Fallback: match by name (case-insensitive)
-                $stmt = $db->prepare("SELECT * FROM `{$table}` WHERE LOWER(name) = LOWER(?) LIMIT 1");
-                $stmt->execute([trim($item['name'])]);
-                $existing = $stmt->fetch();
-                if ($existing) {
-                    $item['existing'] = $existing;
-                    $existing_count++;
                 }
             }
             unset($item);
@@ -1301,7 +1390,6 @@ if (isset($_POST['parse']) && isset($_FILES['gmaps_file'])) {
 
         $parsed = [
             'search_query' => $search_query,
-            'import_type' => $import_type,
             'auto_approved' => $auto_approved,
             'needs_review' => $needs_review,
             'rejected' => $rejected,
@@ -1430,13 +1518,6 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
     <form method="POST" enctype="multipart/form-data">
         <div class="form-row">
             <div class="form-group">
-                <label>Import As</label>
-                <select name="import_type" style="min-width:140px;">
-                    <option value="provider" <?= ($_POST['import_type'] ?? 'provider') === 'provider' ? 'selected' : '' ?>>Provider</option>
-                    <option value="developer" <?= ($_POST['import_type'] ?? '') === 'developer' ? 'selected' : '' ?>>Developer</option>
-                </select>
-            </div>
-            <div class="form-group">
                 <label>Google Maps HTML File</label>
                 <input type="file" name="gmaps_file" accept=".html,.htm" required>
             </div>
@@ -1465,7 +1546,7 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
 <?php if ($parsed): ?>
 <!-- PARSE RESULTS -->
 <div class="card">
-    <h2>Parse Results: "<?= htmlspecialchars($parsed['search_query']) ?>" <span style="font-size:0.8rem;font-weight:400;color:#666;">— importing as <?= $parsed['import_type'] === 'developer' ? 'Developer' : 'Provider' ?></span></h2>
+    <h2>Parse Results: "<?= htmlspecialchars($parsed['search_query']) ?>" <span style="font-size:0.8rem;font-weight:400;color:#666;">— auto-detected types per item</span></h2>
 
     <div class="stats">
         <div class="stat stat-blue">
@@ -1496,7 +1577,6 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
 <!-- SAVE FORM -->
 <form method="POST" id="saveForm">
     <input type="hidden" name="save_to_db" value="1">
-    <input type="hidden" name="import_type" value="<?= htmlspecialchars($parsed['import_type'] ?? 'provider') ?>">
 
 <?php
     // Build flat category list for dropdown
@@ -1529,14 +1609,12 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
                 <th style="width:40px;">✓</th>
                 <th>Photo</th>
                 <th>Name</th>
+                <th>Type</th>
                 <th>Status</th>
                 <th>Rating</th>
                 <th>Links</th>
                 <th>Maps Category</th>
-                <?php if (($parsed['import_type'] ?? 'provider') === 'provider'): ?>
                 <th>Our Category</th>
-                <th>Match</th>
-                <?php endif; ?>
                 <th>Short Description</th>
                 <th>Socials</th>
                 <th>Address</th>
@@ -1571,7 +1649,8 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
                 $new_desc = trim($item['profile_description'] ?? '');
                 if ($new_desc && $ex_desc !== $new_desc)
                     $diffs['description'] = $ex_desc;
-                if (($parsed['import_type'] ?? 'provider') === 'provider') {
+                $ex_table = $item['existing_table'] ?? '';
+                if ($ex_table === 'provider') {
                     $ex_cat = $ex['category_key'] ?? '';
                     if ($ck && $ex_cat && $ex_cat !== $ck)
                         $diffs['category'] = $ex_cat;
@@ -1618,8 +1697,19 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
                     <?php endif; ?>
                 </td>
                 <td style="white-space:nowrap;">
+                    <?php $det_type = $item['detected_type'] ?? 'provider'; ?>
+                    <select class="small-select" name="items[<?= $idx ?>][item_type]" style="width:90px;font-size:0.75rem;" onchange="toggleTypeFields(this, <?= $idx ?>)">
+                        <option value="provider" <?= $det_type==='provider'?'selected':'' ?>>Provider</option>
+                        <option value="developer" <?= $det_type==='developer'?'selected':'' ?>>Developer</option>
+                        <option value="agent" <?= $det_type==='agent'?'selected':'' ?>>Agent</option>
+                    </select>
+                    <?php if (!empty($item['existing_type_mismatch'])): ?>
+                        <br><span style="font-size:0.6rem;color:#dc2626;">⚠ exists as <?= $item['existing_table'] ?></span>
+                    <?php endif; ?>
+                </td>
+                <td style="white-space:nowrap;">
                     <?php if ($is_dup): ?>
-                        <span class="badge badge-exists">In DB</span>
+                        <span class="badge badge-exists">In DB (<?= $item['existing_table'] ?? '?' ?>)</span>
                         <?php if (!empty($diffs)): ?>
                             <br><span style="font-size:0.65rem;color:#b45309;">Δ <?= implode(', ', array_keys($diffs)) ?></span>
                             <br><label style="font-size:0.68rem;cursor:pointer;color:#1d4ed8;">
@@ -1646,9 +1736,8 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
                     <?php endif; ?>
                 </td>
                 <td><span style="color:#666;font-size:0.8rem;"><?= htmlspecialchars($item['gmaps_category']) ?></span></td>
-                <?php if (($parsed['import_type'] ?? 'provider') === 'provider'): ?>
-                <td>
-                    <select class="small-select cat-multi" name="items[<?= $idx ?>][category_keys][]" multiple size="4" onchange="updateGroupMulti(this, <?= $idx ?>)">
+                <td class="cat-cell-<?= $idx ?>" <?= $det_type !== 'provider' ? 'style="opacity:0.3;"' : '' ?>>
+                    <select class="small-select cat-multi" name="items[<?= $idx ?>][category_keys][]" multiple size="3" onchange="updateGroupMulti(this, <?= $idx ?>)">
                         <?php foreach ($flat_cats as $fc): ?>
                             <option value="<?= $fc['cat_key'] ?>"
                                     data-group="<?= $fc['group_key'] ?>"
@@ -1659,11 +1748,11 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
                         <?php endforeach; ?>
                     </select>
                     <input type="hidden" name="items[<?= $idx ?>][group_key]" id="group_<?= $idx ?>" value="<?= htmlspecialchars($gk) ?>">
+                    <span class="badge badge-<?= $item['confidence'] ?>" style="margin-top:2px;display:inline-block;"><?= ucfirst($item['confidence']) ?></span>
+                    <?php if ($det_type !== 'provider'): ?>
+                        <br><span style="font-size:0.6rem;color:#999;">N/A for <?= $det_type ?></span>
+                    <?php endif; ?>
                 </td>
-                <td>
-                    <span class="badge badge-<?= $item['confidence'] ?>"><?= ucfirst($item['confidence']) ?></span>
-                </td>
-                <?php endif; ?>
                 <td>
                     <?php $short_val = !empty($item['short_description_override']) ? $item['short_description_override'] : ($item['gmaps_category'] . ' in ' . ($item['address'] ?: 'Lombok')); ?>
                     <input type="text" class="small-input editable" name="items[<?= $idx ?>][short_description]"
@@ -1730,9 +1819,10 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
                         <?php endforeach; ?>
                     </select>
                 </td>
-                <td>
-                    <?php $itype = $parsed['import_type'] ?? 'provider'; ?>
-                    <?php if ($itype === 'developer'): ?>
+                <td class="flags-cell-<?= $idx ?>">
+                    <?php if ($det_type === 'agent'): ?>
+                        <label style="font-size:0.75rem;white-space:nowrap;"><input type="checkbox" name="items[<?= $idx ?>][is_verified]" value="1"> Verified</label>
+                    <?php elseif ($det_type === 'developer'): ?>
                         <label style="font-size:0.75rem;white-space:nowrap;"><input type="checkbox" name="items[<?= $idx ?>][is_featured]" value="1"> Featured</label>
                     <?php else: ?>
                         <label style="font-size:0.75rem;white-space:nowrap;"><input type="checkbox" name="items[<?= $idx ?>][is_featured]" value="1"> Featured</label><br>
@@ -1785,17 +1875,42 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
 
 <script>
 function toggleAll(checked) {
-    document.querySelectorAll('input[type="checkbox"][name*="[selected]"]').forEach(cb => cb.checked = checked);
+    document.querySelectorAll('input[type="checkbox"][name*="[selected]"]').forEach(function(cb) { cb.checked = checked; });
 }
 function updateGroup(sel, idx) {
-    const opt = sel.options[sel.selectedIndex];
-    const gk = opt ? opt.getAttribute('data-group') || '' : '';
+    var opt = sel.options[sel.selectedIndex];
+    var gk = opt ? opt.getAttribute('data-group') || '' : '';
     document.getElementById('group_' + idx).value = gk;
 }
 function updateGroupMulti(sel, idx) {
-    const selected = Array.from(sel.selectedOptions);
-    const gk = selected.length ? (selected[0].getAttribute('data-group') || '') : '';
+    var selected = [];
+    for (var i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].selected) selected.push(sel.options[i]);
+    }
+    var gk = selected.length ? (selected[0].getAttribute('data-group') || '') : '';
     document.getElementById('group_' + idx).value = gk;
+}
+function toggleTypeFields(sel, idx) {
+    var val = sel.value;
+    var catCell = document.querySelector('.cat-cell-' + idx);
+    var flagsCell = document.querySelector('.flags-cell-' + idx);
+    // Category: only visible for providers
+    if (catCell) {
+        catCell.style.opacity = (val === 'provider') ? '1' : '0.3';
+    }
+    // Flags: rebuild based on type
+    if (flagsCell) {
+        var html = '';
+        if (val === 'agent') {
+            html = '<label style="font-size:0.75rem;white-space:nowrap;"><input type="checkbox" name="items[' + idx + '][is_verified]" value="1"> Verified</label>';
+        } else if (val === 'developer') {
+            html = '<label style="font-size:0.75rem;white-space:nowrap;"><input type="checkbox" name="items[' + idx + '][is_featured]" value="1"> Featured</label>';
+        } else {
+            html = '<label style="font-size:0.75rem;white-space:nowrap;"><input type="checkbox" name="items[' + idx + '][is_featured]" value="1"> Featured</label><br>';
+            html += '<label style="font-size:0.75rem;white-space:nowrap;"><input type="checkbox" name="items[' + idx + '][is_trusted]" value="1"> Trusted</label>';
+        }
+        flagsCell.innerHTML = html;
+    }
 }
 </script>
 
