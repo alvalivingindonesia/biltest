@@ -530,7 +530,27 @@ textarea{min-height:80px;resize:vertical}
 
 .lookup-section{margin-bottom:24px}
 .lookup-section h3{font-size:14px;margin-bottom:8px;padding-bottom:4px;border-bottom:2px solid #0c7c84}
+.sidebar-group{position:relative}
+.sidebar-sub{display:none;background:rgba(0,0,0,.15)}
+.sidebar-sub a{opacity:.8}
+.sidebar-parent{display:flex!important;justify-content:space-between;align-items:center}
+.sb-arrow{font-size:10px;transition:transform .2s}
+.sidebar-group.open .sb-arrow{transform:rotate(90deg)}
+th a:hover{text-decoration:underline!important}
 </style>
+<script>
+function toggleSidebarSub(e,id){
+    var sub=document.getElementById(id);
+    var grp=sub.parentElement;
+    if(sub.style.display==='block'){
+        // Already open — navigate to the section
+        return true;
+    }
+    e.preventDefault();
+    sub.style.display='block';
+    grp.classList.add('open');
+}
+</script>
 </head>
 <body>
 <div class="shell">
@@ -540,8 +560,22 @@ textarea{min-height:80px;resize:vertical}
     <div class="brand">Build in Lombok</div>
     <a href="?s=dashboard" class="<?= $section==='dashboard'?'active':'' ?>">Dashboard</a>
     <h2>Content</h2>
-    <a href="?s=providers" class="<?= $section==='providers'?'active':'' ?>">Providers (<?= $prov_count ?>)</a>
-    <a href="?s=developers" class="<?= $section==='developers'?'active':'' ?>">Developers (<?= $dev_count ?>)</a>
+    <div class="sidebar-group">
+        <a href="?s=providers" class="sidebar-parent <?= $section==='providers'?'active':'' ?>" onclick="toggleSidebarSub(event,'sb-providers')">Providers (<?= $prov_count ?>) <span class="sb-arrow">▸</span></a>
+        <div class="sidebar-sub" id="sb-providers" <?= $section==='providers'?'style="display:block"':'' ?>>
+            <?php foreach ($groups_list as $g): ?>
+                <a href="?s=providers&fg=<?= $g['key'] ?>" style="padding-left:32px;font-size:12px;"><?= htmlspecialchars($g['label']) ?></a>
+            <?php endforeach; ?>
+        </div>
+    </div>
+    <div class="sidebar-group">
+        <a href="?s=developers" class="sidebar-parent <?= $section==='developers'?'active':'' ?>" onclick="toggleSidebarSub(event,'sb-developers')">Developers (<?= $dev_count ?>) <span class="sb-arrow">▸</span></a>
+        <div class="sidebar-sub" id="sb-developers" <?= $section==='developers'?'style="display:block"':'' ?>>
+            <?php foreach ($cats_list as $c): ?>
+                <a href="?s=developers&fc=<?= $c['key'] ?>" style="padding-left:32px;font-size:12px;"><?= htmlspecialchars($c['label']) ?></a>
+            <?php endforeach; ?>
+        </div>
+    </div>
     <a href="?s=projects" class="<?= $section==='projects'?'active':'' ?>">Projects (<?= $proj_count ?>)</a>
     <a href="?s=guides" class="<?= $section==='guides'?'active':'' ?>">Guides (<?= $guide_count ?>)</a>
     <h2>User Management</h2>
@@ -608,6 +642,8 @@ elseif ($section === 'providers' && $action === 'list'):
     $f_cat = $_GET['fc'] ?? '';
     $f_area = $_GET['fa'] ?? '';
     $f_active = $_GET['fv'] ?? '';
+    $f_min_reviews = $_GET['fr'] ?? '';
+    $sort = $_GET['sort'] ?? 'reviews';
     $where = '1=1'; $params = [];
     if ($q) { $where .= " AND (p.name LIKE ? OR p.short_description LIKE ?)"; $params[] = "%{$q}%"; $params[] = "%{$q}%"; }
     if ($f_group) { $where .= " AND p.group_key=?"; $params[] = $f_group; }
@@ -615,9 +651,15 @@ elseif ($section === 'providers' && $action === 'list'):
     if ($f_area) { $where .= " AND p.area_key=?"; $params[] = $f_area; }
     if ($f_active === '1') { $where .= " AND p.is_active=1"; }
     elseif ($f_active === '0') { $where .= " AND p.is_active=0"; }
+    if ($f_min_reviews !== '') { $where .= " AND p.google_review_count >= ?"; $params[] = (int)$f_min_reviews; }
+    $order = match($sort) {
+        'name' => 'p.name ASC',
+        'rating' => 'p.google_rating DESC, p.google_review_count DESC',
+        default => 'p.google_review_count DESC, p.google_rating DESC',
+    };
     $stmt = $db->prepare("SELECT p.*, g.label AS grp_label, a.label AS area_label
         FROM providers p LEFT JOIN `groups` g ON g.`key`=p.group_key LEFT JOIN areas a ON a.`key`=p.area_key
-        WHERE {$where} ORDER BY p.name LIMIT 200");
+        WHERE {$where} ORDER BY {$order} LIMIT 200");
     $stmt->execute($params);
     $rows = $stmt->fetchAll();
     // Fetch categories for all listed providers
@@ -654,8 +696,10 @@ elseif ($section === 'providers' && $action === 'list'):
         <option value="1" <?= $f_active==='1'?'selected':'' ?>>Active</option>
         <option value="0" <?= $f_active==='0'?'selected':'' ?>>Inactive</option>
     </select>
+    <input type="number" name="fr" value="<?= htmlspecialchars($f_min_reviews) ?>" placeholder="Min reviews" style="width:100px;" min="0">
+    <input type="hidden" name="sort" value="<?= htmlspecialchars($sort) ?>">
     <button class="btn btn-o">Filter</button>
-    <?php if ($q || $f_group || $f_cat || $f_area || $f_active !== ''): ?><a href="?s=providers" class="btn btn-o">Clear</a><?php endif; ?>
+    <?php if ($q || $f_group || $f_cat || $f_area || $f_active !== '' || $f_min_reviews !== ''): ?><a href="?s=providers" class="btn btn-o">Clear</a><?php endif; ?>
 </form>
 <script>
 function filterCatDropdown() {
@@ -670,9 +714,21 @@ function filterCatDropdown() {
 }
 filterCatDropdown();
 </script>
+<?php
+    // Build sort URL helper — preserves current filters
+    $p_sort_params = http_build_query(array_filter(['s'=>'providers','q'=>$q,'fg'=>$f_group,'fc'=>$f_cat,'fa'=>$f_area,'fv'=>$f_active,'fr'=>$f_min_reviews], fn($v)=>$v!==''));
+    $p_sort_name_url = $p_sort_params . '&sort=name';
+    $p_sort_reviews_url = $p_sort_params . '&sort=reviews';
+    $p_sort_rating_url = $p_sort_params . '&sort=rating';
+?>
 <div class="card" style="padding:0;overflow-x:auto">
 <table>
-    <tr><th>Name</th><th>Group</th><th>Categories</th><th>Area</th><th>Rating</th><th>Active</th><th>Actions</th></tr>
+    <tr>
+        <th><a href="?<?= $p_sort_name_url ?>" style="color:inherit;text-decoration:none">Name <?= $sort==='name'?'▲':'' ?></a></th>
+        <th>Group</th><th>Categories</th><th>Area</th>
+        <th><a href="?<?= $p_sort_reviews_url ?>" style="color:inherit;text-decoration:none">Reviews <?= $sort==='reviews'?'▼':'' ?></a> / <a href="?<?= $p_sort_rating_url ?>" style="color:inherit;text-decoration:none">Rating <?= $sort==='rating'?'▼':'' ?></a></th>
+        <th>Active</th><th>Actions</th>
+    </tr>
     <?php foreach ($rows as $r): ?>
     <tr>
         <td><a href="?s=providers&a=edit&id=<?= $r['id'] ?>"><?= htmlspecialchars($r['name']) ?></a></td>
@@ -772,13 +828,21 @@ elseif ($section === 'developers' && $action === 'list'):
     $f_area = $_GET['fa'] ?? '';
     $f_cat = $_GET['fc'] ?? '';
     $f_active = $_GET['fv'] ?? '';
+    $f_min_reviews = $_GET['fr'] ?? '';
+    $sort = $_GET['sort'] ?? 'reviews';
     $where = '1=1'; $params = [];
     if ($q) { $where .= " AND (d.name LIKE ?)"; $params[] = "%{$q}%"; }
     if ($f_area) { $where .= " AND EXISTS(SELECT 1 FROM developer_areas da2 WHERE da2.developer_id=d.id AND da2.area_key=?)"; $params[] = $f_area; }
     if ($f_cat) { $where .= " AND EXISTS(SELECT 1 FROM developer_categories dc2 WHERE dc2.developer_id=d.id AND dc2.category_key=?)"; $params[] = $f_cat; }
     if ($f_active === '1') { $where .= " AND d.is_active=1"; }
     elseif ($f_active === '0') { $where .= " AND d.is_active=0"; }
-    $stmt = $db->prepare("SELECT d.* FROM developers d WHERE {$where} ORDER BY d.name LIMIT 200");
+    if ($f_min_reviews !== '') { $where .= " AND d.google_review_count >= ?"; $params[] = (int)$f_min_reviews; }
+    $order = match($sort) {
+        'name' => 'd.name ASC',
+        'rating' => 'd.google_rating DESC, d.google_review_count DESC',
+        default => 'd.google_review_count DESC, d.google_rating DESC',
+    };
+    $stmt = $db->prepare("SELECT d.* FROM developers d WHERE {$where} ORDER BY {$order} LIMIT 200");
     $stmt->execute($params);
     $rows = $stmt->fetchAll();
     // Fetch categories + areas for listed devs
@@ -814,12 +878,25 @@ elseif ($section === 'developers' && $action === 'list'):
         <option value="1" <?= $f_active==='1'?'selected':'' ?>>Active</option>
         <option value="0" <?= $f_active==='0'?'selected':'' ?>>Inactive</option>
     </select>
+    <input type="number" name="fr" value="<?= htmlspecialchars($f_min_reviews) ?>" placeholder="Min reviews" style="width:100px;" min="0">
+    <input type="hidden" name="sort" value="<?= htmlspecialchars($sort) ?>">
     <button class="btn btn-o">Filter</button>
-    <?php if ($q || $f_area || $f_cat || $f_active !== ''): ?><a href="?s=developers" class="btn btn-o">Clear</a><?php endif; ?>
+    <?php if ($q || $f_area || $f_cat || $f_active !== '' || $f_min_reviews !== ''): ?><a href="?s=developers" class="btn btn-o">Clear</a><?php endif; ?>
 </form>
+<?php
+    $d_sort_params = http_build_query(array_filter(['s'=>'developers','q'=>$q,'fc'=>$f_cat,'fa'=>$f_area,'fv'=>$f_active,'fr'=>$f_min_reviews], fn($v)=>$v!==''));
+    $d_sort_name_url = $d_sort_params . '&sort=name';
+    $d_sort_reviews_url = $d_sort_params . '&sort=reviews';
+    $d_sort_rating_url = $d_sort_params . '&sort=rating';
+?>
 <div class="card" style="padding:0;overflow-x:auto">
 <table>
-    <tr><th>Name</th><th>Categories</th><th>Areas</th><th>Rating</th><th>Phone</th><th>Active</th><th>Actions</th></tr>
+    <tr>
+        <th><a href="?<?= $d_sort_name_url ?>" style="color:inherit;text-decoration:none">Name <?= $sort==='name'?'▲':'' ?></a></th>
+        <th>Categories</th><th>Areas</th>
+        <th><a href="?<?= $d_sort_reviews_url ?>" style="color:inherit;text-decoration:none">Reviews <?= $sort==='reviews'?'▼':'' ?></a> / <a href="?<?= $d_sort_rating_url ?>" style="color:inherit;text-decoration:none">Rating <?= $sort==='rating'?'▼':'' ?></a></th>
+        <th>Phone</th><th>Active</th><th>Actions</th>
+    </tr>
     <?php foreach ($rows as $r): ?>
     <tr>
         <td><a href="?s=developers&a=edit&id=<?= $r['id'] ?>"><?= htmlspecialchars($r['name']) ?></a></td>
