@@ -652,11 +652,9 @@ elseif ($section === 'providers' && $action === 'list'):
     if ($f_active === '1') { $where .= " AND p.is_active=1"; }
     elseif ($f_active === '0') { $where .= " AND p.is_active=0"; }
     if ($f_min_reviews !== '') { $where .= " AND p.google_review_count >= ?"; $params[] = (int)$f_min_reviews; }
-    $order = match($sort) {
-        'name' => 'p.name ASC',
-        'rating' => 'p.google_rating DESC, p.google_review_count DESC',
-        default => 'p.google_review_count DESC, p.google_rating DESC',
-    };
+    if ($sort === 'name') { $order = 'p.name ASC'; }
+    elseif ($sort === 'rating') { $order = 'p.google_rating DESC, p.google_review_count DESC'; }
+    else { $order = 'p.google_review_count DESC, p.google_rating DESC'; }
     $stmt = $db->prepare("SELECT p.*, g.label AS grp_label, a.label AS area_label
         FROM providers p LEFT JOIN `groups` g ON g.`key`=p.group_key LEFT JOIN areas a ON a.`key`=p.area_key
         WHERE {$where} ORDER BY {$order} LIMIT 200");
@@ -716,7 +714,7 @@ filterCatDropdown();
 </script>
 <?php
     // Build sort URL helper — preserves current filters
-    $p_sort_params = http_build_query(array_filter(['s'=>'providers','q'=>$q,'fg'=>$f_group,'fc'=>$f_cat,'fa'=>$f_area,'fv'=>$f_active,'fr'=>$f_min_reviews], fn($v)=>$v!==''));
+    $p_sort_params = http_build_query(array_filter(['s'=>'providers','q'=>$q,'fg'=>$f_group,'fc'=>$f_cat,'fa'=>$f_area,'fv'=>$f_active,'fr'=>$f_min_reviews], function($v){ return $v!==''; }));
     $p_sort_name_url = $p_sort_params . '&sort=name';
     $p_sort_reviews_url = $p_sort_params . '&sort=reviews';
     $p_sort_rating_url = $p_sort_params . '&sort=rating';
@@ -837,11 +835,9 @@ elseif ($section === 'developers' && $action === 'list'):
     if ($f_active === '1') { $where .= " AND d.is_active=1"; }
     elseif ($f_active === '0') { $where .= " AND d.is_active=0"; }
     if ($f_min_reviews !== '') { $where .= " AND d.google_review_count >= ?"; $params[] = (int)$f_min_reviews; }
-    $order = match($sort) {
-        'name' => 'd.name ASC',
-        'rating' => 'd.google_rating DESC, d.google_review_count DESC',
-        default => 'd.google_review_count DESC, d.google_rating DESC',
-    };
+    if ($sort === 'name') { $order = 'd.name ASC'; }
+    elseif ($sort === 'rating') { $order = 'd.google_rating DESC, d.google_review_count DESC'; }
+    else { $order = 'd.google_review_count DESC, d.google_rating DESC'; }
     $stmt = $db->prepare("SELECT d.* FROM developers d WHERE {$where} ORDER BY {$order} LIMIT 200");
     $stmt->execute($params);
     $rows = $stmt->fetchAll();
@@ -884,7 +880,7 @@ elseif ($section === 'developers' && $action === 'list'):
     <?php if ($q || $f_area || $f_cat || $f_active !== '' || $f_min_reviews !== ''): ?><a href="?s=developers" class="btn btn-o">Clear</a><?php endif; ?>
 </form>
 <?php
-    $d_sort_params = http_build_query(array_filter(['s'=>'developers','q'=>$q,'fc'=>$f_cat,'fa'=>$f_area,'fv'=>$f_active,'fr'=>$f_min_reviews], fn($v)=>$v!==''));
+    $d_sort_params = http_build_query(array_filter(['s'=>'developers','q'=>$q,'fc'=>$f_cat,'fa'=>$f_area,'fv'=>$f_active,'fr'=>$f_min_reviews], function($v){ return $v!==''; }));
     $d_sort_name_url = $d_sort_params . '&sort=name';
     $d_sort_reviews_url = $d_sort_params . '&sort=reviews';
     $d_sort_rating_url = $d_sort_params . '&sort=rating';
