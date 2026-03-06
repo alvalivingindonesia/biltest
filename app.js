@@ -959,7 +959,8 @@ async function renderProviderDetail(el, slug) {
           <span>/</span>
           <span>${b.name}</span>
         </div>
-        <div style="display:flex;align-items:flex-start;gap:var(--space-4);flex-wrap:wrap;">
+        <div style="display:flex;align-items:flex-start;gap:var(--space-6);flex-wrap:wrap;">
+          ${b.profile_photo_url ? `<img src="${b.profile_photo_url}" alt="${b.name}" style="width:100px;height:100px;border-radius:var(--radius-md);object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,.12);flex-shrink:0;">` : ''}
           <div style="flex:1;min-width:0;">
             <div class="card-meta mb-3">
               <span class="badge ${getGroupBadgeClass(b.group)}">${formatGroupLabel(b.group)}</span>
@@ -1140,15 +1141,20 @@ async function renderDeveloperDetail(el, slug) {
           <span>/</span>
           <span>${dev.name}</span>
         </div>
-        <div class="card-meta mb-3">
-          ${dev.badge ? `<span class="badge badge--featured">${dev.badge}</span>` : ''}
-          ${dev.project_types.map(t => `<span class="badge badge--project-type">${formatProjectType(t)}</span>`).join('')}
-        </div>
-        <h1 class="page-title">${dev.name}</h1>
-        <div class="card-meta">
-          ${dev.areas_focus.map(a => `<span class="meta-chip">${iconMapPin()} ${formatAreaLabel(a)}</span>`).join('')}
-          <span class="meta-chip">${iconLang()} ${dev.languages.replace('Bahasa + ', '').replace(' + Other', '+')}</span>
-          ${dev.min_ticket_usd ? `<span class="meta-chip">From ${formatUSD(dev.min_ticket_usd)}</span>` : ''}
+        <div style="display:flex;align-items:flex-start;gap:var(--space-6);flex-wrap:wrap;">
+          ${dev.profile_photo_url ? `<img src="${dev.profile_photo_url}" alt="${dev.name}" style="width:100px;height:100px;border-radius:var(--radius-md);object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,.12);flex-shrink:0;">` : ''}
+          <div style="flex:1;min-width:0;">
+            <div class="card-meta mb-3">
+              ${dev.badge ? `<span class="badge badge--featured">${dev.badge}</span>` : ''}
+              ${dev.project_types.map(t => `<span class="badge badge--project-type">${formatProjectType(t)}</span>`).join('')}
+            </div>
+            <h1 class="page-title">${dev.name}</h1>
+            <div class="card-meta">
+              ${dev.areas_focus.map(a => `<span class="meta-chip">${iconMapPin()} ${formatAreaLabel(a)}</span>`).join('')}
+              <span class="meta-chip">${iconLang()} ${dev.languages.replace('Bahasa + ', '').replace(' + Other', '+')}</span>
+              ${dev.min_ticket_usd ? `<span class="meta-chip">From ${formatUSD(dev.min_ticket_usd)}</span>` : ''}
+            </div>
+          </div>
         </div>
       </div>
     </div>
