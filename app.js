@@ -702,10 +702,15 @@ function renderProviderCard(b, index = 0) {
     ? `<span class="card-rating-inline"><span class="card-rating-star">★</span> ${b.google_rating.toFixed(1)} <span class="card-rating-count">(${b.google_review_count})</span></span>`
     : '';
 
+  const photoThumb = b.profile_photo_url
+    ? `<img src="${b.profile_photo_url}" alt="" class="card-thumb" loading="lazy">`
+    : '';
+
   return `
     <article class="card card-animate" style="animation-delay: ${index * 50}ms" data-id="${b.id}">
       <div class="card-top">
         <div class="card-top-left">
+          ${photoThumb}
           <span class="card-category-label">${(b.categories && b.categories.length > 0) ? b.categories.map(c => formatCategoryLabel(c.key || c)).join(' · ') : formatCategoryLabel(b.category)}</span>
           ${badge}
         </div>

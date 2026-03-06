@@ -507,9 +507,7 @@ function scrape_website(string $url): array {
         $url = 'https://' . $url;
     }
 
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_URL => $url,
+    $curl_opts = [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_MAXREDIRS => 3,
@@ -518,7 +516,10 @@ function scrape_website(string $url): array {
         CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         CURLOPT_HTTPHEADER => ['Accept: text/html,application/xhtml+xml', 'Accept-Language: en-US,en;q=0.9,id;q=0.8'],
-    ]);
+    ];
+
+    $ch = curl_init();
+    curl_setopt_array($ch, [CURLOPT_URL => $url] + $curl_opts);
     $html = curl_exec($ch);
     $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
@@ -529,18 +530,49 @@ function scrape_website(string $url): array {
 
     $result['scraped'] = true;
 
-    // ── Extract social links ──
+    // ── Extract social links (both URL patterns in text AND href attributes) ──
     $social_patterns = [
         'instagram_url' => '#https?://(?:www\.)?instagram\.com/[a-zA-Z0-9_.]+/?#i',
         'facebook_url'  => '#https?://(?:www\.)?(?:facebook|fb)\.com/[a-zA-Z0-9_./-]+/?#i',
         'youtube_url'   => '#https?://(?:www\.)?youtube\.com/(?:c/|channel/|@)[a-zA-Z0-9_.-]+/?#i',
         'tiktok_url'    => '#https?://(?:www\.)?tiktok\.com/@[a-zA-Z0-9_.]+/?#i',
-        'linkedin_url'  => '#https?://(?:www\.)?linkedin\.com/(?:company|in)/[a-zA-Z0-9_.-]+/?#i',
+        'linkedin_url'  => '#https?://(?:www\.)?linkedin\.com/(?:company|in)/[a-zA-Z0-9_./-]+/?#i',
     ];
 
+    // Method 1: scan full HTML for social URLs (catches inline text, href, data attributes)
     foreach ($social_patterns as $key => $pattern) {
         if (preg_match($pattern, $html, $sm)) {
             $result[$key] = rtrim($sm[0], '/');
+        }
+    }
+
+    // Method 2: explicitly scan all href attributes (catches encoded/escaped URLs)
+    preg_match_all('/href=["\']([^"\']+)["\']/i', $html, $href_matches);
+    foreach ($href_matches[1] as $href) {
+        $href = html_entity_decode($href, ENT_QUOTES, 'UTF-8');
+        if (empty($result['instagram_url']) && preg_match('#instagram\.com/[a-zA-Z0-9_.]+#i', $href)) {
+            $result['instagram_url'] = (strpos($href, 'http') === 0) ? rtrim($href, '/') : 'https://' . ltrim($href, '/');
+        }
+        if (empty($result['facebook_url']) && preg_match('#(?:facebook|fb)\.com/[a-zA-Z0-9_./]+#i', $href) && strpos($href, 'sharer') === false) {
+            $result['facebook_url'] = (strpos($href, 'http') === 0) ? rtrim($href, '/') : 'https://' . ltrim($href, '/');
+        }
+        if (empty($result['youtube_url']) && preg_match('#youtube\.com/(?:c/|channel/|@)[a-zA-Z0-9_.-]+#i', $href)) {
+            $result['youtube_url'] = (strpos($href, 'http') === 0) ? rtrim($href, '/') : 'https://' . ltrim($href, '/');
+        }
+        if (empty($result['tiktok_url']) && preg_match('#tiktok\.com/@[a-zA-Z0-9_.]+#i', $href)) {
+            $result['tiktok_url'] = (strpos($href, 'http') === 0) ? rtrim($href, '/') : 'https://' . ltrim($href, '/');
+        }
+        if (empty($result['linkedin_url']) && preg_match('#linkedin\.com/(?:company|in)/[a-zA-Z0-9_.-]+#i', $href)) {
+            $result['linkedin_url'] = (strpos($href, 'http') === 0) ? rtrim($href, '/') : 'https://' . ltrim($href, '/');
+        }
+    }
+
+    // Also detect WhatsApp links from href
+    if (!isset($result['whatsapp_url'])) $result['whatsapp_url'] = '';
+    foreach ($href_matches[1] as $href) {
+        $href = html_entity_decode($href, ENT_QUOTES, 'UTF-8');
+        if (empty($result['whatsapp_url']) && preg_match('#whatsapp\.com/send\?phone=(\d+)#i', $href, $wa_m)) {
+            $result['whatsapp_url'] = '+' . $wa_m[1];
         }
     }
 
@@ -549,6 +581,62 @@ function scrape_website(string $url): array {
         $result['profile_description'] = html_entity_decode(trim($dm[1]), ENT_QUOTES, 'UTF-8');
     } elseif (preg_match('/<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']{10,500})["\']/', $html, $dm)) {
         $result['profile_description'] = html_entity_decode(trim($dm[1]), ENT_QUOTES, 'UTF-8');
+    }
+
+    // ── Extract About Us section text for richer profile descriptions ──
+    $about_text = '';
+    // Look for common about section patterns in the HTML
+    if (preg_match('/<(?:section|div|article)[^>]*(?:id|class)=["\'][^"\']*(?:about-us|about_us|about-section|about-content|aboutUs)[^"\']*["\'][^>]*>(.*?)<\/(?:section|div|article)>/si', $html, $about_m)) {
+        $about_text = strip_tags(preg_replace('/<(script|style)[^>]*>.*?<\/\1>/si', '', $about_m[1]));
+    }
+    // Also try headings: <h1-h3>About Us</h1-h3> followed by <p> tags
+    if (!$about_text && preg_match('/<h[1-3][^>]*>[^<]*(?:About\s*Us|Tentang\s*Kami|Who\s*We\s*Are|Our\s*Story)[^<]*<\/h[1-3]>\s*((?:<p[^>]*>.*?<\/p>\s*){1,4})/si', $html, $about_m)) {
+        $about_text = strip_tags($about_m[1]);
+    }
+    if ($about_text) {
+        $about_text = trim(preg_replace('/\s+/', ' ', $about_text));
+        // Use about text if it's more substantial than the meta description
+        if (strlen($about_text) > 30 && strlen($about_text) > strlen($result['profile_description'])) {
+            $result['profile_description'] = mb_substr($about_text, 0, 500);
+        }
+    }
+
+    // ── Try /about or /about-us page if no good description found ──
+    if (strlen($result['profile_description']) < 50) {
+        $parsed_url = parse_url($url);
+        $base = ($parsed_url['scheme'] ?? 'https') . '://' . ($parsed_url['host'] ?? '');
+        foreach (['/about', '/about-us', '/tentang-kami'] as $about_path) {
+            $ch2 = curl_init();
+            curl_setopt_array($ch2, [CURLOPT_URL => $base . $about_path] + $curl_opts);
+            $about_html = curl_exec($ch2);
+            $about_code = curl_getinfo($ch2, CURLINFO_HTTP_CODE);
+            curl_close($ch2);
+            if ($about_html && $about_code < 400 && strlen($about_html) > 500) {
+                // Extract paragraphs from about page
+                $cleaned = preg_replace('/<(script|style|nav|header|footer)[^>]*>.*?<\/\1>/si', '', $about_html);
+                preg_match_all('/<p[^>]*>(.{20,800}?)<\/p>/si', $cleaned, $p_matches);
+                if (!empty($p_matches[1])) {
+                    $paragraphs = array_map(function($p) { return trim(strip_tags($p)); }, $p_matches[1]);
+                    $paragraphs = array_filter($paragraphs, function($p) { return strlen($p) > 30 && !preg_match('/cookie|privacy|©|copyright/i', $p); });
+                    $combined = implode(' ', array_slice(array_values($paragraphs), 0, 3));
+                    if (strlen($combined) > strlen($result['profile_description'])) {
+                        $result['profile_description'] = mb_substr(trim($combined), 0, 500);
+                    }
+                }
+                // Also scan about page for social links we might have missed
+                preg_match_all('/href=["\']([^"\']+)["\']/i', $about_html, $about_hrefs);
+                foreach ($about_hrefs[1] as $href) {
+                    $href = html_entity_decode($href, ENT_QUOTES, 'UTF-8');
+                    if (empty($result['instagram_url']) && preg_match('#instagram\.com/[a-zA-Z0-9_.]+#i', $href))
+                        $result['instagram_url'] = (strpos($href, 'http') === 0) ? rtrim($href, '/') : 'https://' . ltrim($href, '/');
+                    if (empty($result['facebook_url']) && preg_match('#(?:facebook|fb)\.com/[a-zA-Z0-9_./]+#i', $href) && strpos($href, 'sharer') === false)
+                        $result['facebook_url'] = (strpos($href, 'http') === 0) ? rtrim($href, '/') : 'https://' . ltrim($href, '/');
+                    if (empty($result['linkedin_url']) && preg_match('#linkedin\.com/(?:company|in)/[a-zA-Z0-9_.-]+#i', $href))
+                        $result['linkedin_url'] = (strpos($href, 'http') === 0) ? rtrim($href, '/') : 'https://' . ltrim($href, '/');
+                }
+                break; // Stop after first successful about page
+            }
+        }
     }
 
     // ── Extract OG image or logo ──
@@ -1105,6 +1193,10 @@ if (isset($_POST['parse']) && isset($_FILES['gmaps_file'])) {
                         $item[$sk] = $web_data[$sk];
                     }
                 }
+                // Merge WhatsApp from website if not already set from Maps
+                if (empty($item['whatsapp']) && !empty($web_data['whatsapp_url'])) {
+                    $item['whatsapp'] = $web_data['whatsapp_url'];
+                }
                 if (!empty($web_data['profile_description'])) {
                     $item['profile_description'] = $web_data['profile_description'];
                 }
@@ -1262,6 +1354,9 @@ tr:hover { background: #fafafa; }
 input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
 .truncate { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .small-select { font-size: 0.8rem; padding: 4px 6px; max-width: 180px; }
+.cat-multi { min-width: 220px; max-width: 260px; min-height: 72px; font-size: 0.75rem; }
+.cat-multi option { padding: 2px 4px; }
+.cat-multi option:checked { background: #0c7c84; color: #fff; }
 .small-input { font-size: 0.8rem; padding: 4px 6px; width: 100%; }
 .select-all-row { padding: 8px 10px; background: #f9fafb; border-bottom: 2px solid #ddd; }
 </style>
@@ -1269,7 +1364,7 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
 <body>
 
 <div class="topbar">
-    <div><strong>Build in Lombok</strong> — Admin Import</div>
+    <div><strong>Build in Lombok</strong> — Admin Import &nbsp; <a href="console.php" style="color:#fff;opacity:0.7;font-size:0.85rem;">← Back to Console</a></div>
     <a href="?logout=1">Logout</a>
 </div>
 
@@ -1505,10 +1600,11 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
                 <td><span style="color:#666;font-size:0.8rem;"><?= htmlspecialchars($item['gmaps_category']) ?></span></td>
                 <?php if (($parsed['import_type'] ?? 'provider') === 'provider'): ?>
                 <td>
-                    <select class="small-select" name="items[<?= $idx ?>][category_keys][]" multiple size="3" style="min-width:180px;min-height:56px;" onchange="updateGroupMulti(this, <?= $idx ?>)">
+                    <select class="small-select cat-multi" name="items[<?= $idx ?>][category_keys][]" multiple size="4" onchange="updateGroupMulti(this, <?= $idx ?>)">
                         <?php foreach ($flat_cats as $fc): ?>
                             <option value="<?= $fc['cat_key'] ?>"
                                     data-group="<?= $fc['group_key'] ?>"
+                                    title="<?= htmlspecialchars($fc['group_label'] . ' → ' . $fc['cat_label']) ?>"
                                     <?= $ck === $fc['cat_key'] ? 'selected' : '' ?>>
                                 <?= $fc['group_label'] ?> → <?= $fc['cat_label'] ?>
                             </option>
