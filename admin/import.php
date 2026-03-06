@@ -593,11 +593,11 @@ function parse_gmaps_html(string $html): array {
         // Skip ad entries
         if (stripos($name, 'Why this ad') !== false) continue;
 
-        // ── Rating ──
-        if (!preg_match('/aria-label="(\d+\.\d+) stars (\d+) Reviews?"/', $chunk, $rm)) {
+        // ── Rating ── (supports EN: "4.5 stars 12 Reviews" and ID: "4,5 bintang 12 Ulasan")
+        if (!preg_match('/aria-label="([\d]+[.,]\d+)\s+(?:stars|bintang)\s+(\d+)\s+(?:Reviews?|Ulasan)"/i', $chunk, $rm)) {
             continue; // No rating = skip (we need rating for import filters)
         }
-        $rating = (float)$rm[1];
+        $rating = (float)str_replace(',', '.', $rm[1]);
         $reviews = (int)$rm[2];
 
         // ── Google Maps place URL & coordinates ──

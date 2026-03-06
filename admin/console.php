@@ -244,6 +244,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $sql .= ", `group_key`=?";
                     $params[] = $_POST['group_key'];
                 }
+                if ($table === 'areas' && isset($_POST['region_key'])) {
+                    $sql .= ", `region_key`=?";
+                    $params[] = $_POST['region_key'] ?: null;
+                }
                 $sql .= " WHERE `key`=?";
                 $params[] = $old_key;
                 $db->prepare($sql)->execute($params);
@@ -253,6 +257,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($table === 'categories') {
                     $db->prepare("INSERT INTO `{$table}` (`key`,`group_key`,`label`,`sort_order`) VALUES (?,?,?,?)")
                         ->execute([$key, $_POST['group_key'], $label, $sort]);
+                } elseif ($table === 'areas' && isset($_POST['region_key'])) {
+                    $db->prepare("INSERT INTO `{$table}` (`key`,`label`,`region_key`,`sort_order`) VALUES (?,?,?,?)")
+                        ->execute([$key, $label, $_POST['region_key'] ?: null, $sort]);
                 } else {
                     $db->prepare("INSERT INTO `{$table}` (`key`,`label`,`sort_order`) VALUES (?,?,?)")
                         ->execute([$key, $label, $sort]);
@@ -426,6 +433,7 @@ $db = get_db();
 $groups_list = $db->query("SELECT * FROM `groups` ORDER BY sort_order")->fetchAll();
 $cats_list = $db->query("SELECT * FROM categories ORDER BY group_key, sort_order")->fetchAll();
 $areas_list = $db->query("SELECT * FROM areas ORDER BY sort_order")->fetchAll();
+try { $regions_list = $db->query("SELECT * FROM area_regions ORDER BY sort_order")->fetchAll(); } catch (Exception $e) { $regions_list = []; }
 $ptypes_list = $db->query("SELECT * FROM project_types ORDER BY sort_order")->fetchAll();
 $pstatus_list = $db->query("SELECT * FROM project_statuses ORDER BY sort_order")->fetchAll();
 
@@ -1084,7 +1092,7 @@ elseif ($section === 'lookups'):
     $lookup_tables = [
         'groups' => ['title' => 'Provider Groups', 'has_group' => false, 'items' => $groups_list],
         'categories' => ['title' => 'Provider Categories', 'has_group' => true, 'items' => $cats_list],
-        'areas' => ['title' => 'Areas / Locations', 'has_group' => false, 'items' => $areas_list],
+        'areas' => ['title' => 'Areas / Locations', 'has_group' => false, 'has_region' => true, 'items' => $areas_list],
         'project_types' => ['title' => 'Project Types', 'has_group' => false, 'items' => $ptypes_list],
         'project_statuses' => ['title' => 'Project Statuses', 'has_group' => false, 'items' => $pstatus_list],
     ];
@@ -1099,7 +1107,7 @@ elseif ($section === 'lookups'):
         <a href="?s=lookups&et=<?= $tbl ?>&ek=_new#lookup-<?= $tbl ?>" class="btn btn-p btn-sm">+ Add</a>
     </div>
     <table style="margin-top:8px">
-        <tr><th>Key</th><th>Label</th><?php if ($cfg['has_group']): ?><th>Group</th><?php endif; ?><th>Sort</th><th style="width:120px">Actions</th></tr>
+        <tr><th>Key</th><th>Label</th><?php if ($cfg['has_group']): ?><th>Group</th><?php endif; ?><?php if (!empty($cfg['has_region'])): ?><th>Region</th><?php endif; ?><th>Sort</th><th style="width:120px">Actions</th></tr>
         <?php foreach ($cfg['items'] as $it): ?>
         <?php if ($edit_table === $tbl && $edit_key === $it['key']): ?>
         <tr style="background:#fffff0">
@@ -1113,6 +1121,12 @@ elseif ($section === 'lookups'):
                     <?php foreach ($groups_list as $g): ?><option value="<?= $g['key'] ?>" <?= ($it['group_key']??'')===$g['key']?'selected':'' ?>><?= htmlspecialchars($g['label']) ?></option><?php endforeach; ?>
                 </select></td>
                 <?php endif; ?>
+                <?php if (!empty($cfg['has_region'])): ?>
+                <td><select name="region_key" style="width:140px">
+                    <option value="">(none)</option>
+                    <?php foreach ($regions_list as $rg): ?><option value="<?= $rg['region_key'] ?>" <?= ($it['region_key']??'')===$rg['region_key']?'selected':'' ?>><?= htmlspecialchars($rg['label']) ?></option><?php endforeach; ?>
+                </select></td>
+                <?php endif; ?>
                 <td><input type="number" name="sort_order" value="<?= $it['sort_order'] ?>" style="width:60px"></td>
                 <td class="actions"><button class="btn btn-g btn-sm">Save</button> <a href="?s=lookups#lookup-<?= $tbl ?>" class="btn btn-o btn-sm">Cancel</a></td>
             </form>
@@ -1123,6 +1137,9 @@ elseif ($section === 'lookups'):
             <td><?= htmlspecialchars($it['label']) ?></td>
             <?php if ($cfg['has_group']): ?>
             <td><span class="badge b-blue"><?= htmlspecialchars($it['group_key'] ?? '') ?></span></td>
+            <?php endif; ?>
+            <?php if (!empty($cfg['has_region'])): ?>
+            <td><span class="badge b-blue"><?= htmlspecialchars($it['region_key'] ?? '-') ?></span></td>
             <?php endif; ?>
             <td><?= $it['sort_order'] ?></td>
             <td class="actions">
@@ -1146,6 +1163,12 @@ elseif ($section === 'lookups'):
                 <?php if ($cfg['has_group']): ?>
                 <td><select name="group_key" style="width:140px">
                     <?php foreach ($groups_list as $g): ?><option value="<?= $g['key'] ?>"><?= htmlspecialchars($g['label']) ?></option><?php endforeach; ?>
+                </select></td>
+                <?php endif; ?>
+                <?php if (!empty($cfg['has_region'])): ?>
+                <td><select name="region_key" style="width:140px">
+                    <option value="">(none)</option>
+                    <?php foreach ($regions_list as $rg): ?><option value="<?= $rg['region_key'] ?>"><?= htmlspecialchars($rg['label']) ?></option><?php endforeach; ?>
                 </select></td>
                 <?php endif; ?>
                 <td><input type="number" name="sort_order" value="99" style="width:60px"></td>
