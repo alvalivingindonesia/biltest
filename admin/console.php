@@ -361,21 +361,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // --- LISTINGS: approve ---
         elseif ($section === 'listings' && $action === 'approve_listing') {
             $lid = (int)$_POST['listing_id'];
-            $db->prepare("UPDATE property_listings SET is_approved=1, status='active' WHERE id=?")->execute([$lid]);
+            $db->prepare("UPDATE listings SET is_approved=1, status='active' WHERE id=?")->execute([$lid]);
             $msg = 'Listing approved.';
             header("Location: console.php?s=listings&msg=" . urlencode($msg)); exit;
         }
         // --- LISTINGS: reject ---
         elseif ($section === 'listings' && $action === 'reject_listing') {
             $lid = (int)$_POST['listing_id'];
-            $db->prepare("UPDATE property_listings SET is_approved=0, status='draft' WHERE id=?")->execute([$lid]);
+            $db->prepare("UPDATE listings SET is_approved=0, status='draft' WHERE id=?")->execute([$lid]);
             $msg = 'Listing rejected (set back to draft).';
             header("Location: console.php?s=listings&msg=" . urlencode($msg)); exit;
         }
         // --- LISTINGS: toggle featured ---
         elseif ($section === 'listings' && $action === 'toggle_featured') {
             $lid = (int)$_POST['listing_id'];
-            $db->prepare("UPDATE property_listings SET is_featured = NOT is_featured WHERE id=?")->execute([$lid]);
+            $db->prepare("UPDATE listings SET is_featured = NOT is_featured WHERE id=?")->execute([$lid]);
             $msg = 'Listing featured status updated.';
             header("Location: console.php?s=listings&msg=" . urlencode($msg)); exit;
         }
@@ -385,14 +385,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $new_status = $_POST['new_status'];
             $allowed_statuses = ['draft','active','under_offer','sold','expired'];
             if (!in_array($new_status, $allowed_statuses)) throw new Exception('Invalid status');
-            $db->prepare("UPDATE property_listings SET status=? WHERE id=?")->execute([$new_status, $lid]);
+            $db->prepare("UPDATE listings SET status=? WHERE id=?")->execute([$new_status, $lid]);
             $msg = 'Listing status updated to ' . $new_status . '.';
             header("Location: console.php?s=listings&msg=" . urlencode($msg)); exit;
         }
         // --- LISTINGS: delete ---
         elseif ($section === 'listings' && $action === 'delete_listing') {
             $lid = (int)$_POST['listing_id'];
-            $db->prepare("DELETE FROM property_listings WHERE id=?")->execute([$lid]);
+            $db->prepare("DELETE FROM listings WHERE id=?")->execute([$lid]);
             $msg = 'Listing deleted.';
             header("Location: console.php?s=listings&msg=" . urlencode($msg)); exit;
         }
@@ -443,8 +443,8 @@ try {
 } catch (Exception $e) { /* tables may not exist yet */ }
 try {
     $agent_count = $db->query("SELECT COUNT(*) FROM agents")->fetchColumn();
-    $listing_count = $db->query("SELECT COUNT(*) FROM property_listings")->fetchColumn();
-    $listing_pending_count = $db->query("SELECT COUNT(*) FROM property_listings WHERE is_approved=0 AND status != 'draft'")->fetchColumn();
+    $listing_count = $db->query("SELECT COUNT(*) FROM listings")->fetchColumn();
+    $listing_pending_count = $db->query("SELECT COUNT(*) FROM listings WHERE is_approved=0 AND status != 'draft'")->fetchColumn();
 } catch (Exception $e) { /* tables may not exist yet */ }
 
 ?><!DOCTYPE html>
@@ -1352,7 +1352,7 @@ elseif ($section === 'agents'):
     try {
         $stmt = $db->prepare("
             SELECT a.*, u.email,
-                (SELECT COUNT(*) FROM property_listings pl WHERE pl.agent_id=a.id) AS listings_count
+                (SELECT COUNT(*) FROM listings pl WHERE pl.agent_id=a.id) AS listings_count
             FROM agents a
             LEFT JOIN users u ON u.id = a.user_id
             WHERE {$where}
@@ -1436,8 +1436,8 @@ elseif ($section === 'listings'):
             SELECT pl.*,
                 a.display_name AS agent_name,
                 ar.label AS area_label,
-                (SELECT file_path FROM listing_images li WHERE li.listing_id=pl.id AND li.is_primary=1 LIMIT 1) AS primary_image
-            FROM property_listings pl
+                (SELECT url FROM listing_images li WHERE li.listing_id=pl.id AND li.is_primary=1 LIMIT 1) AS primary_image
+            FROM listings pl
             LEFT JOIN agents a ON a.id = pl.agent_id
             LEFT JOIN areas ar ON ar.`key` = pl.area_key
             WHERE {$where}
