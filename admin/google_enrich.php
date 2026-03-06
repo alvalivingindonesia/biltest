@@ -1,10 +1,6 @@
 <?php
 /**
  * Build in Lombok — Admin: Enrichment Tool (AJAX endpoint)
- *
- * Provides:
- *   - find_missing: DB query to list entities needing enrichment
- *   - quick_save: saves fields submitted from the client-side UI
  */
 error_reporting(0);
 ini_set('display_errors', '0');
@@ -20,10 +16,7 @@ if (empty($_SESSION['admin_auth'])) {
 
 $raw = file_get_contents('php://input');
 $input = json_decode($raw, true);
-if (!is_array($input)) {
-    $input = array();
-}
-
+if (!is_array($input)) { $input = array(); }
 $action = isset($input['action']) ? $input['action'] : '';
 
 function get_db() {
@@ -37,8 +30,19 @@ function get_db() {
     return $pdo;
 }
 
+function table_has_col($db, $table, $col) {
+    static $cache = array();
+    $key = $table . '.' . $col;
+    if (!isset($cache[$key])) {
+        $cols = $db->query("SHOW COLUMNS FROM `{$table}`")->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($cols as $c) { $cache[$table . '.' . $c] = true; }
+        if (!isset($cache[$key])) { $cache[$key] = false; }
+    }
+    return $cache[$key];
+}
+
 // ═══════════════════════════════════════════════════════════════
-// ACTION: find_missing — entities with N+ reviews but no image
+// ACTION: find_missing
 // ═══════════════════════════════════════════════════════════════
 if ($action === 'find_missing') {
     try {
@@ -46,44 +50,44 @@ if ($action === 'find_missing') {
         $db = get_db();
         $entities = array();
 
-        $rows = $db->prepare("
-            SELECT id, name, google_review_count, google_rating, website_url, google_maps_url,
-                profile_photo_url, logo_url, instagram_url, facebook_url, phone,
-                short_description, 'provider' AS entity_type
-            FROM providers
-            WHERE google_review_count >= ?
-              AND (profile_photo_url IS NULL OR profile_photo_url = '')
-              AND is_active = 1
-            ORDER BY google_review_count DESC
-        ");
-        $rows->execute(array($min_reviews));
-        foreach ($rows->fetchAll() as $r) { $entities[] = $r; }
+        // Build safe SELECT for each table — only pick columns that exist
+        $tables = array(
+            'providers'  => array('name_col' => 'name',         'type' => 'provider'),
+            'developers' => array('name_col' => 'name',         'type' => 'developer'),
+            'agents'     => array('name_col' => 'display_name', 'type' => 'agent'),
+        );
 
-        $rows = $db->prepare("
-            SELECT id, name, google_review_count, google_rating, website_url, google_maps_url,
-                profile_photo_url, logo_url, instagram_url, facebook_url, phone,
-                short_description, 'developer' AS entity_type
-            FROM developers
-            WHERE google_review_count >= ?
-              AND (profile_photo_url IS NULL OR profile_photo_url = '')
-              AND is_active = 1
-            ORDER BY google_review_count DESC
-        ");
-        $rows->execute(array($min_reviews));
-        foreach ($rows->fetchAll() as $r) { $entities[] = $r; }
+        $want_cols = array('profile_photo_url','logo_url','instagram_url','facebook_url','phone',
+                           'website_url','google_maps_url','short_description');
 
-        $rows = $db->prepare("
-            SELECT id, display_name AS name, google_review_count, google_rating, website_url, google_maps_url,
-                profile_photo_url, logo_url, instagram_url, facebook_url, phone,
-                short_description, 'agent' AS entity_type
-            FROM agents
-            WHERE google_review_count >= ?
-              AND (profile_photo_url IS NULL OR profile_photo_url = '')
-              AND is_active = 1
-            ORDER BY google_review_count DESC
-        ");
-        $rows->execute(array($min_reviews));
-        foreach ($rows->fetchAll() as $r) { $entities[] = $r; }
+        foreach ($tables as $tbl => $info) {
+            $select = "id, {$info['name_col']} AS name, google_review_count, google_rating";
+            $available = array();
+            foreach ($want_cols as $wc) {
+                if (table_has_col($db, $tbl, $wc)) {
+                    $select .= ", {$wc}";
+                    $available[] = $wc;
+                }
+            }
+            $select .= ", '{$info['type']}' AS entity_type";
+
+            $rows = $db->prepare("
+                SELECT {$select}
+                FROM {$tbl}
+                WHERE google_review_count >= ?
+                  AND (profile_photo_url IS NULL OR profile_photo_url = '')
+                  AND is_active = 1
+                ORDER BY google_review_count DESC
+            ");
+            $rows->execute(array($min_reviews));
+            foreach ($rows->fetchAll() as $r) {
+                // Fill missing cols with empty string so JS doesn't break
+                foreach ($want_cols as $wc) {
+                    if (!isset($r[$wc])) { $r[$wc] = ''; }
+                }
+                $entities[] = $r;
+            }
+        }
 
         echo json_encode(array('entities' => $entities, 'total' => count($entities)));
     } catch (Exception $ex) {
@@ -93,7 +97,7 @@ if ($action === 'find_missing') {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ACTION: quick_save — save fields for one entity
+// ACTION: quick_save
 // ═══════════════════════════════════════════════════════════════
 if ($action === 'quick_save') {
     try {
@@ -108,14 +112,10 @@ if ($action === 'quick_save') {
 
         $db = get_db();
         $table = '';
-        if ($entity_type === 'provider')  { $table = 'providers'; }
+        if ($entity_type === 'provider')      { $table = 'providers'; }
         elseif ($entity_type === 'developer') { $table = 'developers'; }
         elseif ($entity_type === 'agent')     { $table = 'agents'; }
         else { echo json_encode(array('error' => 'Invalid entity_type')); exit; }
-
-        // Validate columns exist
-        $col_check = $db->query("SHOW COLUMNS FROM `{$table}`")->fetchAll(PDO::FETCH_COLUMN);
-        $valid_cols = array_flip($col_check);
 
         $updates = array();
         $params = array();
@@ -123,8 +123,8 @@ if ($action === 'quick_save') {
         foreach ($fields as $col => $val) {
             $val = trim($val);
             if ($val === '') continue;
-            if (!isset($valid_cols[$col])) continue;
             if (!preg_match('/^[a-z_]+$/', $col)) continue;
+            if (!table_has_col($db, $table, $col)) continue;
             $updates[] = "`{$col}` = ?";
             $params[] = $val;
             $saved_fields[] = $col;
