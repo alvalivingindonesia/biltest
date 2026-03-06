@@ -173,64 +173,56 @@ function formatUSD(amount) {
   return `$${amount}`;
 }
 
+// ---- Dynamic filter data (loaded from DB) ----
+const FilterData = {
+  areas: [], groups: [], categories: [], project_types: [], project_statuses: [],
+  _loaded: false,
+  async load() {
+    if (this._loaded) return;
+    try {
+      const f = await DataLayer.getFilters();
+      this.areas = f.areas || [];
+      this.groups = f.groups || [];
+      this.categories = f.categories || [];
+      this.project_types = f.project_types || [];
+      this.project_statuses = f.project_statuses || [];
+      this._loaded = true;
+    } catch(e) { console.error('Failed to load filters:', e); }
+  },
+  labelMap(arr) {
+    const m = {}; arr.forEach(i => { m[i.key] = i.label; }); return m;
+  }
+};
+
 function formatAreaLabel(area) {
-  const labels = {
-    kuta: "Kuta", senggigi: "Senggigi", mataram: "Mataram",
-    selong_belanak: "Selong Belanak", ekas: "Ekas", other_lombok: "Other Lombok"
-  };
-  return labels[area] || area;
+  const m = FilterData.labelMap(FilterData.areas);
+  return m[area] || (area || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function formatGroupLabel(group) {
-  const labels = {
-    builders_trades: "Builders & Trades",
-    professional_services: "Professional Services",
-    specialist_contractors: "Specialist Contractors",
-    suppliers_materials: "Suppliers & Materials"
-  };
-  return labels[group] || group;
+  const m = FilterData.labelMap(FilterData.groups);
+  return m[group] || (group || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function formatCategoryLabel(cat) {
-  const labels = {
-    // Builders & Trades
-    general_contractor: "General Contractor", carpenter: "Carpenter / Joiner",
-    mason: "Mason / Concrete", roofer: "Roofer", plumber: "Plumber",
-    electrician: "Electrician", painter: "Painter / Finisher", tiler: "Tiler",
-    // Professional Services
-    architect: "Architect", interior_designer: "Interior Designer",
-    structural_engineer: "Structural Engineer", mep_engineer: "MEP Engineer",
-    civil_engineer: "Civil Engineer", quantity_surveyor: "Quantity Surveyor",
-    project_manager: "Project Manager",
-    // Specialist Contractors
-    pool_contractor: "Pool Contractor", solar_installer: "Solar / PV Installer",
-    waterproofing: "Waterproofing", glazing_contractor: "Windows & Doors",
-    metalwork_contractor: "Metalwork / Welding", hvac_contractor: "HVAC / AC",
-    landscaping_contractor: "Landscaping",
-    // Suppliers & Materials
-    building_materials_store: "Building Materials Store",
-    timber_workshop: "Timber Workshop", tiles_stone_supplier: "Tiles & Stone",
-    sanitary_supplier: "Sanitary Ware", lighting_supplier: "Lighting & Electrical",
-    sand_supplier: "Sand Supplier", gravel_supplier: "Gravel & Riverstone",
-    aggregate_supplier: "Crushed Stone / Aggregate",
-    earth_fill_supplier: "Earth Fill", topsoil_supplier: "Topsoil & Landscaping"
-  };
-  return labels[cat] || cat;
+  const m = FilterData.labelMap(FilterData.categories);
+  return m[cat] || (cat || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function formatProjectType(type) {
-  const labels = {
-    villa_complex: "Villa Complex", apartment: "Apartment",
-    land_subdivision: "Land Plot", mixed_use: "Mixed-Use", other: "Other"
-  };
-  return labels[type] || type;
+  const m = FilterData.labelMap(FilterData.project_types);
+  return m[type] || (type || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function formatProjectStatus(status) {
-  const labels = {
-    planning: "Planning", under_construction: "Under Construction", completed: "Completed"
-  };
-  return labels[status] || status;
+  const m = FilterData.labelMap(FilterData.project_statuses);
+  return m[status] || (status || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function buildFilterOptions(items, selectedValue, filterByKey, filterByValue) {
+  let list = items;
+  if (filterByKey && filterByValue) list = items.filter(i => i[filterByKey] === filterByValue);
+  return list.map(i => `<option value="${i.key}" ${selectedValue === i.key ? 'selected' : ''}>${i.label}</option>`).join('');
 }
 
 function getStatusBadgeClass(status) {
@@ -421,15 +413,17 @@ async function renderHome(el) {
   let featured = [], featuredProjects = [], homeGuides = [];
   let totalProviders = 0, totalDevelopers = 0, totalProjects = 0;
   try {
-    const [provRes, devRes, projRes, guidesData] = await Promise.all([
+    const [provRes, devRes, projRes, guidesData, _] = await Promise.all([
       DataLayer.getProviders({ featured: '1', per_page: 6 }),
-      DataLayer.getDevelopers({ per_page: 1 }),
+      DataLayer.getDevelopers({ per_page: 100 }),
       DataLayer.getProjects({ featured: '1', per_page: 4 }),
       DataLayer.getGuides(),
+      FilterData.load(),
     ]);
     featured = provRes.data;
     totalProviders = provRes.meta.total || featured.length;
     totalDevelopers = devRes.meta.total || 0;
+    _cachedDevelopers = devRes.data;
     featuredProjects = projRes.data;
     totalProjects = projRes.meta.total || featuredProjects.length;
     homeGuides = guidesData || [];
@@ -634,6 +628,7 @@ function renderProviderCard(b, index = 0) {
 // =====================================================
 
 async function renderDirectory(el, params = {}) {
+  await FilterData.load();
   const filters = {
     area: params.area || '',
     group: params.group || '',
@@ -714,49 +709,6 @@ async function renderDirectory(el, params = {}) {
     applyFiltersAndRender();
   };
 
-  const categoryTree = {
-    builders_trades: [
-      { key: 'general_contractor', label: 'General Contractor' },
-      { key: 'carpenter', label: 'Carpenter / Joiner' },
-      { key: 'mason', label: 'Mason / Concrete Worker' },
-      { key: 'roofer', label: 'Roofer' },
-      { key: 'plumber', label: 'Plumber' },
-      { key: 'electrician', label: 'Electrician' },
-      { key: 'painter', label: 'Painter / Finisher' },
-      { key: 'tiler', label: 'Tiler' },
-    ],
-    professional_services: [
-      { key: 'architect', label: 'Architect' },
-      { key: 'interior_designer', label: 'Interior Designer' },
-      { key: 'structural_engineer', label: 'Structural Engineer' },
-      { key: 'mep_engineer', label: 'MEP Engineer' },
-      { key: 'civil_engineer', label: 'Civil Engineer' },
-      { key: 'quantity_surveyor', label: 'Quantity Surveyor' },
-      { key: 'project_manager', label: 'Project / Construction Manager' },
-    ],
-    specialist_contractors: [
-      { key: 'pool_contractor', label: 'Pool Builder' },
-      { key: 'solar_installer', label: 'Solar / PV Installer' },
-      { key: 'waterproofing', label: 'Waterproofing' },
-      { key: 'glazing_contractor', label: 'Windows & Doors' },
-      { key: 'metalwork_contractor', label: 'Steel / Welding / Metalwork' },
-      { key: 'hvac_contractor', label: 'AC / HVAC' },
-      { key: 'landscaping_contractor', label: 'Landscaping' },
-    ],
-    suppliers_materials: [
-      { key: 'building_materials_store', label: 'General Building Materials' },
-      { key: 'timber_workshop', label: 'Timber & Carpentry Workshop' },
-      { key: 'tiles_stone_supplier', label: 'Tiles & Stone Finishes' },
-      { key: 'sanitary_supplier', label: 'Sanitary Ware & Plumbing Fixtures' },
-      { key: 'lighting_supplier', label: 'Lighting & Electrical Fixtures' },
-      { key: 'sand_supplier', label: 'Sand Supplier' },
-      { key: 'gravel_supplier', label: 'Gravel & Riverstone' },
-      { key: 'aggregate_supplier', label: 'Crushed Stone / Aggregate' },
-      { key: 'earth_fill_supplier', label: 'Earth Fill / Compacted Fill' },
-      { key: 'topsoil_supplier', label: 'Topsoil & Landscaping Materials' },
-    ],
-  };
-
   const activeCount = Object.entries(filters).filter(([k, v]) => k !== 'sort' && v !== '').length;
 
   el.innerHTML = `
@@ -785,35 +737,23 @@ async function renderDirectory(el, params = {}) {
                 <label class="filter-label" for="f-area">Area</label>
                 <select id="f-area" class="filter-select" onchange="updateDirectoryFilter('area', this.value)">
                   <option value="">All areas</option>
-                  <option value="kuta" ${filters.area === 'kuta' ? 'selected' : ''}>Kuta</option>
-                  <option value="senggigi" ${filters.area === 'senggigi' ? 'selected' : ''}>Senggigi</option>
-                  <option value="mataram" ${filters.area === 'mataram' ? 'selected' : ''}>Mataram</option>
-                  <option value="selong_belanak" ${filters.area === 'selong_belanak' ? 'selected' : ''}>Selong Belanak</option>
-                  <option value="ekas" ${filters.area === 'ekas' ? 'selected' : ''}>Ekas</option>
-                  <option value="other_lombok" ${filters.area === 'other_lombok' ? 'selected' : ''}>Other Lombok</option>
+                  ${buildFilterOptions(FilterData.areas, filters.area)}
                 </select>
               </div>
               <div class="filter-group">
                 <label class="filter-label" for="f-group">Group</label>
                 <select id="f-group" class="filter-select" onchange="updateGroupFilter(this.value)">
                   <option value="">All groups</option>
-                  <option value="builders_trades" ${filters.group === 'builders_trades' ? 'selected' : ''}>Builders & Trades</option>
-                  <option value="professional_services" ${filters.group === 'professional_services' ? 'selected' : ''}>Professional Services</option>
-                  <option value="specialist_contractors" ${filters.group === 'specialist_contractors' ? 'selected' : ''}>Specialist Contractors</option>
-                  <option value="suppliers_materials" ${filters.group === 'suppliers_materials' ? 'selected' : ''}>Suppliers & Materials</option>
+                  ${buildFilterOptions(FilterData.groups, filters.group)}
                 </select>
               </div>
               <div class="filter-group">
                 <label class="filter-label" for="f-category">Specialty</label>
                 <select id="f-category" class="filter-select" onchange="updateDirectoryFilter('category', this.value)">
                   <option value="">All specialties</option>
-                  ${filters.group && categoryTree[filters.group]
-                    ? categoryTree[filters.group].map(c =>
-                        `<option value="${c.key}" ${filters.category === c.key ? 'selected' : ''}>${c.label}</option>`
-                      ).join('')
-                    : Object.values(categoryTree).flat().map(c =>
-                        `<option value="${c.key}" ${filters.category === c.key ? 'selected' : ''}>${c.label}</option>`
-                      ).join('')
+                  ${filters.group
+                    ? buildFilterOptions(FilterData.categories, filters.category, 'group_key', filters.group)
+                    : buildFilterOptions(FilterData.categories, filters.category)
                   }
                 </select>
               </div>
@@ -974,7 +914,7 @@ async function renderProviderDetail(el, slug) {
             <div class="detail-card claim-cta-card">
               <div class="detail-card-title">Is this your business?</div>
               <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:0 0 var(--space-3) 0;">Claim this listing to update your information, respond to inquiries, and manage your profile.</p>
-              <button class="btn btn--primary btn--sm" onclick="${`UserAuth.user ? showClaimModal(${b.id}, '${b.name.replace(/'/g, "\\'")}'`) : showAuthModal('login')}">Claim this listing</button>
+              <button class="btn btn--primary btn--sm" onclick="UserAuth.user ? showClaimModal(${b.id}, '${b.name.replace(/'/g, "\\'")}'): showAuthModal('login')">Claim this listing</button>
             </div>
             <div class="help-cta" style="padding:var(--space-5);">
               <h3 class="help-cta-title" style="font-size:var(--text-base);">Not sure who to hire?</h3>
@@ -1131,8 +1071,11 @@ async function renderDeveloperDetail(el, slug) {
 // RENDER: PROJECT CARD
 // =====================================================
 
+// Cache for developer lookups in project cards
+let _cachedDevelopers = [];
+
 function renderProjectCard(p, index = 0) {
-  const dev = developers.find(d => d.id === p.developer_id);
+  const dev = _cachedDevelopers.find(d => d.id === p.developer_id);
   const badge = p.badge ? `<span class="card-badge">${p.badge}</span>` : '';
   const statusLabel = formatProjectStatus(p.status);
 
@@ -1182,6 +1125,7 @@ function renderProjectCard(p, index = 0) {
 // =====================================================
 
 async function renderProjects(el, params = {}) {
+  await FilterData.load();
   const filters = {
     area: params.area || '',
     project_type: params.project_type || '',
@@ -1195,6 +1139,10 @@ async function renderProjects(el, params = {}) {
     if (!grid) return;
 
     const apiParams = { per_page: 100 };
+    // Ensure developer cache is loaded for project cards
+    if (_cachedDevelopers.length === 0) {
+      try { const dr = await DataLayer.getDevelopers({ per_page: 100 }); _cachedDevelopers = dr.data; } catch(e) {}
+    }
     if (filters.area) apiParams.area = filters.area;
     if (filters.project_type) apiParams.type = filters.project_type;
     if (filters.status) apiParams.status = filters.status;
@@ -1253,30 +1201,21 @@ async function renderProjects(el, params = {}) {
                 <label class="filter-label" for="pf-area">Area</label>
                 <select id="pf-area" class="filter-select" onchange="updateProjectFilter('area', this.value)">
                   <option value="">All areas</option>
-                  <option value="kuta" ${filters.area === 'kuta' ? 'selected' : ''}>Kuta</option>
-                  <option value="selong_belanak" ${filters.area === 'selong_belanak' ? 'selected' : ''}>Selong Belanak</option>
-                  <option value="senggigi" ${filters.area === 'senggigi' ? 'selected' : ''}>Senggigi</option>
-                  <option value="ekas" ${filters.area === 'ekas' ? 'selected' : ''}>Ekas</option>
-                  <option value="mataram" ${filters.area === 'mataram' ? 'selected' : ''}>Mataram</option>
+                  ${buildFilterOptions(FilterData.areas, filters.area)}
                 </select>
               </div>
               <div class="filter-group">
                 <label class="filter-label" for="pf-type">Type</label>
                 <select id="pf-type" class="filter-select" onchange="updateProjectFilter('project_type', this.value)">
                   <option value="">All types</option>
-                  <option value="villa_complex" ${filters.project_type === 'villa_complex' ? 'selected' : ''}>Villa Complex</option>
-                  <option value="apartment" ${filters.project_type === 'apartment' ? 'selected' : ''}>Apartment</option>
-                  <option value="land_subdivision" ${filters.project_type === 'land_subdivision' ? 'selected' : ''}>Land Plot</option>
-                  <option value="mixed_use" ${filters.project_type === 'mixed_use' ? 'selected' : ''}>Mixed-Use</option>
+                  ${buildFilterOptions(FilterData.project_types, filters.project_type)}
                 </select>
               </div>
               <div class="filter-group">
                 <label class="filter-label" for="pf-status">Status</label>
                 <select id="pf-status" class="filter-select" onchange="updateProjectFilter('status', this.value)">
                   <option value="">Any status</option>
-                  <option value="planning" ${filters.status === 'planning' ? 'selected' : ''}>Planning</option>
-                  <option value="under_construction" ${filters.status === 'under_construction' ? 'selected' : ''}>Under Construction</option>
-                  <option value="completed" ${filters.status === 'completed' ? 'selected' : ''}>Completed</option>
+                  ${buildFilterOptions(FilterData.project_statuses, filters.status)}
                 </select>
               </div>
               <div class="filter-group">
