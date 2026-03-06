@@ -616,8 +616,10 @@ function handle_filters(): void {
     } catch (Exception $e) { /* table may not exist yet */ }
     $project_types = $db->query("SELECT `key`, label FROM project_types ORDER BY sort_order")->fetchAll();
     $project_statuses = $db->query("SELECT `key`, label FROM project_statuses ORDER BY sort_order")->fetchAll();
-    $listing_types = $db->query("SELECT `key`, label FROM listing_types ORDER BY sort_order")->fetchAll();
-    $land_certificate_types = $db->query("SELECT `key`, label FROM land_certificate_types ORDER BY sort_order")->fetchAll();
+    $listing_types = [];
+    try { $listing_types = $db->query("SELECT `key`, label FROM listing_types ORDER BY sort_order")->fetchAll(); } catch (Exception $e) {}
+    $land_certificate_types = [];
+    try { $land_certificate_types = $db->query("SELECT `key`, label FROM land_certificate_types ORDER BY sort_order")->fetchAll(); } catch (Exception $e) {}
 
     json_out([
         'groups' => $groups,
@@ -695,7 +697,8 @@ function handle_search(): void {
 // =============================================================
 
 function handle_listings_list(): void {
-    $db = get_db();
+    try {
+        $db = get_db();
     [$page, $per_page, $offset] = get_page_params();
 
     $where = ["l.status = 'active'", 'l.is_approved = 1'];
@@ -791,6 +794,9 @@ function handle_listings_list(): void {
     attach_tags($items, 'listing_tags', 'listing_id');
 
     json_out(paginated_response($items, $total, $page, $per_page));
+    } catch (Exception $e) {
+        json_out(paginated_response([], 0, 1, 20));
+    }
 }
 
 function handle_listing_detail(string $slug): void {

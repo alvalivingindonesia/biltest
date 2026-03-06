@@ -513,15 +513,16 @@ async function renderHome(el) {
   let featured = [], featuredProjects = [], homeGuides = [];
   let totalProviders = 0, totalDevelopers = 0, totalProjects = 0;
   try {
-    const [provRes, devRes, projRes, guidesData, _] = await Promise.all([
+    const [provRes, allProvRes, devRes, projRes, guidesData, _] = await Promise.all([
       DataLayer.getProviders({ featured: '1', per_page: 6 }),
+      DataLayer.getProviders({ per_page: 1 }),
       DataLayer.getDevelopers({ per_page: 100 }),
       DataLayer.getProjects({ featured: '1', per_page: 4 }),
       DataLayer.getGuides(),
       FilterData.load(),
     ]);
     featured = provRes.data;
-    totalProviders = provRes.meta.total || featured.length;
+    totalProviders = allProvRes.meta.total || provRes.meta.total || featured.length;
     totalDevelopers = devRes.meta.total || 0;
     _cachedDevelopers = devRes.data;
     featuredProjects = projRes.data;

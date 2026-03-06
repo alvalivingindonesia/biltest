@@ -1199,6 +1199,19 @@ if (isset($_POST['parse']) && isset($_FILES['gmaps_file'])) {
                 }
                 if (!empty($web_data['profile_description'])) {
                     $item['profile_description'] = $web_data['profile_description'];
+                    // Override short_description with first 1-2 sentences from About Us
+                    $desc = $web_data['profile_description'];
+                    // Extract first ~160 chars, break at sentence boundary
+                    if (strlen($desc) > 160) {
+                        $short = substr($desc, 0, 200);
+                        // Cut at last sentence-ending punctuation within range
+                        if (preg_match('/^(.{60,160}[.!?])\s/', $short, $sm)) {
+                            $desc = $sm[1];
+                        } else {
+                            $desc = substr($short, 0, 160) . '...';
+                        }
+                    }
+                    $item['short_description_override'] = $desc;
                 }
                 if (!empty($web_data['profile_photo_url'])) {
                     $item['profile_photo_url'] = $web_data['profile_photo_url'];
@@ -1523,6 +1536,10 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
                 $ex_website = $ex['website_url'] ?? '';
                 if ($item['website_url'] && $ex_website !== $item['website_url'])
                     $diffs['website'] = $ex_website;
+                $ex_desc = trim($ex['description'] ?? '');
+                $new_desc = trim($item['profile_description'] ?? '');
+                if ($new_desc && $ex_desc !== $new_desc)
+                    $diffs['description'] = $ex_desc;
                 if (($parsed['import_type'] ?? 'provider') === 'provider') {
                     $ex_cat = $ex['category_key'] ?? '';
                     if ($ck && $ex_cat && $ex_cat !== $ck)
@@ -1617,10 +1634,15 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
                 </td>
                 <?php endif; ?>
                 <td>
+                    <?php $short_val = !empty($item['short_description_override']) ? $item['short_description_override'] : ($item['gmaps_category'] . ' in ' . ($item['address'] ?: 'Lombok')); ?>
                     <input type="text" class="small-input editable" name="items[<?= $idx ?>][short_description]"
-                           value="<?= htmlspecialchars($item['gmaps_category'] . ' in ' . ($item['address'] ?: 'Lombok')) ?>"
+                           value="<?= htmlspecialchars($short_val) ?>"
                            style="min-width:180px;">
-                    <input type="hidden" name="items[<?= $idx ?>][description]" value="<?= htmlspecialchars($item['profile_description'] ?? '') ?>">
+                    <textarea class="small-input editable" name="items[<?= $idx ?>][description]"
+                              style="min-width:180px;min-height:48px;margin-top:3px;font-size:0.75rem;resize:vertical;" placeholder="Full description (from About Us)"><?= htmlspecialchars($item['profile_description'] ?? '') ?></textarea>
+                    <?php if (isset($diffs['description'])): ?>
+                        <span class="diff-old" style="display:block;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="<?= htmlspecialchars($diffs['description'] ?: '(empty)') ?>">was: <?= htmlspecialchars(mb_substr($diffs['description'] ?: '(empty)', 0, 40)) ?>&hellip;</span>
+                    <?php endif; ?>
                 </td>
                 <td style="white-space:nowrap;font-size:0.72rem;">
                     <?php

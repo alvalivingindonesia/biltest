@@ -545,6 +545,7 @@ textarea{min-height:80px;resize:vertical}
     <h2>Tools</h2>
     <a href="import.php">Google Maps Importer</a>
     <a href="?s=review_updates" class="<?= $section==='review_updates'?'active':'' ?>">Review Update Log</a>
+    <a href="https://biltest.roving-i.com.au" target="_blank" rel="noopener" style="opacity:.7;">🌐 View Live Site</a>
     <a href="?logout=1" style="margin-top:auto;opacity:.6">Logout</a>
 </div>
 
