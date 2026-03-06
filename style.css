@@ -749,6 +749,28 @@
   line-height: 1.5;
   white-space: nowrap;
 }
+.card-badge--trusted {
+  color: #0c7c84;
+  background: rgba(12, 124, 132, 0.1);
+}
+.card-badge--featured {
+  color: #d4604a;
+  background: rgba(212, 96, 74, 0.1);
+}
+.badge--trusted {
+  color: #0c7c84;
+  background: rgba(12, 124, 132, 0.12);
+  border: 1px solid rgba(12, 124, 132, 0.25);
+}
+.card-thumb--logo {
+  width: auto;
+  max-width: 64px;
+  height: 28px;
+  border-radius: 4px;
+  object-fit: contain;
+  background: #fff;
+  padding: 2px 4px;
+}
 
 /* Inline rating — small, text-level */
 .card-rating-inline {

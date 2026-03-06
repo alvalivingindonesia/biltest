@@ -60,14 +60,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     short_description=?, description=?, address=?, latitude=?, longitude=?,
                     google_maps_url=?, google_rating=?, google_review_count=?,
                     phone=?, whatsapp_number=?, website_url=?, languages=?,
-                    profile_photo_url=?, instagram_url=?, facebook_url=?, linkedin_url=?,
-                    is_featured=?, badge=?, is_active=? WHERE id=?")->execute([
+                    profile_photo_url=?, logo_url=?, instagram_url=?, facebook_url=?, linkedin_url=?,
+                    is_featured=?, is_trusted=?, badge=?, is_active=? WHERE id=?")->execute([
                     $data['name'], $slug, $data['group_key'], $data['area_key'],
                     $data['short_description'], $data['description'], $data['address'], $data['latitude'] ?: null, $data['longitude'] ?: null,
                     $data['google_maps_url'], $data['google_rating'] ?: null, $data['google_review_count'] ?: 0,
                     $data['phone'], $data['whatsapp_number'], $data['website_url'], $data['languages'],
-                    $data['profile_photo_url'] ?: null, $data['instagram_url'] ?: null, $data['facebook_url'] ?: null, $data['linkedin_url'] ?: null,
-                    isset($data['is_featured']) ? 1 : 0, $data['badge'] ?: null, isset($data['is_active']) ? 1 : 0, $id
+                    $data['profile_photo_url'] ?: null, $data['logo_url'] ?: null, $data['instagram_url'] ?: null, $data['facebook_url'] ?: null, $data['linkedin_url'] ?: null,
+                    isset($data['is_featured']) ? 1 : 0, isset($data['is_trusted']) ? 1 : 0, $data['badge'] ?: null, isset($data['is_active']) ? 1 : 0, $id
                 ]);
                 // Update categories (junction table)
                 $db->prepare("DELETE FROM provider_categories WHERE provider_id=?")->execute([$id]);
@@ -84,15 +84,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     short_description, description, address, latitude, longitude,
                     google_maps_url, google_rating, google_review_count,
                     phone, whatsapp_number, website_url, languages,
-                    profile_photo_url, instagram_url, facebook_url, linkedin_url,
-                    is_featured, badge, is_active)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")->execute([
+                    profile_photo_url, logo_url, instagram_url, facebook_url, linkedin_url,
+                    is_featured, is_trusted, badge, is_active)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")->execute([
                     $slug, $data['name'], $data['group_key'], ($data['categories'] ?? [''])[0] ?? '', $data['area_key'],
                     $data['short_description'], $data['description'], $data['address'], $data['latitude'] ?: null, $data['longitude'] ?: null,
                     $data['google_maps_url'], $data['google_rating'] ?: null, $data['google_review_count'] ?: 0,
                     $data['phone'], $data['whatsapp_number'], $data['website_url'], $data['languages'],
-                    $data['profile_photo_url'] ?: null, $data['instagram_url'] ?: null, $data['facebook_url'] ?: null, $data['linkedin_url'] ?: null,
-                    isset($data['is_featured']) ? 1 : 0, $data['badge'] ?: null, isset($data['is_active']) ? 1 : 0
+                    $data['profile_photo_url'] ?: null, $data['logo_url'] ?: null, $data['instagram_url'] ?: null, $data['facebook_url'] ?: null, $data['linkedin_url'] ?: null,
+                    isset($data['is_featured']) ? 1 : 0, isset($data['is_trusted']) ? 1 : 0, $data['badge'] ?: null, isset($data['is_active']) ? 1 : 0
                 ]);
                 $new_id = $db->lastInsertId();
                 // Insert categories (junction table)
@@ -113,12 +113,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $db->prepare("UPDATE developers SET name=?, slug=?, short_description=?, description=?,
                     min_ticket_usd=?, google_maps_url=?, google_rating=?, google_review_count=?,
                     phone=?, whatsapp_number=?, website_url=?, languages=?,
-                    profile_photo_url=?, instagram_url=?, facebook_url=?, linkedin_url=?,
+                    profile_photo_url=?, logo_url=?, instagram_url=?, facebook_url=?, linkedin_url=?,
                     is_featured=?, badge=?, is_active=? WHERE id=?")->execute([
                     $data['name'], $slug, $data['short_description'], $data['description'],
                     $data['min_ticket_usd'] ?: null, $data['google_maps_url'], $data['google_rating'] ?: null, $data['google_review_count'] ?: 0,
                     $data['phone'], $data['whatsapp_number'], $data['website_url'], $data['languages'],
-                    $data['profile_photo_url'] ?: null, $data['instagram_url'] ?: null, $data['facebook_url'] ?: null, $data['linkedin_url'] ?: null,
+                    $data['profile_photo_url'] ?: null, $data['logo_url'] ?: null, $data['instagram_url'] ?: null, $data['facebook_url'] ?: null, $data['linkedin_url'] ?: null,
                     isset($data['is_featured']) ? 1 : 0, $data['badge'] ?: null, isset($data['is_active']) ? 1 : 0, $id
                 ]);
                 // Update areas
@@ -140,13 +140,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $db->prepare("INSERT INTO developers (slug, name, short_description, description,
                     min_ticket_usd, google_maps_url, google_rating, google_review_count,
                     phone, whatsapp_number, website_url, languages,
-                    profile_photo_url, instagram_url, facebook_url, linkedin_url,
+                    profile_photo_url, logo_url, instagram_url, facebook_url, linkedin_url,
                     is_featured, badge, is_active)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")->execute([
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")->execute([
                     $slug, $data['name'], $data['short_description'], $data['description'],
                     $data['min_ticket_usd'] ?: null, $data['google_maps_url'], $data['google_rating'] ?: null, $data['google_review_count'] ?: 0,
                     $data['phone'], $data['whatsapp_number'], $data['website_url'], $data['languages'],
-                    $data['profile_photo_url'] ?: null, $data['instagram_url'] ?: null, $data['facebook_url'] ?: null, $data['linkedin_url'] ?: null,
+                    $data['profile_photo_url'] ?: null, $data['logo_url'] ?: null, $data['instagram_url'] ?: null, $data['facebook_url'] ?: null, $data['linkedin_url'] ?: null,
                     isset($data['is_featured']) ? 1 : 0, $data['badge'] ?: null, isset($data['is_active']) ? 1 : 0
                 ]);
                 $new_id = $db->lastInsertId();
@@ -170,22 +170,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($id) {
                 $db->prepare("UPDATE projects SET name=?, slug=?, developer_id=?, area_key=?, project_type_key=?, status_key=?,
                     min_investment_usd=?, expected_yield_range=?, timeline_summary=?,
-                    short_description=?, description=?, website_url=?, info_contact_whatsapp=?,
+                    short_description=?, description=?, website_url=?, info_contact_whatsapp=?, logo_url=?,
                     is_featured=?, badge=?, is_active=? WHERE id=?")->execute([
                     $data['name'], $slug, $data['developer_id'] ?: null, $data['area_key'], $data['project_type_key'], $data['status_key'],
                     $data['min_investment_usd'] ?: null, $data['expected_yield_range'], $data['timeline_summary'],
-                    $data['short_description'], $data['description'], $data['website_url'], $data['info_contact_whatsapp'],
+                    $data['short_description'], $data['description'], $data['website_url'], $data['info_contact_whatsapp'], $data['logo_url'] ?: null,
                     isset($data['is_featured']) ? 1 : 0, $data['badge'] ?: null, isset($data['is_active']) ? 1 : 0, $id
                 ]);
                 $msg = 'Project updated.';
             } else {
                 $db->prepare("INSERT INTO projects (slug, name, developer_id, area_key, project_type_key, status_key,
                     min_investment_usd, expected_yield_range, timeline_summary,
-                    short_description, description, website_url, info_contact_whatsapp,
-                    is_featured, badge, is_active) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")->execute([
+                    short_description, description, website_url, info_contact_whatsapp, logo_url,
+                    is_featured, badge, is_active) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")->execute([
                     $slug, $data['name'], $data['developer_id'] ?: null, $data['area_key'], $data['project_type_key'], $data['status_key'],
                     $data['min_investment_usd'] ?: null, $data['expected_yield_range'], $data['timeline_summary'],
-                    $data['short_description'], $data['description'], $data['website_url'], $data['info_contact_whatsapp'],
+                    $data['short_description'], $data['description'], $data['website_url'], $data['info_contact_whatsapp'], $data['logo_url'] ?: null,
                     isset($data['is_featured']) ? 1 : 0, $data['badge'] ?: null, isset($data['is_active']) ? 1 : 0
                 ]);
                 $msg = 'Project created.';
@@ -740,6 +740,12 @@ elseif ($section === 'providers' && ($action === 'edit' || $action === 'save')):
                 <?php if (!empty($item['profile_photo_url'])): ?><img src="<?= $v('profile_photo_url') ?>" style="width:36px;height:36px;border-radius:4px;object-fit:cover"><?php endif; ?>
             </div>
         </div>
+        <div class="fg span2"><label>Logo URL</label>
+            <div style="display:flex;gap:8px;align-items:center">
+                <input type="url" name="logo_url" value="<?= $v('logo_url') ?>" placeholder="https://... (company logo)" style="flex:1">
+                <?php if (!empty($item['logo_url'])): ?><img src="<?= $v('logo_url') ?>" style="height:36px;width:auto;border-radius:4px;object-fit:contain;background:#f5f5f5;padding:2px"><?php endif; ?>
+            </div>
+        </div>
         <div class="fg"><label>Instagram URL</label><input type="url" name="instagram_url" value="<?= $v('instagram_url') ?>" placeholder="https://instagram.com/..."></div>
         <div class="fg"><label>Facebook URL</label><input type="url" name="facebook_url" value="<?= $v('facebook_url') ?>" placeholder="https://facebook.com/..."></div>
         <div class="fg"><label>LinkedIn URL</label><input type="url" name="linkedin_url" value="<?= $v('linkedin_url') ?>" placeholder="https://linkedin.com/..."></div>
@@ -747,6 +753,7 @@ elseif ($section === 'providers' && ($action === 'edit' || $action === 'save')):
         <div class="fg">
             <label>&nbsp;</label>
             <div class="ck"><input type="checkbox" name="is_featured" <?= !empty($item['is_featured'])?'checked':'' ?>> Featured</div>
+            <div class="ck"><input type="checkbox" name="is_trusted" <?= !empty($item['is_trusted'])?'checked':'' ?>> Trusted</div>
             <div class="ck"><input type="checkbox" name="is_active" <?= ($id ? !empty($item['is_active']) : true)?'checked':'' ?>> Active</div>
         </div>
     </div>
@@ -862,6 +869,12 @@ elseif ($section === 'developers' && ($action === 'edit' || $action === 'save'))
             <div style="display:flex;gap:8px;align-items:center">
                 <input type="url" name="profile_photo_url" value="<?= $v('profile_photo_url') ?>" placeholder="https://..." style="flex:1">
                 <?php if (!empty($item['profile_photo_url'])): ?><img src="<?= $v('profile_photo_url') ?>" style="width:36px;height:36px;border-radius:4px;object-fit:cover"><?php endif; ?>
+            </div>
+        </div>
+        <div class="fg span2"><label>Logo URL</label>
+            <div style="display:flex;gap:8px;align-items:center">
+                <input type="url" name="logo_url" value="<?= $v('logo_url') ?>" placeholder="https://... (company logo)" style="flex:1">
+                <?php if (!empty($item['logo_url'])): ?><img src="<?= $v('logo_url') ?>" style="height:36px;width:auto;border-radius:4px;object-fit:contain;background:#f5f5f5;padding:2px"><?php endif; ?>
             </div>
         </div>
         <div class="fg"><label>Instagram URL</label><input type="url" name="instagram_url" value="<?= $v('instagram_url') ?>" placeholder="https://instagram.com/..."></div>
@@ -1011,6 +1024,12 @@ elseif ($section === 'projects' && ($action === 'edit' || $action === 'save')):
         <div class="fg"><label>Website</label><input type="url" name="website_url" value="<?= $v('website_url') ?>"></div>
         <div class="fg"><label>Contact WhatsApp</label><input type="text" name="info_contact_whatsapp" value="<?= $v('info_contact_whatsapp') ?>"></div>
         <div class="fg"><label>Badge</label><input type="text" name="badge" value="<?= $v('badge') ?>"></div>
+        <div class="fg span2"><label>Logo URL</label>
+            <div style="display:flex;gap:8px;align-items:center">
+                <input type="url" name="logo_url" value="<?= $v('logo_url') ?>" placeholder="https://... (project logo)" style="flex:1">
+                <?php if (!empty($item['logo_url'])): ?><img src="<?= $v('logo_url') ?>" style="height:36px;width:auto;border-radius:4px;object-fit:contain;background:#f5f5f5;padding:2px"><?php endif; ?>
+            </div>
+        </div>
         <div class="fg">
             <label>&nbsp;</label>
             <div class="ck"><input type="checkbox" name="is_featured" <?= !empty($item['is_featured'])?'checked':'' ?>> Featured</div>

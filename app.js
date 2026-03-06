@@ -531,25 +531,36 @@ async function router() {
 // =====================================================
 
 async function renderHome(el) {
-  let featured = [], featuredProjects = [], homeGuides = [];
+  let trustedProviders = [], featuredDevs = [], featuredProjects = [], homeGuides = [];
   let totalProviders = 0, totalDevelopers = 0, totalProjects = 0;
   try {
-    const [provRes, allProvRes, devRes, projRes, guidesData, _] = await Promise.all([
-      DataLayer.getProviders({ featured: '1', per_page: 6 }),
+    const [trustedRes, allProvRes, devRes, projRes, guidesData, _] = await Promise.all([
+      DataLayer.getProviders({ trusted: '1', per_page: 50 }),
       DataLayer.getProviders({ per_page: 1 }),
       DataLayer.getDevelopers({ per_page: 100 }),
       DataLayer.getProjects({ featured: '1', per_page: 4 }),
       DataLayer.getGuides(),
       FilterData.load(),
     ]);
-    featured = provRes.data;
-    totalProviders = allProvRes.meta.total || provRes.meta.total || featured.length;
+    trustedProviders = trustedRes.data;
+    totalProviders = allProvRes.meta.total || trustedRes.meta.total || trustedProviders.length;
     totalDevelopers = devRes.meta.total || 0;
     _cachedDevelopers = devRes.data;
+    featuredDevs = devRes.data.filter(d => d.is_featured);
     featuredProjects = projRes.data;
     totalProjects = projRes.meta.total || featuredProjects.length;
     homeGuides = guidesData || [];
   } catch(e) { console.error('Failed to load home data:', e); }
+
+  // Random subset: show up to 6 trusted providers, 4 featured developers
+  function shuffleAndSlice(arr, max) {
+    const shuffled = [...arr].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, max);
+  }
+  const displayTrusted = shuffleAndSlice(trustedProviders, 6);
+  const displayFeaturedDevs = shuffleAndSlice(featuredDevs, 4);
+  const totalTrusted = trustedProviders.length;
+  const totalFeaturedDevs = featuredDevs.length;
 
   el.innerHTML = `
     <!-- HERO -->
@@ -593,26 +604,48 @@ async function renderHome(el) {
 
     <hr class="section-divider">
 
-    <!-- FEATURED PROVIDERS -->
+    <!-- TRUSTED PROVIDERS -->
     <section class="section">
       <div class="container">
         <div class="section-header">
-          <div class="section-label">Featured Partners</div>
+          <div class="section-label">Trusted Providers</div>
           <h2 class="section-title">Trusted by Investors & Builders</h2>
-          <p class="section-desc">Highlighted listings with strong Google ratings and verified track records on Lombok.</p>
+          <p class="section-desc">Highlighted providers with strong Google ratings and verified track records on Lombok.</p>
         </div>
         <div class="card-grid">
-          ${featured.map((b, i) => renderProviderCard(b, i)).join('')}
+          ${displayTrusted.map((b, i) => renderProviderCard(b, i)).join('')}
         </div>
         <div style="margin-top: var(--space-6); text-align: center;">
-          <a href="#directory" class="btn btn--ghost" onclick="navigate('directory'); return false;">
-            View all ${totalProviders} providers ${iconArrowRight()}
+          <a href="#directory?trusted=1" class="btn btn--ghost" onclick="navigate('directory?trusted=1'); return false;">
+            View all ${totalTrusted} trusted providers ${iconArrowRight()}
           </a>
         </div>
       </div>
     </section>
 
     <hr class="section-divider">
+
+    <!-- FEATURED DEVELOPERS -->
+    ${displayFeaturedDevs.length > 0 ? `
+    <section class="section">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-label">Featured Developers</div>
+          <h2 class="section-title">Top Property Developers</h2>
+          <p class="section-desc">Leading developers building quality projects across Lombok.</p>
+        </div>
+        <div class="card-grid">
+          ${displayFeaturedDevs.map((d, i) => renderDeveloperCard(d, i)).join('')}
+        </div>
+        <div style="margin-top: var(--space-6); text-align: center;">
+          <a href="#developers?featured=1" class="btn btn--ghost" onclick="navigate('developers?featured=1'); return false;">
+            View all ${totalFeaturedDevs} featured developers ${iconArrowRight()}
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <hr class="section-divider">` : ''}
 
     <!-- FEATURED PROJECTS -->
     <section class="section">
@@ -719,13 +752,16 @@ function renderProviderCard(b, index = 0) {
     ? `<span class="card-badge">${renderBadge(b.badge)}</span>`
     : '';
 
+  const trustedBadge = b.is_trusted ? '<span class="card-badge card-badge--trusted">✓ Trusted</span>' : '';
+
   const langShort = b.languages.replace('Bahasa + ', '').replace('Bahasa only', 'Bahasa').replace(' + Other', '+');
   const ratingInline = b.google_rating
     ? `<span class="card-rating-inline"><span class="card-rating-star">★</span> ${b.google_rating.toFixed(1)} <span class="card-rating-count">(${b.google_review_count})</span></span>`
     : '';
 
-  const photoThumb = b.profile_photo_url
-    ? `<img src="${b.profile_photo_url}" alt="" class="card-thumb" loading="lazy">`
+  const thumbImg = b.logo_url || b.profile_photo_url;
+  const photoThumb = thumbImg
+    ? `<img src="${thumbImg}" alt="" class="card-thumb${b.logo_url ? ' card-thumb--logo' : ''}" loading="lazy">`
     : '';
 
   return `
@@ -734,7 +770,7 @@ function renderProviderCard(b, index = 0) {
         <div class="card-top-left">
           ${photoThumb}
           <span class="card-category-label">${(b.categories && b.categories.length > 0) ? b.categories.map(c => formatCategoryLabel(c.key || c)).join(' · ') : formatCategoryLabel(b.category)}</span>
-          ${badge}
+          ${trustedBadge}${badge}
         </div>
         ${ratingInline}
       </div>
@@ -770,6 +806,7 @@ async function renderDirectory(el, params = {}) {
     category: params.category || '',
     languages: params.languages || '',
     min_rating: params.min_rating || '',
+    trusted: params.trusted || '',
     sort: params.sort || 'confidence',
     search: params.search || ''
   };
@@ -790,6 +827,7 @@ async function renderDirectory(el, params = {}) {
     }
     if (filters.group) apiParams.group = filters.group;
     if (filters.category) apiParams.category = filters.category;
+    if (filters.trusted) apiParams.trusted = '1';
     if (filters.search) apiParams.q = filters.search;
     if (filters.sort === 'rating') { apiParams.sort = 'google_rating'; apiParams.dir = 'DESC'; }
     else if (filters.sort === 'alpha') { apiParams.sort = 'name'; }
@@ -811,6 +849,8 @@ async function renderDirectory(el, params = {}) {
       // Re-sort by confidence if default
       if (!filters.sort || filters.sort === 'confidence') {
         results.sort((a, b_) => {
+          if (b_.is_trusted && !a.is_trusted) return 1;
+          if (a.is_trusted && !b_.is_trusted) return -1;
           if (b_.is_featured && !a.is_featured) return 1;
           if (a.is_featured && !b_.is_featured) return -1;
           return confidenceScore(b_.google_rating, b_.google_review_count) - confidenceScore(a.google_rating, a.google_review_count);
@@ -845,7 +885,7 @@ async function renderDirectory(el, params = {}) {
 
   window.clearDirectoryFilters = function() {
     filters.area = ''; filters.group = ''; filters.category = '';
-    filters.languages = ''; filters.min_rating = ''; filters.search = '';
+    filters.languages = ''; filters.min_rating = ''; filters.search = ''; filters.trusted = '';
     el.querySelectorAll('.filter-select').forEach(s => s.value = '');
     applyFiltersAndRender();
   };
@@ -912,6 +952,13 @@ async function renderDirectory(el, params = {}) {
                   <option value="4.0" ${filters.min_rating === '4.0' ? 'selected' : ''}>4.0+ stars</option>
                   <option value="4.5" ${filters.min_rating === '4.5' ? 'selected' : ''}>4.5+ stars</option>
                   <option value="4.8" ${filters.min_rating === '4.8' ? 'selected' : ''}>4.8+ stars</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label class="filter-label" for="f-trusted">Status</label>
+                <select id="f-trusted" class="filter-select" onchange="updateDirectoryFilter('trusted', this.value)">
+                  <option value="">All providers</option>
+                  <option value="1" ${filters.trusted === '1' ? 'selected' : ''}>Trusted only</option>
                 </select>
               </div>
             </div>
@@ -981,11 +1028,12 @@ async function renderProviderDetail(el, slug) {
           <span>${b.name}</span>
         </div>
         <div style="display:flex;align-items:flex-start;gap:var(--space-6);flex-wrap:wrap;">
-          ${b.profile_photo_url ? `<img src="${b.profile_photo_url}" alt="${b.name}" style="width:100px;height:100px;border-radius:var(--radius-md);object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,.12);flex-shrink:0;">` : ''}
+          ${b.logo_url ? `<img src="${b.logo_url}" alt="${b.name}" style="height:80px;width:auto;max-width:200px;border-radius:var(--radius-md);object-fit:contain;background:#fff;padding:var(--space-2);box-shadow:0 2px 8px rgba(0,0,0,.12);flex-shrink:0;">` : (b.profile_photo_url ? `<img src="${b.profile_photo_url}" alt="${b.name}" style="width:100px;height:100px;border-radius:var(--radius-md);object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,.12);flex-shrink:0;">` : '')}
           <div style="flex:1;min-width:0;">
             <div class="card-meta mb-3">
               <span class="badge ${getGroupBadgeClass(b.group)}">${formatGroupLabel(b.group)}</span>
               <span class="badge badge--project-type">${formatCategoryLabel(b.category)}</span>
+              ${b.is_trusted ? '<span class="badge badge--trusted">✓ Trusted</span>' : ''}
               ${b.badge ? `<span class="badge badge--featured">${renderBadge(b.badge)}</span>` : ''}
             </div>
             <h1 class="page-title">${b.name}</h1>
@@ -1007,6 +1055,7 @@ async function renderProviderDetail(el, slug) {
             </div>
 
             <h2 class="detail-section-title">About</h2>
+            ${(b.logo_url && b.profile_photo_url) ? `<img src="${b.profile_photo_url}" alt="${b.name}" style="float:right;width:120px;height:120px;border-radius:var(--radius-md);object-fit:cover;margin:0 0 var(--space-4) var(--space-4);box-shadow:0 2px 8px rgba(0,0,0,.1);">` : ''}
             <p class="detail-description">${b.description_en}</p>
 
             <h2 class="detail-section-title">Specialties</h2>
@@ -1082,16 +1131,20 @@ async function renderProviderDetail(el, slug) {
 
 function renderDeveloperCard(dev, index = 0) {
   const badge = dev.badge ? `<span class="card-badge">${renderBadge(dev.badge)}</span>` : '';
+  const featuredBadge = dev.is_featured ? '<span class="card-badge card-badge--featured">★ Featured</span>' : '';
   const ratingInline = dev.google_rating
     ? `<span class="card-rating-inline"><span class="card-rating-star">★</span> ${dev.google_rating.toFixed(1)} <span class="card-rating-count">(${dev.google_review_count})</span></span>`
     : '';
   const areas = dev.areas_focus.map(a => formatAreaLabel(a)).join(', ');
+  const thumbImg = dev.logo_url || dev.profile_photo_url;
+  const devThumb = thumbImg ? `<img src="${thumbImg}" alt="" class="card-thumb${dev.logo_url ? ' card-thumb--logo' : ''}" loading="lazy">` : '';
   return `
     <article class="card card-animate" style="animation-delay:${index * 50}ms">
       <div class="card-top">
         <div class="card-top-left">
+          ${devThumb}
           <span class="card-category-label">${(dev.categories && dev.categories.length > 0) ? dev.categories.map(c => formatCategoryLabel(c.key || c)).join(' · ') : 'Developer'}</span>
-          ${badge}
+          ${featuredBadge}${badge}
         </div>
         ${ratingInline}
       </div>
@@ -1118,11 +1171,17 @@ async function renderDevelopers(el, params = {}) {
   await FilterData.load();
   let devs = [];
   try {
-    const res = await DataLayer.getDevelopers({ per_page: 100, ...params });
+    const apiParams = { per_page: 100 };
+    if (params.area) apiParams.area = params.area;
+    if (params.region) apiParams.region = params.region;
+    if (params.q) apiParams.q = params.q;
+    if (params.featured) apiParams.featured = '1';
+    const res = await DataLayer.getDevelopers(apiParams);
     devs = res.data;
   } catch(e) { console.error('Failed to load developers:', e); }
 
   const areaOptions = buildAreaOptions(params.area || '');
+  const isFeaturedFilter = params.featured === '1';
 
   el.innerHTML = `
     <div class="page-header">
@@ -1132,7 +1191,7 @@ async function renderDevelopers(el, params = {}) {
           <span>/</span>
           <span>Developers</span>
         </div>
-        <h1 class="page-title">Property Developers</h1>
+        <h1 class="page-title">${isFeaturedFilter ? 'Featured ' : ''}Property Developers</h1>
         <p class="page-desc">Active developers building villas, apartments, and land projects across Lombok.</p>
       </div>
     </div>
@@ -1143,13 +1202,20 @@ async function renderDevelopers(el, params = {}) {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
             Filters
           </button>
-          <div class="filters-body">
+          <div class="filters-body${isFeaturedFilter ? ' open' : ''}">
             <div class="filters-grid">
               <div class="filter-group">
                 <label class="filter-label">Area</label>
                 <select id="fil-dev-area" class="filter-select" aria-label="Area">
                   <option value="">All areas</option>
                   ${areaOptions}
+                </select>
+              </div>
+              <div class="filter-group">
+                <label class="filter-label">Status</label>
+                <select id="fil-dev-featured" class="filter-select" aria-label="Status">
+                  <option value="">All developers</option>
+                  <option value="1" ${isFeaturedFilter ? 'selected' : ''}>Featured only</option>
                 </select>
               </div>
               <div class="filter-group">
@@ -1169,6 +1235,7 @@ async function renderDevelopers(el, params = {}) {
 
   // Filter event listeners
   const filArea = el.querySelector('#fil-dev-area');
+  const filFeatured = el.querySelector('#fil-dev-featured');
   const filQ = el.querySelector('#fil-dev-q');
   function applyDevFilters() {
     const p = {};
@@ -1176,10 +1243,12 @@ async function renderDevelopers(el, params = {}) {
       if (filArea.value.startsWith('region:')) p.region = filArea.value.replace('region:', '');
       else p.area = filArea.value;
     }
+    if (filFeatured.value) p.featured = filFeatured.value;
     if (filQ.value) p.q = filQ.value;
     navigate('developers', p);
   }
   filArea.addEventListener('change', applyDevFilters);
+  filFeatured.addEventListener('change', applyDevFilters);
   let debounce; filQ.addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(applyDevFilters, 400); });
 
   requestAnimationFrame(() => animateCards(el));
@@ -1205,9 +1274,10 @@ async function renderDeveloperDetail(el, slug) {
           <span>${dev.name}</span>
         </div>
         <div style="display:flex;align-items:flex-start;gap:var(--space-6);flex-wrap:wrap;">
-          ${dev.profile_photo_url ? `<img src="${dev.profile_photo_url}" alt="${dev.name}" style="width:100px;height:100px;border-radius:var(--radius-md);object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,.12);flex-shrink:0;">` : ''}
+          ${dev.logo_url ? `<img src="${dev.logo_url}" alt="${dev.name}" style="height:80px;width:auto;max-width:200px;border-radius:var(--radius-md);object-fit:contain;background:#fff;padding:var(--space-2);box-shadow:0 2px 8px rgba(0,0,0,.12);flex-shrink:0;">` : (dev.profile_photo_url ? `<img src="${dev.profile_photo_url}" alt="${dev.name}" style="width:100px;height:100px;border-radius:var(--radius-md);object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,.12);flex-shrink:0;">` : '')}
           <div style="flex:1;min-width:0;">
             <div class="card-meta mb-3">
+              ${dev.is_featured ? '<span class="badge badge--featured">★ Featured</span>' : ''}
               ${dev.badge ? `<span class="badge badge--featured">${renderBadge(dev.badge)}</span>` : ''}
               ${dev.project_types.map(t => `<span class="badge badge--project-type">${formatProjectType(t)}</span>`).join('')}
             </div>
@@ -1229,6 +1299,7 @@ async function renderDeveloperDetail(el, slug) {
               ${renderGoogleRating(dev.google_rating, dev.google_review_count, 'detail')}
             </div>
             <h2 class="detail-section-title">About</h2>
+            ${(dev.logo_url && dev.profile_photo_url) ? `<img src="${dev.profile_photo_url}" alt="${dev.name}" style="float:right;width:120px;height:120px;border-radius:var(--radius-md);object-fit:cover;margin:0 0 var(--space-4) var(--space-4);box-shadow:0 2px 8px rgba(0,0,0,.1);">` : ''}
             <p class="detail-description">${dev.description_en}</p>
 
             <h2 class="detail-section-title">Focus Areas</h2>

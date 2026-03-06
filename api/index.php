@@ -265,6 +265,10 @@ function handle_providers_list(): void {
     if (isset($_GET['featured']) && $_GET['featured'] === '1') {
         $where[] = 'p.is_featured = 1';
     }
+    // Filter: trusted only
+    if (isset($_GET['trusted']) && $_GET['trusted'] === '1') {
+        $where[] = 'p.is_trusted = 1';
+    }
     // Filter: text search
     if (!empty($_GET['q'])) {
         $where[] = 'MATCH(p.name, p.short_description, p.description) AGAINST(? IN BOOLEAN MODE)';
@@ -282,7 +286,7 @@ function handle_providers_list(): void {
     $sort = get_sort_param(['name', 'google_rating', 'created_at'], 'name');
     $sort_col = "p.{$sort}";
     // Featured always first
-    $order = "p.is_featured DESC, {$sort_col} " . get_sort_dir();
+    $order = "p.is_trusted DESC, p.is_featured DESC, {$sort_col} " . get_sort_dir();
 
     // Count
     $count_stmt = $db->prepare("SELECT COUNT(*) FROM providers p WHERE {$where_sql}");
@@ -294,8 +298,8 @@ function handle_providers_list(): void {
         "SELECT p.id, p.slug, p.name, p.group_key, p.area_key,
                 p.short_description, p.address, p.google_rating, p.google_review_count,
                 p.phone, p.whatsapp_number, p.website_url, p.languages,
-                p.instagram_url, p.facebook_url, p.profile_photo_url,
-                p.is_featured, p.badge,
+                p.instagram_url, p.facebook_url, p.profile_photo_url, p.logo_url,
+                p.is_featured, p.is_trusted, p.badge,
                 g.label AS group_label, a.label AS area_label, a.region_key
          FROM providers p
          LEFT JOIN `groups` g ON g.`key` = p.group_key
@@ -393,7 +397,7 @@ function handle_developers_list(): void {
     $stmt = $db->prepare(
         "SELECT d.id, d.slug, d.name, d.short_description, d.min_ticket_usd,
                 d.google_rating, d.google_review_count, d.phone, d.whatsapp_number,
-                d.website_url, d.languages, d.is_featured, d.badge, d.profile_photo_url
+                d.website_url, d.languages, d.is_featured, d.badge, d.profile_photo_url, d.logo_url
          FROM developers d
          WHERE {$where_sql}
          ORDER BY {$order}
@@ -525,7 +529,7 @@ function handle_projects_list(): void {
     $stmt = $db->prepare(
         "SELECT p.id, p.slug, p.name, p.area_key, p.project_type_key, p.status_key,
                 p.min_investment_usd, p.expected_yield_range, p.timeline_summary,
-                p.short_description, p.info_contact_whatsapp, p.is_featured, p.badge,
+                p.short_description, p.info_contact_whatsapp, p.is_featured, p.badge, p.logo_url,
                 d.name AS developer_name, d.slug AS developer_slug,
                 a.label AS area_label, pt.label AS project_type_label, ps.label AS status_label
          FROM projects p
