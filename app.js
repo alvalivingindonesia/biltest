@@ -568,59 +568,45 @@ async function renderHome(el) {
   const totalFeaturedDevs = featuredDevs.length;
 
   el.innerHTML = `
-    <!-- HERO -->
-    <section class="hero">
-      <div class="container">
-        <div class="hero-eyebrow">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>
-          Lombok, Indonesia
+    <!-- HERO — Full bleed cinematic -->
+    <section class="hero" aria-label="Build in Lombok hero">
+      <div class="hero-bg" id="hero-bg"></div>
+      <div class="hero-overlay"></div>
+      <div class="hero-inner">
+        <div class="container">
+          <div class="hero-eyebrow">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>
+            Lombok, Indonesia
+          </div>
+          <h1 class="hero-title">Build Your Dream<br><em>in Lombok</em></h1>
+          <p class="hero-subtitle">Connect with trusted builders, architects, specialists, and developers across the island's most sought-after locations.</p>
+          <div class="hero-ctas">
+            <a href="#directory" class="hero-btn hero-btn--primary" onclick="navigate('directory'); return false;">
+              Find Builders &amp; Specialists
+            </a>
+            <a href="#developers" class="hero-btn hero-btn--ghost" onclick="navigate('developers'); return false;">
+              Explore Projects
+            </a>
+          </div>
         </div>
-        <h1 class="hero-title">Build in <em>Lombok</em></h1>
-        <p class="hero-subtitle">Connect with trusted builders, tukangs, specialists, developers, and projects across the island.</p>
-        <p class="hero-trust">Every listing shows real <strong>Google ratings and review counts</strong> — the trust signal that matters when you're making six-figure decisions.</p>
-        <div class="hero-ctas">
-          <a href="#directory" class="hero-cta-card" onclick="navigate('directory'); return false;">
-            <div class="hero-cta-icon hero-cta-icon--teal">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            </div>
-            <div class="hero-cta-title">Find Builders & Specialists</div>
-            <div class="hero-cta-desc">Browse ${totalProviders} contractors, architects, engineers, and trade specialists.</div>
-            <div class="hero-cta-arrow">Browse directory ${iconArrowRight()}</div>
-          </a>
-          <a href="#developers" class="hero-cta-card" onclick="navigate('developers'); return false;">
-            <div class="hero-cta-icon hero-cta-icon--coral">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-            </div>
-            <div class="hero-cta-title">Developers & Projects</div>
-            <div class="hero-cta-desc">Explore ${totalDevelopers} active developers and ${totalProjects} investment projects.</div>
-            <div class="hero-cta-arrow">View projects ${iconArrowRight()}</div>
-          </a>
-          <a href="#listings" class="hero-cta-card" onclick="navigate('listings'); return false;">
-            <div class="hero-cta-icon hero-cta-icon--green">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-            </div>
-            <div class="hero-cta-title">Find Land & Property</div>
-            <div class="hero-cta-desc">Browse land, villas, and investment properties listed by local agents.</div>
-            <div class="hero-cta-arrow">Browse listings ${iconArrowRight()}</div>
-          </a>
-        </div>
+      </div>
+      <div class="hero-scroll-hint" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
       </div>
     </section>
 
-    <hr class="section-divider">
-
     <!-- TRUSTED PROVIDERS -->
-    <section class="section">
+    <section class="section section-animate">
       <div class="container">
         <div class="section-header">
           <div class="section-label">Trusted Providers</div>
-          <h2 class="section-title">Trusted by Investors & Builders</h2>
+          <h2 class="section-title">Trusted by Investors &amp; Builders</h2>
           <p class="section-desc">Highlighted providers with strong Google ratings and verified track records on Lombok.</p>
         </div>
         <div class="card-grid">
           ${displayTrusted.map((b, i) => renderProviderCard(b, i)).join('')}
         </div>
-        <div style="margin-top: var(--space-6); text-align: center;">
+        <div style="margin-top: var(--space-10); text-align: center;">
           <a href="#directory?trusted=1" class="btn btn--ghost" onclick="navigate('directory?trusted=1'); return false;">
             View all ${totalTrusted} trusted providers ${iconArrowRight()}
           </a>
@@ -628,32 +614,45 @@ async function renderHome(el) {
       </div>
     </section>
 
-    <hr class="section-divider">
+    <!-- LIFESTYLE IMAGE INTERSTITIAL -->
+    <div style="
+      width:100%; height:clamp(260px, 30vw, 480px);
+      background-image: url('./images/hero-lifestyle.jpg');
+      background-size: cover;
+      background-position: center 55%;
+      position: relative;
+      overflow: hidden;
+    " role="presentation" aria-hidden="true">
+      <div style="position:absolute;inset:0;background:linear-gradient(to right, rgba(10,8,6,0.45) 0%, rgba(10,8,6,0.1) 50%, rgba(10,8,6,0.45) 100%);"></div>
+      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:2;">
+        <p style="font-family:var(--font-display);font-size:clamp(1.5rem,1rem+2.5vw,3.5rem);color:#faf8f4;letter-spacing:-0.02em;font-weight:400;text-align:center;text-shadow:0 2px 24px rgba(0,0,0,0.4);padding:0 var(--space-6);line-height:1.2;">
+          <em>Luxury builds, rooted in Lombok</em>
+        </p>
+      </div>
+    </div>
 
     <!-- FEATURED DEVELOPERS -->
     ${displayFeaturedDevs.length > 0 ? `
-    <section class="section">
+    <section class="section section-animate" style="background:var(--color-surface-offset);">
       <div class="container">
         <div class="section-header">
           <div class="section-label">Featured Developers</div>
           <h2 class="section-title">Top Property Developers</h2>
-          <p class="section-desc">Leading developers building quality projects across Lombok.</p>
+          <p class="section-desc">Leading developers building quality projects across Lombok's finest locations.</p>
         </div>
         <div class="card-grid">
           ${displayFeaturedDevs.map((d, i) => renderDeveloperCard(d, i)).join('')}
         </div>
-        <div style="margin-top: var(--space-6); text-align: center;">
+        <div style="margin-top: var(--space-10); text-align: center;">
           <a href="#developers?featured=1" class="btn btn--ghost" onclick="navigate('developers?featured=1'); return false;">
             View all ${totalFeaturedDevs} featured developers ${iconArrowRight()}
           </a>
         </div>
       </div>
-    </section>
-
-    <hr class="section-divider">` : ''}
+    </section>` : ''}
 
     <!-- FEATURED PROJECTS -->
-    <section class="section">
+    <section class="section section-animate">
       <div class="container">
         <div class="section-header">
           <div class="section-label">Investment Projects</div>
@@ -663,7 +662,7 @@ async function renderHome(el) {
         <div class="card-grid">
           ${featuredProjects.map((p, i) => renderProjectCard(p, i)).join('')}
         </div>
-        <div style="margin-top: var(--space-6); text-align: center;">
+        <div style="margin-top: var(--space-10); text-align: center;">
           <a href="#projects" class="btn btn--ghost" onclick="navigate('projects'); return false;">
             View all ${totalProjects} projects ${iconArrowRight()}
           </a>
@@ -671,39 +670,53 @@ async function renderHome(el) {
       </div>
     </section>
 
-    <hr class="section-divider">
-
-    <!-- HOW IT WORKS -->
-    <section class="section how-it-works">
+    <!-- HOW IT WORKS — Dark interstitial -->
+    <section class="section how-it-works section-animate">
       <div class="container">
         <div class="section-header">
           <div class="section-label">How It Works</div>
           <h2 class="section-title">Why Build in Lombok</h2>
+          <p class="section-desc" style="color:rgba(212,209,202,0.65);">Everything you need to plan, source, and execute your Lombok build — in one place.</p>
         </div>
         <div class="how-steps">
           <div class="how-step">
-            <div class="how-step-number">1</div>
+            <div class="how-step-number">01</div>
             <div class="how-step-title">Browse with confidence</div>
-            <p class="how-step-desc">Every listing shows real Google ratings and review counts — so you can compare providers on a shared, independent trust signal.</p>
+            <p class="how-step-desc">Every listing shows real Google ratings and review counts — compare providers on an independent, verifiable trust signal.</p>
           </div>
           <div class="how-step">
-            <div class="how-step-number">2</div>
+            <div class="how-step-number">02</div>
             <div class="how-step-title">Filter by what matters</div>
-            <p class="how-step-desc">Filter by area, speciality, language ability, and minimum rating. Find who you need, where you need them, before you make a call.</p>
+            <p class="how-step-desc">Filter by area, speciality, language, and rating. Find who you need, where you need them, before you make a single call.</p>
           </div>
           <div class="how-step">
-            <div class="how-step-number">3</div>
+            <div class="how-step-number">03</div>
             <div class="how-step-title">Connect directly</div>
-            <p class="how-step-desc">One-tap WhatsApp links on every listing. No middleman, no commission — just direct contact with the people who can build your project.</p>
+            <p class="how-step-desc">One-tap WhatsApp on every listing. No middleman, no commission — direct contact with the people who can build your vision.</p>
           </div>
         </div>
       </div>
     </section>
 
-    <hr class="section-divider">
+    <!-- CONSTRUCTION IMAGE INTERSTITIAL -->
+    <div style="
+      width:100%; height:clamp(220px, 25vw, 400px);
+      background-image: url('./images/hero-construction.jpg');
+      background-size: cover;
+      background-position: center 40%;
+      position: relative;
+      overflow: hidden;
+    " role="presentation" aria-hidden="true">
+      <div style="position:absolute;inset:0;background:rgba(10,8,6,0.5);"></div>
+      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:2;">
+        <p style="font-family:var(--font-display);font-size:clamp(1.25rem,0.8rem+2vw,2.5rem);color:#faf8f4;letter-spacing:-0.01em;font-weight:400;text-align:center;text-shadow:0 2px 20px rgba(0,0,0,0.5);padding:0 var(--space-6);">
+          From foundation to finish
+        </p>
+      </div>
+    </div>
 
     <!-- GUIDES TEASER -->
-    <section class="section">
+    <section class="section section-animate" style="background:var(--color-surface-offset);">
       <div class="container">
         <div class="section-header">
           <div class="section-label">Guides</div>
@@ -713,7 +726,7 @@ async function renderHome(el) {
         <div class="card-grid">
           ${homeGuides.slice(0, 3).map((g, i) => renderGuideCard(g, i)).join('')}
         </div>
-        <div style="margin-top: var(--space-6); text-align: center;">
+        <div style="margin-top: var(--space-10); text-align: center;">
           <a href="#guides" class="btn btn--ghost" onclick="navigate('guides'); return false;">
             All guides ${iconArrowRight()}
           </a>
@@ -721,17 +734,15 @@ async function renderHome(el) {
       </div>
     </section>
 
-    <hr class="section-divider">
-
-    <!-- HELP CTA -->
-    <section class="section">
+    <!-- HELP CTA — Dark interstitial -->
+    <section class="section section-animate">
       <div class="container container--narrow">
         <div class="help-cta">
-          <div class="help-cta-icon">
+          <div class="help-cta-icon" style="background:rgba(255,255,255,0.08);color:rgba(212,209,202,0.8);">
             ${iconWhatsApp()}
           </div>
-          <h2 class="help-cta-title">Need Help With Your Project?</h2>
-          <p class="help-cta-desc">Not sure where to start? We're building a curated advisor network. Drop your details via WhatsApp and we'll point you in the right direction.</p>
+          <h2 class="help-cta-title" style="color:#faf8f4;">Need Help With Your Project?</h2>
+          <p class="help-cta-desc" style="color:rgba(212,209,202,0.6);">Not sure where to start? Drop your details via WhatsApp and we'll point you in the right direction.</p>
           <a href="https://wa.me/628123456789" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp">
             ${iconWhatsApp()} Get in Touch on WhatsApp
           </a>
@@ -2495,6 +2506,36 @@ function animateCards(container) {
     card.classList.remove('card-animate');
     void card.offsetWidth;
     card.classList.add('card-animate');
+  });
+
+  // Initialize hero background parallax/animation
+  var heroBg = container.querySelector('#hero-bg') || document.querySelector('#hero-bg');
+  if (heroBg) {
+    requestAnimationFrame(function() {
+      heroBg.classList.add('loaded');
+    });
+  }
+
+  // Section scroll-in animations
+  initSectionAnimations(container);
+}
+
+function initSectionAnimations(container) {
+  if (!window.IntersectionObserver) return;
+  var sections = (container || document).querySelectorAll('.section-animate');
+  if (!sections.length) return;
+
+  var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+
+  sections.forEach(function(section) {
+    observer.observe(section);
   });
 }
 

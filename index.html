@@ -195,5 +195,40 @@
   <!-- ===================== APP SCRIPT ===================== -->
   <script src="./app.js"></script>
 
+  <!-- ===================== NAV SCROLL BEHAVIOR ===================== -->
+  <script>
+  (function() {
+    var header = document.querySelector('.site-header');
+    if (!header) return;
+
+    function updateNav() {
+      var page = (window.location.hash || '#home').replace('#', '').split('?')[0] || 'home';
+      var isHome = (page === 'home' || page === '');
+      var scrolled = window.scrollY > 60;
+
+      if (isHome) {
+        header.classList.remove('solid');
+        if (scrolled) {
+          header.classList.add('scrolled');
+        } else {
+          header.classList.remove('scrolled');
+        }
+      } else {
+        header.classList.remove('scrolled');
+        header.classList.add('solid');
+      }
+    }
+
+    window.addEventListener('scroll', updateNav, { passive: true });
+    window.addEventListener('hashchange', function() {
+      // Small delay to let route render
+      setTimeout(updateNav, 50);
+    });
+
+    // Initial state
+    updateNav();
+  })();
+  </script>
+
 </body>
 </html>
