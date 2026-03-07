@@ -867,91 +867,116 @@ async function renderDirectory(el, params = {}) {
 
   const activeCount = Object.entries(filters).filter(([k, v]) => k !== 'sort' && v !== '').length;
 
+  const groupHeaders = {
+    'builders_trades': {
+      title: 'Builders & Tradespeople',
+      desc: 'Skilled craftsmen bringing your architectural vision to life across Lombok.',
+      icon: '🏗️'
+    },
+    'professional_services': {
+      title: 'Professional Services',
+      desc: 'Architects, engineers, and consultants to guide every phase of your project.',
+      icon: '📐'
+    },
+    'specialist_contractors': {
+      title: 'Specialist Contractors',
+      desc: 'Pool builders, solar installers, landscaping experts — the finishing touches.',
+      icon: '✨'
+    },
+    'suppliers_materials': {
+      title: 'Materials & Suppliers',
+      desc: 'Quality building materials and trusted suppliers across Lombok.',
+      icon: '📦'
+    },
+    '': {
+      title: 'The Directory',
+      desc: 'Every contractor, specialist, and supplier you need to build in Lombok.',
+      icon: ''
+    }
+  };
+  const headerData = groupHeaders[filters.group] || groupHeaders[''];
+
   el.innerHTML = `
-    <div class="page-header">
+    <div class="dir-hero" data-group="${filters.group}">
       <div class="container">
         <div class="page-header-breadcrumb">
           <a href="#home" onclick="navigate('home');return false;">Home</a>
           <span>/</span>
           <span>Directory</span>
         </div>
-        <h1 class="page-title">Builders, Specialists & Professionals</h1>
-        <p class="page-desc">Find trusted contractors, architects, engineers, and specialist suppliers across Lombok.</p>
+        <h1 class="dir-hero-title">${headerData.title}</h1>
+        <p class="dir-hero-desc">${headerData.desc}</p>
       </div>
     </div>
     <div class="section">
       <div class="container">
         <!-- Filters -->
-        <div class="filters-bar">
-          <button class="filters-toggle-btn" onclick="this.closest('.filters-bar').querySelector('.filters-body').classList.toggle('open')">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-            Filters ${activeCount > 0 ? `<span class="badge badge--verified">${activeCount}</span>` : ''}
-          </button>
-          <div class="filters-body ${activeCount > 0 ? 'open' : ''}">
-            <div class="filters-grid">
-              <div class="filter-group">
-                <label class="filter-label" for="f-area">Area</label>
-                <select id="f-area" class="filter-select" onchange="updateDirectoryFilter('area', this.value)">
-                  <option value="">All areas</option>
-                  ${buildAreaOptions(filters.area)}
-                </select>
-              </div>
-              <div class="filter-group">
-                <label class="filter-label" for="f-group">Group</label>
-                <select id="f-group" class="filter-select" onchange="updateGroupFilter(this.value)">
+        <div class="dir-filters">
+          <div class="dir-primary-filters">
+            <div class="dir-filter-pill">
+              <label class="dir-filter-pill-label">Where in Lombok?</label>
+              <select id="f-area" class="dir-filter-pill-select" onchange="updateDirectoryFilter('area', this.value)">
+                <option value="">All Areas</option>
+                ${buildAreaOptions(filters.area)}
+              </select>
+            </div>
+            <div class="dir-filter-pill">
+              <label class="dir-filter-pill-label">What specialty?</label>
+              <select id="f-category" class="dir-filter-pill-select" onchange="updateDirectoryFilter('category', this.value)">
+                <option value="">All Specialties</option>
+                ${filters.group
+                  ? buildFilterOptions(FilterData.categories, filters.category, 'group_key', filters.group)
+                  : buildFilterOptions(FilterData.categories, filters.category)
+                }
+              </select>
+            </div>
+          </div>
+          <div class="dir-secondary-filters">
+            <button class="dir-more-btn" onclick="this.nextElementSibling.classList.toggle('open');this.classList.toggle('open')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+              More Filters
+            </button>
+            <div class="dir-more-body">
+              <div class="dir-more-grid">
+                <!-- hidden group filter to maintain functionality -->
+                <select id="f-group" class="filter-select" style="display:none" onchange="updateGroupFilter(this.value)">
                   <option value="">All groups</option>
                   ${buildFilterOptions(FilterData.groups, filters.group)}
                 </select>
+                <div class="filter-group">
+                  <label class="filter-label">Language</label>
+                  <select id="f-lang" class="filter-select" onchange="updateDirectoryFilter('languages', this.value)">
+                    <option value="">Any language</option>
+                    <option value="english" ${filters.languages === 'english' ? 'selected' : ''}>English</option>
+                    <option value="bahasa" ${filters.languages === 'bahasa' ? 'selected' : ''}>Bahasa</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label class="filter-label">Min Rating</label>
+                  <select id="f-rating" class="filter-select" onchange="updateDirectoryFilter('min_rating', this.value)">
+                    <option value="">Any</option>
+                    <option value="4.0" ${filters.min_rating === '4.0' ? 'selected' : ''}>4.0+</option>
+                    <option value="4.5" ${filters.min_rating === '4.5' ? 'selected' : ''}>4.5+</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label class="filter-label">Status</label>
+                  <select id="f-trusted" class="filter-select" onchange="updateDirectoryFilter('trusted', this.value)">
+                    <option value="">All</option>
+                    <option value="1" ${filters.trusted === '1' ? 'selected' : ''}>Trusted only</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label class="filter-label">Sort</label>
+                  <select class="filter-select" onchange="updateDirectoryFilter('sort', this.value)">
+                    <option value="confidence" ${filters.sort === 'confidence' ? 'selected' : ''}>Most Trusted</option>
+                    <option value="rating" ${filters.sort === 'rating' ? 'selected' : ''}>Highest Rated</option>
+                    <option value="review_count" ${filters.sort === 'review_count' ? 'selected' : ''}>Most Reviewed</option>
+                    <option value="alpha" ${filters.sort === 'alpha' ? 'selected' : ''}>A–Z</option>
+                  </select>
+                </div>
               </div>
-              <div class="filter-group">
-                <label class="filter-label" for="f-category">Specialty</label>
-                <select id="f-category" class="filter-select" onchange="updateDirectoryFilter('category', this.value)">
-                  <option value="">All specialties</option>
-                  ${filters.group
-                    ? buildFilterOptions(FilterData.categories, filters.category, 'group_key', filters.group)
-                    : buildFilterOptions(FilterData.categories, filters.category)
-                  }
-                </select>
-              </div>
-              <div class="filter-group">
-                <label class="filter-label" for="f-lang">Language</label>
-                <select id="f-lang" class="filter-select" onchange="updateDirectoryFilter('languages', this.value)">
-                  <option value="">Any language</option>
-                  <option value="english" ${filters.languages === 'english' ? 'selected' : ''}>English-speaking</option>
-                  <option value="bahasa" ${filters.languages === 'bahasa' ? 'selected' : ''}>Bahasa-speaking</option>
-                </select>
-              </div>
-              <div class="filter-group">
-                <label class="filter-label" for="f-rating">Min Rating</label>
-                <select id="f-rating" class="filter-select" onchange="updateDirectoryFilter('min_rating', this.value)">
-                  <option value="">Any rating</option>
-                  <option value="4.0" ${filters.min_rating === '4.0' ? 'selected' : ''}>4.0+ stars</option>
-                  <option value="4.5" ${filters.min_rating === '4.5' ? 'selected' : ''}>4.5+ stars</option>
-                  <option value="4.8" ${filters.min_rating === '4.8' ? 'selected' : ''}>4.8+ stars</option>
-                </select>
-              </div>
-              <div class="filter-group">
-                <label class="filter-label" for="f-trusted">Status</label>
-                <select id="f-trusted" class="filter-select" onchange="updateDirectoryFilter('trusted', this.value)">
-                  <option value="">All providers</option>
-                  <option value="1" ${filters.trusted === '1' ? 'selected' : ''}>Trusted only</option>
-                </select>
-              </div>
-            </div>
-            <div class="filters-footer">
-              <p class="filters-active-count">
-                ${activeCount > 0 ? `<strong>${activeCount}</strong> filter${activeCount !== 1 ? 's' : ''} active` : 'No filters active'}
-              </p>
-              <div class="sort-group">
-                <span class="sort-label">Sort:</span>
-                <select class="filter-select" style="min-height:36px;padding-top:var(--space-1);padding-bottom:var(--space-1);" onchange="updateDirectoryFilter('sort', this.value)">
-                  <option value="confidence" ${filters.sort === 'confidence' ? 'selected' : ''}>Most Trusted</option>
-                  <option value="rating" ${filters.sort === 'rating' ? 'selected' : ''}>Highest Rated</option>
-                  <option value="review_count" ${filters.sort === 'review_count' ? 'selected' : ''}>Most Reviewed</option>
-                  <option value="alpha" ${filters.sort === 'alpha' ? 'selected' : ''}>A–Z</option>
-                </select>
-              </div>
-              ${activeCount > 0 ? `<button class="btn btn--secondary btn--sm" onclick="clearDirectoryFilters()">Clear all</button>` : ''}
+              ${activeCount > 0 ? '<div style="margin-top:var(--space-3);text-align:right;"><button class="btn btn--ghost btn--sm" onclick="clearDirectoryFilters()">Clear all filters</button></div>' : ''}
             </div>
           </div>
         </div>
@@ -993,29 +1018,33 @@ async function renderProviderDetail(el, slug) {
     return;
   }
 
+  const isStore = b.group === 'suppliers_materials';
+  const groupLabel = formatGroupLabel(b.group);
+  const specialties = (b.categories && b.categories.length > 0) ? b.categories.map(c => formatCategoryLabel(c.key || c)).join(', ') : formatCategoryLabel(b.category);
+
   el.innerHTML = `
-    <div class="page-header">
+    <div class="detail-hero">
       <div class="container">
-        <div class="page-header-breadcrumb">
-          <a href="#home" onclick="navigate('home');return false;">Home</a>
+        <div class="page-header-breadcrumb" style="color:rgba(250,248,244,.6);">
+          <a href="#home" onclick="navigate('home');return false;" style="color:rgba(250,248,244,.7);">Home</a>
           <span>/</span>
-          <a href="#directory" onclick="navigate('directory');return false;">Directory</a>
+          <a href="#directory" onclick="navigate('directory');return false;" style="color:rgba(250,248,244,.7);">Directory</a>
           <span>/</span>
-          <span>${b.name}</span>
+          <span style="color:rgba(250,248,244,.5);">${b.name}</span>
         </div>
-        <div style="display:flex;align-items:flex-start;gap:var(--space-6);flex-wrap:wrap;">
-          ${b.logo_url ? `<img src="${b.logo_url}" alt="${b.name}" style="height:80px;width:auto;max-width:200px;border-radius:var(--radius-md);object-fit:contain;background:#fff;padding:var(--space-2);box-shadow:0 2px 8px rgba(0,0,0,.12);flex-shrink:0;">` : (b.profile_photo_url ? `<img src="${b.profile_photo_url}" alt="${b.name}" style="width:100px;height:100px;border-radius:var(--radius-md);object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,.12);flex-shrink:0;">` : '')}
-          <div style="flex:1;min-width:0;">
-            <div class="card-meta mb-3">
-              <span class="badge ${getGroupBadgeClass(b.group)}">${formatGroupLabel(b.group)}</span>
-              <span class="badge badge--project-type">${formatCategoryLabel(b.category)}</span>
-              ${b.is_trusted ? '<span class="badge badge--trusted">✓ Trusted</span>' : ''}
-              ${b.badge ? `<span class="badge badge--featured">${renderBadge(b.badge)}</span>` : ''}
+        <div class="detail-hero-inner">
+          ${b.logo_url ? '<img src="'+b.logo_url+'" alt="'+b.name+'" class="detail-hero-logo">' : (b.profile_photo_url ? '<img src="'+b.profile_photo_url+'" alt="'+b.name+'" class="detail-hero-photo">' : '')}
+          <div class="detail-hero-info">
+            <div class="detail-hero-badges">
+              <span class="badge badge--light">${groupLabel}</span>
+              ${b.is_trusted ? '<span class="badge badge--trusted-light">\u2713 Trusted</span>' : ''}
+              ${b.badge ? '<span class="badge badge--light">' + renderBadge(b.badge) + '</span>' : ''}
             </div>
-            <h1 class="page-title">${b.name}</h1>
-            <div class="card-meta mt-auto">
-              <span class="meta-chip">${iconMapPin()} ${formatAreaLabel(b.area)}</span>
-              <span class="meta-chip">${iconLang()} ${(b.languages || 'Bahasa').split(/[,+]+/).map(function(s){return s.trim();}).filter(Boolean).join(' · ')}</span>
+            <h1 class="detail-hero-name">${b.name}</h1>
+            <p class="detail-hero-specialty">${specialties}</p>
+            <div class="detail-hero-meta">
+              <span>${iconMapPin()} ${formatAreaLabel(b.area)}</span>
+              <span>${iconLang()} ${(b.languages || 'Bahasa').split(/[,+]+/).map(function(s){return s.trim();}).filter(Boolean).join(' \u00b7 ')}</span>
             </div>
           </div>
         </div>
@@ -1027,72 +1056,48 @@ async function renderProviderDetail(el, slug) {
           <div class="detail-main">
             <div class="detail-rating-row">
               ${renderGoogleRating(b.google_rating, b.google_review_count, 'detail')}
-              ${b.google_maps_url ? `<a href="${b.google_maps_url}" target="_blank" rel="noopener noreferrer" class="btn btn--secondary btn--sm" style="margin-left:var(--space-3);">${iconMapPin()} View on Google Maps ${iconExternalLink()}</a>` : ''}
+              ${b.google_maps_url ? '<a href="'+b.google_maps_url+'" target="_blank" rel="noopener noreferrer" class="btn btn--ghost btn--sm" style="margin-left:var(--space-3);">'+iconMapPin()+' Google Maps</a>' : ''}
             </div>
 
             <h2 class="detail-section-title">About</h2>
-            ${(b.logo_url && b.profile_photo_url) ? `<img src="${b.profile_photo_url}" alt="${b.name}" style="float:right;width:120px;height:120px;border-radius:var(--radius-md);object-fit:cover;margin:0 0 var(--space-4) var(--space-4);box-shadow:0 2px 8px rgba(0,0,0,.1);">` : ''}
             <p class="detail-description">${b.description_en}</p>
 
             <h2 class="detail-section-title">Specialties</h2>
             <div class="detail-tags mb-6">
-              ${b.tags.map(t => `<span class="tag">${t}</span>`).join('')}
+              ${b.tags.map(t => '<span class="tag">'+t+'</span>').join('')}
             </div>
 
             <h2 class="detail-section-title">Contact</h2>
             <div class="info-list mb-6">
-              ${b.address ? `<div class="info-row"><span class="info-icon">${iconMapPin()}</span><span class="info-label">Address</span><span class="info-value">${b.address}</span></div>` : ''}
-              ${b.phone ? `<div class="info-row"><span class="info-icon">${iconPhone()}</span><span class="info-label">Phone</span><span class="info-value"><a href="tel:${b.phone}">${b.phone}</a></span></div>` : ''}
-              ${b.website_url ? `<div class="info-row"><span class="info-icon">${iconGlobe()}</span><span class="info-label">Website</span><span class="info-value"><a href="${b.website_url}" target="_blank" rel="noopener noreferrer">Visit website ${iconExternalLink()}</a></span></div>` : ''}
-              ${b.google_maps_url ? `<div class="info-row"><span class="info-icon">${iconMapPin()}</span><span class="info-label">Google Maps</span><span class="info-value"><a href="${b.google_maps_url}" target="_blank" rel="noopener noreferrer">View on map ${iconExternalLink()}</a></span></div>` : ''}
+              ${b.address ? '<div class="info-row"><span class="info-icon">'+iconMapPin()+'</span><span class="info-label">Address</span><span class="info-value">'+b.address+'</span></div>' : ''}
+              ${b.phone ? '<div class="info-row"><span class="info-icon">'+iconPhone()+'</span><span class="info-label">Phone</span><span class="info-value"><a href="tel:'+b.phone+'">'+b.phone+'</a></span></div>' : ''}
+              ${b.website_url ? '<div class="info-row"><span class="info-icon">'+iconGlobe()+'</span><span class="info-label">Website</span><span class="info-value"><a href="'+b.website_url+'" target="_blank" rel="noopener noreferrer">Visit website '+iconExternalLink()+'</a></span></div>' : ''}
             </div>
             ${renderSocialLinks(b)}
-
-            <div class="card-actions">
-              ${b.whatsapp_number ? `<a href="https://wa.me/${b.whatsapp_number}" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp">${iconWhatsApp()} WhatsApp</a>` : ''}
-              ${b.phone ? `<a href="tel:${b.phone}" class="btn btn--secondary">${iconPhone()} Call</a>` : ''}
-              ${b.google_maps_url ? `<a href="${b.google_maps_url}" target="_blank" rel="noopener noreferrer" class="btn btn--secondary">${iconMapPin()} Map</a>` : ''}
-              ${renderFavBtn('provider', b.id)}
-            </div>
-
-            ${renderGoogleReviewBtn(b.google_maps_url)}
-            <button onclick="checkReviewUpdates('provider', ${b.id})" class="btn btn--ghost btn--sm" style="margin-top:var(--space-3)">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-              Check for Review Updates
-            </button>
           </div>
 
           <div class="detail-sidebar">
+            <div class="detail-card detail-card--actions">
+              ${b.whatsapp_number ? '<a href="https://wa.me/'+b.whatsapp_number+'" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--full btn--lg">'+iconWhatsApp()+' WhatsApp</a>' : ''}
+              ${b.phone ? '<a href="tel:'+b.phone+'" class="btn btn--ghost btn--full" style="margin-top:var(--space-2)">'+iconPhone()+' Call Now</a>' : ''}
+              ${b.website_url ? '<a href="'+b.website_url+'" target="_blank" rel="noopener noreferrer" class="btn btn--primary btn--full" style="margin-top:var(--space-2)">'+iconGlobe()+' Visit Website</a>' : ''}
+              ${isStore && b.tokopedia_url ? '<a href="'+b.tokopedia_url+'" target="_blank" rel="noopener noreferrer" class="btn btn--secondary btn--full" style="margin-top:var(--space-2)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg> Shop on Tokopedia</a>' : ''}
+              ${b.google_maps_url ? '<a href="'+b.google_maps_url+'" target="_blank" rel="noopener noreferrer" class="btn btn--ghost btn--full" style="margin-top:var(--space-2)">'+iconMapPin()+' View on Map</a>' : ''}
+              ${renderFavBtn('provider', b.id)}
+            </div>
             <div class="detail-card">
               <div class="detail-card-title">Quick Info</div>
               <div class="info-list">
-                <div class="info-row">
-                  <span class="info-label">Type</span>
-                  <span class="info-value">${formatGroupLabel(b.group)}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">Speciality</span>
-                  <span class="info-value">${(b.categories && b.categories.length > 0) ? b.categories.map(c => formatCategoryLabel(c.key || c)).join(', ') : formatCategoryLabel(b.category)}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">Area</span>
-                  <span class="info-value">${formatAreaLabel(b.area)}</span>
-                </div>
-                <div class="info-row">
-                  <span class="info-label">Languages</span>
-                  <span class="info-value">${(b.languages || 'Bahasa').split(/[,+]+/).map(function(s){return s.trim();}).filter(Boolean).join(', ')}</span>
-                </div>
+                <div class="info-row"><span class="info-label">Type</span><span class="info-value">${groupLabel}</span></div>
+                <div class="info-row"><span class="info-label">Speciality</span><span class="info-value">${specialties}</span></div>
+                <div class="info-row"><span class="info-label">Area</span><span class="info-value">${formatAreaLabel(b.area)}</span></div>
+                <div class="info-row"><span class="info-label">Languages</span><span class="info-value">${(b.languages || 'Bahasa').split(/[,+]+/).map(function(s){return s.trim();}).filter(Boolean).join(', ')}</span></div>
               </div>
             </div>
             <div class="detail-card claim-cta-card">
               <div class="detail-card-title">Is this your business?</div>
-              <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:0 0 var(--space-3) 0;">Claim this listing to update your information, respond to inquiries, and manage your profile.</p>
+              <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:0 0 var(--space-3) 0;">Claim this listing to update your information and manage your profile.</p>
               <button class="btn btn--primary btn--sm" onclick="UserAuth.user ? showClaimModal(${b.id}, '${b.name.replace(/'/g, "\\'")}'): showAuthModal('login')">Claim this listing</button>
-            </div>
-            <div class="help-cta" style="padding:var(--space-5);">
-              <h3 class="help-cta-title" style="font-size:var(--text-base);">Not sure who to hire?</h3>
-              <p class="help-cta-desc" style="font-size:var(--text-xs);">Our advisor network can help match you with the right specialist for your project.</p>
-              <a href="https://wa.me/628123456789" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--sm">${iconWhatsApp()} Get advice</a>
             </div>
           </div>
         </div>
@@ -1160,15 +1165,15 @@ async function renderDevelopers(el, params = {}) {
   const isFeaturedFilter = params.featured === '1';
 
   el.innerHTML = `
-    <div class="page-header">
+    <div class="dir-hero">
       <div class="container">
         <div class="page-header-breadcrumb">
           <a href="#home" onclick="navigate('home');return false;">Home</a>
           <span>/</span>
           <span>Developers</span>
         </div>
-        <h1 class="page-title">${isFeaturedFilter ? 'Featured ' : ''}Property Developers</h1>
-        <p class="page-desc">Active developers building villas, apartments, and land projects across Lombok.</p>
+        <h1 class="dir-hero-title">${isFeaturedFilter ? 'Featured ' : ''}Property Developers</h1>
+        <p class="dir-hero-desc">Active developers building villas, apartments, and land projects across Lombok.</p>
       </div>
     </div>
     <div class="section">
@@ -1240,28 +1245,29 @@ async function renderDeveloperDetail(el, slug) {
   const devProjects = dev.projects || [];
 
   el.innerHTML = `
-    <div class="page-header">
+    <div class="detail-hero">
       <div class="container">
-        <div class="page-header-breadcrumb">
-          <a href="#home" onclick="navigate('home');return false;">Home</a>
+        <div class="page-header-breadcrumb" style="color:rgba(250,248,244,.6);">
+          <a href="#home" onclick="navigate('home');return false;" style="color:rgba(250,248,244,.7);">Home</a>
           <span>/</span>
-          <a href="#developers" onclick="navigate('developers');return false;">Developers</a>
+          <a href="#developers" onclick="navigate('developers');return false;" style="color:rgba(250,248,244,.7);">Developers</a>
           <span>/</span>
-          <span>${dev.name}</span>
+          <span style="color:rgba(250,248,244,.5);">${dev.name}</span>
         </div>
-        <div style="display:flex;align-items:flex-start;gap:var(--space-6);flex-wrap:wrap;">
-          ${dev.logo_url ? `<img src="${dev.logo_url}" alt="${dev.name}" style="height:80px;width:auto;max-width:200px;border-radius:var(--radius-md);object-fit:contain;background:#fff;padding:var(--space-2);box-shadow:0 2px 8px rgba(0,0,0,.12);flex-shrink:0;">` : (dev.profile_photo_url ? `<img src="${dev.profile_photo_url}" alt="${dev.name}" style="width:100px;height:100px;border-radius:var(--radius-md);object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,.12);flex-shrink:0;">` : '')}
-          <div style="flex:1;min-width:0;">
-            <div class="card-meta mb-3">
-              ${dev.is_featured ? '<span class="badge badge--featured">★ Featured</span>' : ''}
-              ${dev.badge ? `<span class="badge badge--featured">${renderBadge(dev.badge)}</span>` : ''}
-              ${dev.project_types.map(t => `<span class="badge badge--project-type">${formatProjectType(t)}</span>`).join('')}
+        <div class="detail-hero-inner">
+          ${dev.logo_url ? '<img src="'+dev.logo_url+'" alt="'+dev.name+'" class="detail-hero-logo">' : (dev.profile_photo_url ? '<img src="'+dev.profile_photo_url+'" alt="'+dev.name+'" class="detail-hero-photo">' : '')}
+          <div class="detail-hero-info">
+            <div class="detail-hero-badges">
+              ${dev.is_featured ? '<span class="badge badge--light">\u2605 Featured</span>' : ''}
+              ${dev.badge ? '<span class="badge badge--light">' + renderBadge(dev.badge) + '</span>' : ''}
+              ${dev.project_types.map(t => '<span class="badge badge--light">'+formatProjectType(t)+'</span>').join('')}
             </div>
-            <h1 class="page-title">${dev.name}</h1>
-            <div class="card-meta">
-              ${dev.areas_focus.map(a => `<span class="meta-chip">${iconMapPin()} ${formatAreaLabel(a)}</span>`).join('')}
-              <span class="meta-chip">${iconLang()} ${(dev.languages || 'Bahasa').split(/[,+]+/).map(function(s){return s.trim();}).filter(Boolean).join(' · ')}</span>
-              ${dev.min_ticket_usd ? `<span class="meta-chip">From ${formatUSD(dev.min_ticket_usd)}</span>` : ''}
+            <h1 class="detail-hero-name">${dev.name}</h1>
+            <p class="detail-hero-specialty">${(dev.categories && dev.categories.length > 0) ? dev.categories.map(c => formatCategoryLabel(c.key || c)).join(', ') : 'Property Developer'}</p>
+            <div class="detail-hero-meta">
+              ${dev.areas_focus.map(a => '<span>'+iconMapPin()+' '+formatAreaLabel(a)+'</span>').join('')}
+              <span>${iconLang()} ${(dev.languages || 'Bahasa').split(/[,+]+/).map(function(s){return s.trim();}).filter(Boolean).join(' \u00b7 ')}</span>
+              ${dev.min_ticket_usd ? '<span>From '+formatUSD(dev.min_ticket_usd)+'</span>' : ''}
             </div>
           </div>
         </div>
@@ -1368,15 +1374,15 @@ async function renderListings(el, params = {}) {
   const certOptions = FilterData.land_certificate_types.map(c => '<option value="' + c.key + '" ' + (params.certificate_type === c.key ? 'selected' : '') + '>' + c.label + '</option>').join('');
 
   el.innerHTML = `
-    <div class="page-header">
+    <div class="dir-hero">
       <div class="container">
         <div class="page-header-breadcrumb">
           <a href="#home" onclick="navigate('home');return false;">Home</a>
           <span>/</span>
           <span>Find Land & Property</span>
         </div>
-        <h1 class="page-title">Find Land & Property</h1>
-        <p class="page-desc">${total} listing${total !== 1 ? 's' : ''} available across Lombok. Browse land for sale, villas, and investment properties.</p>
+        <h1 class="dir-hero-title">Find Land & Property</h1>
+        <p class="dir-hero-desc">Discover your dream location across Lombok — land, villas, and investment properties.</p>
       </div>
     </div>
     <div class="section">
@@ -1617,15 +1623,15 @@ async function renderAgents(el, params = {}) {
   const areaOptions = buildAreaOptions(params.area || '');
 
   el.innerHTML = `
-    <div class="page-header">
+    <div class="dir-hero">
       <div class="container">
         <div class="page-header-breadcrumb">
           <a href="#home" onclick="navigate('home');return false;">Home</a>
           <span>/</span>
           <span>Agents</span>
         </div>
-        <h1 class="page-title">Land & Property Agents</h1>
-        <p class="page-desc">${total} agent${total !== 1 ? 's' : ''} helping you find the perfect property in Lombok.</p>
+        <h1 class="dir-hero-title">Property Agents</h1>
+        <p class="dir-hero-desc">Trusted advisors to guide you through every property decision in Lombok.</p>
       </div>
     </div>
     <div class="section">
@@ -1702,21 +1708,28 @@ async function renderAgentDetail(el, slug) {
   const wa = agent.whatsapp_number || '';
 
   el.innerHTML = `
-    <div class="page-header">
+    <div class="detail-hero">
       <div class="container">
-        <div class="page-header-breadcrumb">
-          <a href="#home" onclick="navigate('home');return false;">Home</a>
+        <div class="page-header-breadcrumb" style="color:rgba(250,248,244,.6);">
+          <a href="#home" onclick="navigate('home');return false;" style="color:rgba(250,248,244,.7);">Home</a>
           <span>/</span>
-          <a href="#agents" onclick="navigate('agents');return false;">Agents</a>
+          <a href="#agents" onclick="navigate('agents');return false;" style="color:rgba(250,248,244,.7);">Agents</a>
           <span>/</span>
-          <span>${agent.display_name}</span>
+          <span style="color:rgba(250,248,244,.5);">${agent.display_name}</span>
         </div>
-        <div style="display:flex;align-items:center;gap:var(--space-4);flex-wrap:wrap;margin-top:var(--space-4)">
-          ${agent.profile_photo_url ? '<img src="' + agent.profile_photo_url + '" alt="' + agent.display_name + '" style="width:72px;height:72px;border-radius:50%;object-fit:cover;">' : '<div style="width:72px;height:72px;border-radius:50%;background:var(--color-primary);display:flex;align-items:center;justify-content:center;font-size:var(--text-2xl);font-weight:700;color:#fff;">' + agent.display_name.charAt(0).toUpperCase() + '</div>'}
-          <div>
-            <h1 class="page-title" style="margin:0">${agent.display_name}</h1>
-            ${agent.agency_name ? '<div style="color:var(--color-text-muted);margin-top:var(--space-1)">' + agent.agency_name + '</div>' : ''}
-            ${agent.is_verified ? '<span class="badge badge--verified" style="margin-top:var(--space-2);display:inline-block">Verified Agent</span>' : ''}
+        <div class="detail-hero-inner">
+          ${agent.profile_photo_url ? '<img src="' + agent.profile_photo_url + '" alt="' + agent.display_name + '" class="detail-hero-photo" style="border-radius:50%;">' : '<div style="width:100px;height:100px;border-radius:50%;background:rgba(12,124,132,0.5);display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:700;color:#fff;flex-shrink:0;">' + agent.display_name.charAt(0).toUpperCase() + '</div>'}
+          <div class="detail-hero-info">
+            <div class="detail-hero-badges">
+              ${agent.is_verified ? '<span class="badge badge--trusted-light">\u2713 Verified Agent</span>' : ''}
+              ${agent.agency_name ? '<span class="badge badge--light">' + agent.agency_name + '</span>' : ''}
+            </div>
+            <h1 class="detail-hero-name">${agent.display_name}</h1>
+            <p class="detail-hero-specialty">Property Agent</p>
+            <div class="detail-hero-meta">
+              ${agent.area_label ? '<span>'+iconMapPin()+' '+agent.area_label+'</span>' : ''}
+              ${agent.listing_count ? '<span>'+agent.listing_count+' listing'+(agent.listing_count > 1 ? 's' : '')+'</span>' : ''}
+            </div>
           </div>
         </div>
       </div>
@@ -2157,15 +2170,15 @@ async function renderProjects(el, params = {}) {
   const activeCount = Object.entries(filters).filter(([k, v]) => k !== 'sort' && v !== '').length;
 
   el.innerHTML = `
-    <div class="page-header">
+    <div class="dir-hero">
       <div class="container">
         <div class="page-header-breadcrumb">
           <a href="#home" onclick="navigate('home');return false;">Home</a>
           <span>/</span>
           <span>Projects</span>
         </div>
-        <h1 class="page-title">Investment Projects</h1>
-        <p class="page-desc">Active villa, apartment, land, and mixed-use developments from verified Lombok developers.</p>
+        <h1 class="dir-hero-title">Investment Projects</h1>
+        <p class="dir-hero-desc">Active villa, apartment, land, and mixed-use developments from verified Lombok developers.</p>
       </div>
     </div>
     <div class="section">
