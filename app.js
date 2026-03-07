@@ -568,30 +568,54 @@ async function renderHome(el) {
   const totalFeaturedDevs = featuredDevs.length;
 
   el.innerHTML = `
-    <!-- HERO — Full bleed cinematic -->
+    <!-- HERO — Full bleed, wireframe layout -->
     <section class="hero" aria-label="Build in Lombok hero">
       <div class="hero-bg" id="hero-bg"></div>
       <div class="hero-overlay"></div>
       <div class="hero-inner">
         <div class="container">
-          <div class="hero-eyebrow">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>
-            Lombok, Indonesia
-          </div>
-          <h1 class="hero-title">Build Your Dream<br><em>in Lombok</em></h1>
-          <p class="hero-subtitle">Connect with trusted builders, architects, specialists, and developers across the island's most sought-after locations.</p>
-          <div class="hero-ctas">
-            <a href="#directory" class="hero-btn hero-btn--primary" onclick="navigate('directory'); return false;">
-              Find Builders &amp; Specialists
-            </a>
-            <a href="#developers" class="hero-btn hero-btn--ghost" onclick="navigate('developers'); return false;">
-              Explore Projects
-            </a>
+          <h1 class="hero-title">BUILD IN LOMBOK</h1>
+          <p class="hero-subtitle">Helping you build and invest in Lombok</p>
+          <div class="hero-search">
+            <svg class="hero-search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="search" class="hero-search-input" placeholder="Search providers, developers, projects..." autocomplete="off" id="hero-search-input">
           </div>
         </div>
       </div>
       <div class="hero-scroll-hint" aria-hidden="true">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+      </div>
+    </section>
+
+    <!-- CATEGORY CARDS -->
+    <section class="category-section">
+      <div class="container">
+        <div class="category-cards">
+          <a href="#listings" class="category-card" onclick="navigate('listings'); return false;">
+            <div class="category-card-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </div>
+            <h3 class="category-card-title">Find Land &amp; Agents</h3>
+            <p class="category-card-desc">Browse verified land listings and connect with trusted agents across Lombok.</p>
+            <span class="category-card-cta">Explore ${iconArrowRight()}</span>
+          </a>
+          <a href="#developers" class="category-card" onclick="navigate('developers'); return false;">
+            <div class="category-card-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="6" width="22" height="15" rx="2"/><path d="M1 10h22"/><path d="M8 22V6"/><path d="M16 22V6"/><path d="M1 14h22"/><path d="M1 18h22"/></svg>
+            </div>
+            <h3 class="category-card-title">Find Developers &amp; Projects</h3>
+            <p class="category-card-desc">Discover leading developers and active investment projects across the island.</p>
+            <span class="category-card-cta">Explore ${iconArrowRight()}</span>
+          </a>
+          <a href="#directory" class="category-card" onclick="navigate('directory'); return false;">
+            <div class="category-card-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+            </div>
+            <h3 class="category-card-title">Find Providers &amp; Trades</h3>
+            <p class="category-card-desc">Connect with builders, architects, engineers, and specialist tradespeople.</p>
+            <span class="category-card-cta">Explore ${iconArrowRight()}</span>
+          </a>
+        </div>
       </div>
     </section>
 
@@ -753,6 +777,16 @@ async function renderHome(el) {
 
   // Animate cards
   requestAnimationFrame(() => animateCards(el));
+
+  // Hero search handler
+  const heroInput = document.getElementById('hero-search-input');
+  if (heroInput) {
+    heroInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && heroInput.value.trim()) {
+        navigate('directory?q=' + encodeURIComponent(heroInput.value.trim()));
+      }
+    });
+  }
 }
 
 // =====================================================
@@ -2713,10 +2747,10 @@ const UserAuth = (() => {
   }
 
   function updateUI() {
-    const navActions = document.querySelector('.nav-actions');
-    if (!navActions) return;
-    // Remove existing user elements
-    navActions.querySelectorAll('.user-menu-wrap, .login-btn').forEach(el => el.remove());
+    const loginArea = document.getElementById('nav-login-area');
+    if (!loginArea) return;
+    // Clear existing login/user elements
+    loginArea.innerHTML = '';
 
     if (currentUser) {
       const initials = currentUser.display_name.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
@@ -2736,7 +2770,7 @@ const UserAuth = (() => {
           <button class="user-dropdown-item user-dropdown-item--danger" onclick="UserAuth.logout()">Log Out</button>
         </div>
       `;
-      navActions.insertBefore(wrap, navActions.firstChild);
+      loginArea.appendChild(wrap);
       // Toggle dropdown
       wrap.querySelector('.user-avatar-btn').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -2753,7 +2787,7 @@ const UserAuth = (() => {
       btn.title = 'Sign in';
       btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
       btn.addEventListener('click', () => showAuthModal('login'));
-      navActions.insertBefore(btn, navActions.firstChild);
+      loginArea.appendChild(btn);
     }
 
     // Update mobile menu

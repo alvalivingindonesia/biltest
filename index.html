@@ -9,7 +9,7 @@
   <!-- Google Fonts: Instrument Serif + Work Sans -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Work+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
   <!-- Stylesheets -->
   <link rel="stylesheet" href="./base.css">
@@ -34,50 +34,21 @@
 
       <!-- Logo -->
       <a href="#home" class="nav-logo" onclick="navigate('home');return false;" aria-label="Build in Lombok — home">
-        <div class="nav-logo-mark" aria-hidden="true">B</div>
-        <div class="nav-brand">
-          Build in Lombok
-          <span>Lombok Directory</span>
-        </div>
+        <span class="nav-brand">BUILD IN LOMBOK</span>
       </a>
 
       <!-- Desktop nav links -->
       <ul class="nav-links" role="list">
-        <li><a href="#directory" onclick="navigate('directory');return false;">Builders & Specialists</a></li>
+        <li><a href="#directory" onclick="navigate('directory');return false;">Directory</a></li>
         <li><a href="#developers" onclick="navigate('developers');return false;">Developers</a></li>
         <li><a href="#projects" onclick="navigate('projects');return false;">Projects</a></li>
-        <li><a href="#listings" onclick="navigate('listings');return false;">Find Land</a></li>
         <li><a href="#guides" onclick="navigate('guides');return false;">Guides</a></li>
+        <li><a href="#about" onclick="navigate('about');return false;">About</a></li>
       </ul>
 
-      <!-- Search -->
-      <div class="nav-search" role="search">
-        <div class="nav-search-wrapper">
-          <span class="nav-search-icon" aria-hidden="true">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          </span>
-          <input
-            type="search"
-            class="nav-search-input"
-            placeholder="Search providers, projects…"
-            aria-label="Search the directory"
-            autocomplete="off"
-          >
-        </div>
-      </div>
-
-      <!-- Actions: theme toggle + hamburger -->
+      <!-- Right actions -->
       <div class="nav-actions">
-        <button
-          class="btn-icon"
-          data-theme-toggle
-          aria-label="Toggle dark mode"
-          title="Toggle dark/light mode"
-        >
-          <!-- Icon injected by JS -->
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        </button>
-
+        <div class="nav-login-wrap" id="nav-login-area"></div>
         <button
           class="btn-icon hamburger"
           id="hamburger-btn"
