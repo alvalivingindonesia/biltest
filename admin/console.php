@@ -49,6 +49,12 @@ $msg     = '';
 
 // ─── HANDLE POST ACTIONS ─────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Join language checkboxes into comma-separated string
+    if (isset($_POST['languages']) && is_array($_POST['languages'])) {
+        $_POST['languages'] = implode(', ', $_POST['languages']);
+    } elseif (!isset($_POST['languages'])) {
+        $_POST['languages'] = '';
+    }
     $db = get_db();
     try {
         // --- PROVIDERS ---
@@ -808,7 +814,13 @@ elseif ($section === 'providers' && ($action === 'edit' || $action === 'save')):
                 <?php foreach ($areas_list as $a): ?><option value="<?= $a['key'] ?>" <?= ($item['area_key']??'')===$a['key']?'selected':'' ?>><?= htmlspecialchars($a['label']) ?></option><?php endforeach; ?>
             </select>
         </div>
-        <div class="fg"><label>Languages</label><input type="text" name="languages" value="<?= $v('languages','Bahasa only') ?>"></div>
+        <div class="fg"><label>Languages</label>
+            <div style="display:flex;gap:12px;align-items:center;padding:6px 0">
+                <?php $langs = array_map('trim', explode(',', $v('languages',''))); ?>
+                <label style="font-weight:400;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="languages[]" value="Bahasa" <?= in_array('Bahasa', $langs) || in_array('Bahasa only', $langs) ? 'checked' : '' ?>> Bahasa</label>
+                <label style="font-weight:400;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="languages[]" value="English" <?= in_array('English', $langs) || strpos($v('languages',''), 'English') !== false ? 'checked' : '' ?>> English</label>
+            </div>
+        </div>
         <div class="fg span2"><label>Short Description</label><input type="text" name="short_description" value="<?= $v('short_description') ?>"></div>
         <div class="fg span2"><label>Full Description</label><textarea name="description" rows="4"><?= $v('description') ?></textarea></div>
         <div class="fg"><label>Address</label><input type="text" name="address" value="<?= $v('address') ?>"></div>
@@ -984,7 +996,13 @@ elseif ($section === 'developers' && ($action === 'edit' || $action === 'save'))
         <div class="fg span2"><label>Short Description</label><input type="text" name="short_description" value="<?= $v('short_description') ?>"></div>
         <div class="fg span2"><label>Full Description</label><textarea name="description" rows="4"><?= $v('description') ?></textarea></div>
         <div class="fg"><label>Min Ticket (USD)</label><input type="number" name="min_ticket_usd" value="<?= $v('min_ticket_usd') ?>"></div>
-        <div class="fg"><label>Languages</label><input type="text" name="languages" value="<?= $v('languages','Bahasa only') ?>"></div>
+        <div class="fg"><label>Languages</label>
+            <div style="display:flex;gap:12px;align-items:center;padding:6px 0">
+                <?php $langs_d = array_map('trim', explode(',', $v('languages',''))); ?>
+                <label style="font-weight:400;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="languages[]" value="Bahasa" <?= in_array('Bahasa', $langs_d) || in_array('Bahasa only', $langs_d) ? 'checked' : '' ?>> Bahasa</label>
+                <label style="font-weight:400;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="languages[]" value="English" <?= in_array('English', $langs_d) || strpos($v('languages',''), 'English') !== false ? 'checked' : '' ?>> English</label>
+            </div>
+        </div>
         <div class="fg"><label>Google Maps URL</label><input type="url" name="google_maps_url" value="<?= $v('google_maps_url') ?>"></div>
         <div class="fg"><label>Google Rating</label><input type="number" name="google_rating" value="<?= $v('google_rating') ?>" step="0.1" min="1" max="5"></div>
         <div class="fg"><label>Review Count</label><input type="number" name="google_review_count" value="<?= $v('google_review_count','0') ?>"></div>

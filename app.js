@@ -759,7 +759,8 @@ function renderProviderCard(b, index = 0) {
 
   const trustedBadge = b.is_trusted ? '<span class="card-badge card-badge--trusted">✓ Trusted</span>' : '';
 
-  const langShort = b.languages.replace('Bahasa + ', '').replace('Bahasa only', 'Bahasa').replace(' + Other', '+');
+  var langParts = (b.languages || '').split(/[,+]+/).map(function(s){ return s.trim(); }).filter(Boolean);
+  var langShort = langParts.length === 0 ? 'Bahasa' : langParts.join(' · ');
   const ratingInline = b.google_rating
     ? `<span class="card-rating-inline"><span class="card-rating-star">★</span> ${b.google_rating.toFixed(1)} <span class="card-rating-count">(${b.google_review_count})</span></span>`
     : '';
@@ -845,7 +846,10 @@ async function renderDirectory(el, params = {}) {
 
       // Client-side filters the API doesn't handle
       if (filters.languages === 'english') {
-        results = results.filter(b => (b.languages || '').includes('English'));
+        results = results.filter(b => (b.languages || '').toLowerCase().includes('english'));
+      }
+      if (filters.languages === 'bahasa') {
+        results = results.filter(b => (b.languages || '').toLowerCase().includes('bahasa'));
       }
       if (filters.min_rating) {
         const minR = parseFloat(filters.min_rating);
@@ -948,6 +952,7 @@ async function renderDirectory(el, params = {}) {
                 <select id="f-lang" class="filter-select" onchange="updateDirectoryFilter('languages', this.value)">
                   <option value="">Any language</option>
                   <option value="english" ${filters.languages === 'english' ? 'selected' : ''}>English-speaking</option>
+                  <option value="bahasa" ${filters.languages === 'bahasa' ? 'selected' : ''}>Bahasa-speaking</option>
                 </select>
               </div>
               <div class="filter-group">
@@ -1044,7 +1049,7 @@ async function renderProviderDetail(el, slug) {
             <h1 class="page-title">${b.name}</h1>
             <div class="card-meta mt-auto">
               <span class="meta-chip">${iconMapPin()} ${formatAreaLabel(b.area)}</span>
-              <span class="meta-chip">${iconLang()} ${b.languages}</span>
+              <span class="meta-chip">${iconLang()} ${(b.languages || 'Bahasa').split(/[,+]+/).map(function(s){return s.trim();}).filter(Boolean).join(' · ')}</span>
             </div>
           </div>
         </div>
@@ -1109,7 +1114,7 @@ async function renderProviderDetail(el, slug) {
                 </div>
                 <div class="info-row">
                   <span class="info-label">Languages</span>
-                  <span class="info-value">${b.languages}</span>
+                  <span class="info-value">${(b.languages || 'Bahasa').split(/[,+]+/).map(function(s){return s.trim();}).filter(Boolean).join(', ')}</span>
                 </div>
               </div>
             </div>
@@ -1289,7 +1294,7 @@ async function renderDeveloperDetail(el, slug) {
             <h1 class="page-title">${dev.name}</h1>
             <div class="card-meta">
               ${dev.areas_focus.map(a => `<span class="meta-chip">${iconMapPin()} ${formatAreaLabel(a)}</span>`).join('')}
-              <span class="meta-chip">${iconLang()} ${dev.languages.replace('Bahasa + ', '').replace(' + Other', '+')}</span>
+              <span class="meta-chip">${iconLang()} ${(dev.languages || 'Bahasa').split(/[,+]+/).map(function(s){return s.trim();}).filter(Boolean).join(' · ')}</span>
               ${dev.min_ticket_usd ? `<span class="meta-chip">From ${formatUSD(dev.min_ticket_usd)}</span>` : ''}
             </div>
           </div>
@@ -3359,11 +3364,11 @@ async function renderSubmitListing(el) {
           </div>
           <div class="auth-field">
             <label>Languages</label>
-            <select name="languages">
-              <option value="Bahasa only">Bahasa only</option>
-              <option value="Bahasa + English">Bahasa + English</option>
-              <option value="Bahasa + English + Other">Bahasa + English + Other</option>
-            </select>
+            <div style="display:flex;gap:16px;padding:6px 0">
+              <label style="font-weight:400;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="lang_bahasa" value="Bahasa" checked> Bahasa</label>
+              <label style="font-weight:400;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" name="lang_english" value="English"> English</label>
+            </div>
+            <input type="hidden" name="languages" value="Bahasa">
           </div>
           <button type="submit" class="auth-submit" style="align-self:flex-start">Submit Listing for Review</button>
         </form>
@@ -3407,6 +3412,11 @@ async function renderSubmitListing(el) {
         data[k] = v;
       }
     });
+    // Combine language checkboxes
+    const langArr = [];
+    if (form.querySelector('[name=lang_bahasa]') && form.querySelector('[name=lang_bahasa]').checked) langArr.push('Bahasa');
+    if (form.querySelector('[name=lang_english]') && form.querySelector('[name=lang_english]').checked) langArr.push('English');
+    data.languages = langArr.join(', ') || 'Bahasa';
     // Get all selected options for multi-select
     const selectedCats = [...catSel.selectedOptions].map(o => o.value);
     data.category_keys = selectedCats;
