@@ -822,7 +822,13 @@ elseif ($section === 'providers' && ($action === 'edit' || $action === 'save')):
         <div class="fg"><label>Website</label>
             <div style="display:flex;gap:8px;align-items:center">
                 <input type="url" name="website_url" id="prov_website_url" value="<?= $v('website_url') ?>" style="flex:1">
-                <?php if ($id): ?><button type="button" class="btn btn-o btn-sm" onclick="scanWebsite('providers')" id="scan-btn" title="Scan website for missing info">&#x1F50D; Scan</button><?php endif; ?>
+                <?php if ($id): ?>
+                <?php if (!empty($item['website_url'])): ?>
+                <button type="button" class="btn btn-o btn-sm" onclick="scanWebsite('providers')" id="scan-btn" title="Scan website for missing info">&#x1F50D; Scan</button>
+                <?php else: ?>
+                <button type="button" class="btn btn-o btn-sm" onclick="window.open('https://www.google.com/search?q='+encodeURIComponent(document.querySelector('[name=name]').value+' Lombok'),'_blank')" title="Search Google for this entity">&#x1F50D; Search</button>
+                <?php endif; ?>
+                <?php endif; ?>
             </div>
         </div>
         <div class="fg"><label>Badge</label><input type="text" name="badge" value="<?= $v('badge') ?>" placeholder="e.g. Verified, Top Rated"></div>
@@ -987,7 +993,13 @@ elseif ($section === 'developers' && ($action === 'edit' || $action === 'save'))
         <div class="fg"><label>Website</label>
             <div style="display:flex;gap:8px;align-items:center">
                 <input type="url" name="website_url" id="dev_website_url" value="<?= $v('website_url') ?>" style="flex:1">
-                <?php if ($id): ?><button type="button" class="btn btn-o btn-sm" onclick="scanWebsite('developers')" id="scan-btn-dev" title="Scan website for missing info">&#x1F50D; Scan</button><?php endif; ?>
+                <?php if ($id): ?>
+                <?php if (!empty($item['website_url'])): ?>
+                <button type="button" class="btn btn-o btn-sm" onclick="scanWebsite('developers')" id="scan-btn-dev" title="Scan website for missing info">&#x1F50D; Scan</button>
+                <?php else: ?>
+                <button type="button" class="btn btn-o btn-sm" onclick="window.open('https://www.google.com/search?q='+encodeURIComponent(document.querySelector('[name=name]').value+' Lombok'),'_blank')" title="Search Google for this entity">&#x1F50D; Search</button>
+                <?php endif; ?>
+                <?php endif; ?>
             </div>
         </div>
         <div class="fg"><label>Badge</label><input type="text" name="badge" value="<?= $v('badge') ?>"></div>
