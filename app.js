@@ -587,173 +587,94 @@ async function renderHome(el) {
       </div>
     </section>
 
-    <!-- CATEGORY CARDS -->
+    <!-- CATEGORY CARDS — 5 cards, 3+2 layout -->
     <section class="category-section">
       <div class="container">
         <div class="category-cards">
           <a href="#listings" class="category-card" onclick="navigate('listings'); return false;">
             <div class="category-card-icon">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
             </div>
-            <h3 class="category-card-title">Find Land &amp; Agents</h3>
-            <p class="category-card-desc">Browse verified land listings and connect with trusted agents across Lombok.</p>
+            <h3 class="category-card-title">Find Property &amp; Agents</h3>
+            <p class="category-card-desc">Browse properties and find local agents.</p>
             <span class="category-card-cta">Explore ${iconArrowRight()}</span>
           </a>
           <a href="#developers" class="category-card" onclick="navigate('developers'); return false;">
             <div class="category-card-icon">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="6" width="22" height="15" rx="2"/><path d="M1 10h22"/><path d="M8 22V6"/><path d="M16 22V6"/><path d="M1 14h22"/><path d="M1 18h22"/></svg>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 20h20"/><path d="M5 20V8l7-5 7 5v12"/><path d="M9 20v-4h6v4"/><path d="M9 12h.01"/><path d="M15 12h.01"/></svg>
             </div>
-            <h3 class="category-card-title">Find Developers &amp; Projects</h3>
-            <p class="category-card-desc">Discover leading developers and active investment projects across the island.</p>
+            <h3 class="category-card-title">Find Developers &amp; Investments</h3>
+            <p class="category-card-desc">Discover development opportunities and partners.</p>
             <span class="category-card-cta">Explore ${iconArrowRight()}</span>
           </a>
-          <a href="#directory" class="category-card" onclick="navigate('directory'); return false;">
+          <a href="#directory?group=builders_trades" class="category-card" onclick="navigate('directory?group=builders_trades'); return false;">
             <div class="category-card-icon">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 18.5A2.5 2.5 0 0 1 4.5 16H20"/><path d="M2 7h16a2 2 0 0 1 2 2v9.5A2.5 2.5 0 0 1 17.5 21H4.5A2.5 2.5 0 0 1 2 18.5z"/><path d="M6 12h4"/><path d="M6 16h8"/><circle cx="18" cy="4" r="3"/></svg>
             </div>
-            <h3 class="category-card-title">Find Providers &amp; Trades</h3>
-            <p class="category-card-desc">Connect with builders, architects, engineers, and specialist tradespeople.</p>
+            <h3 class="category-card-title">Find Builders &amp; Trades</h3>
+            <p class="category-card-desc">Connect with skilled builders and trades.</p>
+            <span class="category-card-cta">Explore ${iconArrowRight()}</span>
+          </a>
+          <a href="#directory?group=professional_services" class="category-card" onclick="navigate('directory?group=professional_services'); return false;">
+            <div class="category-card-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            </div>
+            <h3 class="category-card-title">Find Professional Services</h3>
+            <p class="category-card-desc">Locate architects, lawyers, and consultants.</p>
+            <span class="category-card-cta">Explore ${iconArrowRight()}</span>
+          </a>
+          <a href="#directory?group=suppliers_materials" class="category-card" onclick="navigate('directory?group=suppliers_materials'); return false;">
+            <div class="category-card-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+            </div>
+            <h3 class="category-card-title">Find Materials &amp; Suppliers</h3>
+            <p class="category-card-desc">Source quality materials and local suppliers.</p>
             <span class="category-card-cta">Explore ${iconArrowRight()}</span>
           </a>
         </div>
       </div>
     </section>
 
-    <!-- TRUSTED PROVIDERS -->
-    <section class="section section-animate">
-      <div class="container">
-        <div class="section-header">
-          <div class="section-label">Trusted Providers</div>
-          <h2 class="section-title">Trusted by Investors &amp; Builders</h2>
-          <p class="section-desc">Highlighted providers with strong Google ratings and verified track records on Lombok.</p>
-        </div>
-        <div class="card-grid">
-          ${displayTrusted.map((b, i) => renderProviderCard(b, i)).join('')}
-        </div>
-        <div style="margin-top: var(--space-10); text-align: center;">
-          <a href="#directory?trusted=1" class="btn btn--ghost" onclick="navigate('directory?trusted=1'); return false;">
-            View all ${totalTrusted} trusted providers ${iconArrowRight()}
-          </a>
-        </div>
-      </div>
-    </section>
-
-    <!-- LIFESTYLE IMAGE INTERSTITIAL -->
-    <div style="
-      width:100%; height:clamp(260px, 30vw, 480px);
-      background-image: url('./images/hero-lifestyle.jpg');
-      background-size: cover;
-      background-position: center 55%;
-      position: relative;
-      overflow: hidden;
-    " role="presentation" aria-hidden="true">
-      <div style="position:absolute;inset:0;background:linear-gradient(to right, rgba(10,8,6,0.45) 0%, rgba(10,8,6,0.1) 50%, rgba(10,8,6,0.45) 100%);"></div>
-      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:2;">
-        <p style="font-family:var(--font-display);font-size:clamp(1.5rem,1rem+2.5vw,3.5rem);color:#faf8f4;letter-spacing:-0.02em;font-weight:400;text-align:center;text-shadow:0 2px 24px rgba(0,0,0,0.4);padding:0 var(--space-6);line-height:1.2;">
-          <em>Luxury builds, rooted in Lombok</em>
-        </p>
-      </div>
-    </div>
-
-    <!-- FEATURED DEVELOPERS -->
-    ${displayFeaturedDevs.length > 0 ? `
+    <!-- FEATURED + GUIDES — Two-column below categories -->
     <section class="section section-animate" style="background:var(--color-surface-offset);">
       <div class="container">
-        <div class="section-header">
-          <div class="section-label">Featured Developers</div>
-          <h2 class="section-title">Top Property Developers</h2>
-          <p class="section-desc">Leading developers building quality projects across Lombok's finest locations.</p>
-        </div>
-        <div class="card-grid">
-          ${displayFeaturedDevs.map((d, i) => renderDeveloperCard(d, i)).join('')}
-        </div>
-        <div style="margin-top: var(--space-10); text-align: center;">
-          <a href="#developers?featured=1" class="btn btn--ghost" onclick="navigate('developers?featured=1'); return false;">
-            View all ${totalFeaturedDevs} featured developers ${iconArrowRight()}
-          </a>
-        </div>
-      </div>
-    </section>` : ''}
-
-    <!-- FEATURED PROJECTS -->
-    <section class="section section-animate">
-      <div class="container">
-        <div class="section-header">
-          <div class="section-label">Investment Projects</div>
-          <h2 class="section-title">Featured Projects</h2>
-          <p class="section-desc">Curated active developments from verified Lombok developers.</p>
-        </div>
-        <div class="card-grid">
-          ${featuredProjects.map((p, i) => renderProjectCard(p, i)).join('')}
-        </div>
-        <div style="margin-top: var(--space-10); text-align: center;">
-          <a href="#projects" class="btn btn--ghost" onclick="navigate('projects'); return false;">
-            View all ${totalProjects} projects ${iconArrowRight()}
-          </a>
-        </div>
-      </div>
-    </section>
-
-    <!-- HOW IT WORKS — Dark interstitial -->
-    <section class="section how-it-works section-animate">
-      <div class="container">
-        <div class="section-header">
-          <div class="section-label">How It Works</div>
-          <h2 class="section-title">Why Build in Lombok</h2>
-          <p class="section-desc" style="color:rgba(212,209,202,0.65);">Everything you need to plan, source, and execute your Lombok build — in one place.</p>
-        </div>
-        <div class="how-steps">
-          <div class="how-step">
-            <div class="how-step-number">01</div>
-            <div class="how-step-title">Browse with confidence</div>
-            <p class="how-step-desc">Every listing shows real Google ratings and review counts — compare providers on an independent, verifiable trust signal.</p>
+        <div class="home-split">
+          <!-- Left: Featured developers & projects -->
+          <div class="home-split-main">
+            <h2 class="home-split-heading">Featured developers &amp; projects</h2>
+            <div class="home-featured-row">
+              ${[...displayFeaturedDevs.slice(0, 2), ...featuredProjects.slice(0, 1)].map((item) => {
+                const isProject = !!item.developer_id;
+                const name = isProject ? item.project_name : (item.name || item.display_name || 'Unnamed');
+                const photo = item.profile_photo_url || item.hero_image_url || '';
+                const link = isProject ? '#project/' + item.id : '#developer/' + item.id;
+                const route = isProject ? 'project/' + item.id : 'developer/' + item.id;
+                return `
+                  <a href="${link}" class="home-featured-thumb" onclick="navigate('${route}'); return false;">
+                    <div class="home-featured-img" style="background-image:url('${photo}');"></div>
+                    <div class="home-featured-label">${name}</div>
+                  </a>
+                `;
+              }).join('')}
+            </div>
+            <div style="margin-top: var(--space-4);">
+              <a href="#developers" class="home-split-link" onclick="navigate('developers'); return false;">View all developers &amp; projects ${iconArrowRight()}</a>
+            </div>
           </div>
-          <div class="how-step">
-            <div class="how-step-number">02</div>
-            <div class="how-step-title">Filter by what matters</div>
-            <p class="how-step-desc">Filter by area, speciality, language, and rating. Find who you need, where you need them, before you make a single call.</p>
+          <!-- Right: Guides & resources -->
+          <div class="home-split-side">
+            <h2 class="home-split-heading">Guides &amp; resources</h2>
+            <ul class="home-guides-list">
+              ${homeGuides.slice(0, 5).map((g) => `
+                <li>
+                  <a href="#guide/${g.slug}" onclick="navigate('guide/${g.slug}'); return false;">${g.title}</a>
+                </li>
+              `).join('')}
+            </ul>
+            <div style="margin-top: var(--space-4);">
+              <a href="#guides" class="home-split-link" onclick="navigate('guides'); return false;">All guides ${iconArrowRight()}</a>
+            </div>
           </div>
-          <div class="how-step">
-            <div class="how-step-number">03</div>
-            <div class="how-step-title">Connect directly</div>
-            <p class="how-step-desc">One-tap WhatsApp on every listing. No middleman, no commission — direct contact with the people who can build your vision.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- CONSTRUCTION IMAGE INTERSTITIAL -->
-    <div style="
-      width:100%; height:clamp(220px, 25vw, 400px);
-      background-image: url('./images/hero-construction.jpg');
-      background-size: cover;
-      background-position: center 40%;
-      position: relative;
-      overflow: hidden;
-    " role="presentation" aria-hidden="true">
-      <div style="position:absolute;inset:0;background:rgba(10,8,6,0.5);"></div>
-      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:2;">
-        <p style="font-family:var(--font-display);font-size:clamp(1.25rem,0.8rem+2vw,2.5rem);color:#faf8f4;letter-spacing:-0.01em;font-weight:400;text-align:center;text-shadow:0 2px 20px rgba(0,0,0,0.5);padding:0 var(--space-6);">
-          From foundation to finish
-        </p>
-      </div>
-    </div>
-
-    <!-- GUIDES TEASER -->
-    <section class="section section-animate" style="background:var(--color-surface-offset);">
-      <div class="container">
-        <div class="section-header">
-          <div class="section-label">Guides</div>
-          <h2 class="section-title">Before You Build</h2>
-          <p class="section-desc">Practical guides covering land titles, permits, construction, and investment fundamentals for Lombok.</p>
-        </div>
-        <div class="card-grid">
-          ${homeGuides.slice(0, 3).map((g, i) => renderGuideCard(g, i)).join('')}
-        </div>
-        <div style="margin-top: var(--space-10); text-align: center;">
-          <a href="#guides" class="btn btn--ghost" onclick="navigate('guides'); return false;">
-            All guides ${iconArrowRight()}
-          </a>
         </div>
       </div>
     </section>
