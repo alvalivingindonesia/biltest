@@ -303,15 +303,24 @@ function renderBadge(badge) {
   return badge;
 }
 
-function iconInstagram() { return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>'; }
-function iconFacebook() { return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>'; }
-function iconLinkedIn() { return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>'; }
+function iconInstagram() { return '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>'; }
+function iconFacebook() { return '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>'; }
+function iconLinkedIn() { return '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>'; }
+
+function formatWhatsAppNumber(phone) {
+  if (!phone) return '';
+  var num = phone.replace(/[^0-9+]/g, '');
+  if (num.startsWith('08')) num = '+62' + num.slice(1);
+  else if (num.startsWith('8') && num.length >= 10) num = '+62' + num;
+  else if (!num.startsWith('+')) num = '+' + num;
+  return num;
+}
 
 function renderSocialLinks(entity) {
   const links = [];
-  if (entity.instagram_url) links.push(`<a href="${entity.instagram_url}" target="_blank" rel="noopener noreferrer" class="social-link" aria-label="Instagram" title="Instagram">${iconInstagram()}</a>`);
-  if (entity.facebook_url) links.push(`<a href="${entity.facebook_url}" target="_blank" rel="noopener noreferrer" class="social-link" aria-label="Facebook" title="Facebook">${iconFacebook()}</a>`);
-  if (entity.linkedin_url) links.push(`<a href="${entity.linkedin_url}" target="_blank" rel="noopener noreferrer" class="social-link" aria-label="LinkedIn" title="LinkedIn">${iconLinkedIn()}</a>`);
+  if (entity.instagram_url) links.push(`<a href="${entity.instagram_url}" target="_blank" rel="noopener noreferrer" class="social-link social-link--instagram" aria-label="Instagram" title="Instagram">${iconInstagram()}</a>`);
+  if (entity.facebook_url) links.push(`<a href="${entity.facebook_url}" target="_blank" rel="noopener noreferrer" class="social-link social-link--facebook" aria-label="Facebook" title="Facebook">${iconFacebook()}</a>`);
+  if (entity.linkedin_url) links.push(`<a href="${entity.linkedin_url}" target="_blank" rel="noopener noreferrer" class="social-link social-link--linkedin" aria-label="LinkedIn" title="LinkedIn">${iconLinkedIn()}</a>`);
   if (links.length === 0) return '';
   return `<div class="social-links" style="display:flex;gap:var(--space-3);margin-top:var(--space-3);">${links.join('')}</div>`;
 }
@@ -738,7 +747,7 @@ function renderProviderCard(b, index = 0) {
   return `
     <article class="card card-animate" style="animation-delay: ${index * 50}ms" data-id="${b.id}">
       <div class="card-visual-header">
-        ${hasPhoto ? `<img src="${thumbImg}" alt="${b.name}" class="card-avatar${b.logo_url ? ' card-avatar--logo' : ''}" loading="lazy">` : `<div class="card-avatar card-avatar--placeholder"><span>${(b.name || 'B').charAt(0).toUpperCase()}</span></div>`}
+        ${hasPhoto ? `<img src="${thumbImg}" alt="${b.name}" class="card-avatar${b.logo_url ? ' card-avatar--logo' : ''}" loading="lazy" onerror="this.style.display='none'">` : `<div class="card-avatar card-avatar--placeholder"><span>${(b.name || 'B').charAt(0).toUpperCase()}</span></div>`}
         <div class="card-header-info">
           <span class="card-category-label">${categoryLabel}</span>
           <div class="card-header-badges">${trustedBadge}${badge}</div>
@@ -1021,18 +1030,12 @@ async function renderProviderDetail(el, slug) {
   const groupLabel = formatGroupLabel(b.group);
   const specialties = (b.categories && b.categories.length > 0) ? b.categories.map(c => formatCategoryLabel(c.key || c)).join(', ') : formatCategoryLabel(b.category);
 
+  const waNum = formatWhatsAppNumber(b.phone);
   el.innerHTML = `
     <div class="detail-hero">
       <div class="container">
-        <div class="page-header-breadcrumb" style="color:rgba(250,248,244,.6);">
-          <a href="#home" onclick="navigate('home');return false;" style="color:rgba(250,248,244,.7);">Home</a>
-          <span>/</span>
-          <a href="#directory" onclick="navigate('directory');return false;" style="color:rgba(250,248,244,.7);">Directory</a>
-          <span>/</span>
-          <span style="color:rgba(250,248,244,.5);">${b.name}</span>
-        </div>
         <div class="detail-hero-inner">
-          ${b.logo_url ? '<img src="'+b.logo_url+'" alt="'+b.name+'" class="detail-hero-logo">' : (b.profile_photo_url ? '<img src="'+b.profile_photo_url+'" alt="'+b.name+'" class="detail-hero-photo">' : '')}
+          ${b.logo_url ? '<img src="'+b.logo_url+'" alt="'+b.name+'" class="detail-hero-logo" onerror="this.style.display=\'none\'">' : (b.profile_photo_url ? '<img src="'+b.profile_photo_url+'" alt="'+b.name+'" class="detail-hero-photo" onerror="this.style.display=\'none\'">' : '')}
           <div class="detail-hero-info">
             <div class="detail-hero-badges">
               <span class="badge badge--light">${groupLabel}</span>
@@ -1040,17 +1043,19 @@ async function renderProviderDetail(el, slug) {
               ${b.badge ? '<span class="badge badge--light">' + renderBadge(b.badge) + '</span>' : ''}
             </div>
             <h1 class="detail-hero-name">${b.name}</h1>
-            <p class="detail-hero-specialty">${specialties}</p>
-            <div class="detail-hero-meta">
-              <span>${iconMapPin()} ${formatAreaLabel(b.area)}</span>
-              <span>${iconLang()} ${(b.languages || 'Bahasa').split(/[,+]+/).map(function(s){return s.trim();}).filter(Boolean).join(' \u00b7 ')}</span>
-            </div>
           </div>
         </div>
       </div>
     </div>
     <div class="section">
       <div class="container">
+        <div class="detail-subheading">
+          <p class="detail-subheading-specialty">${specialties}</p>
+          <div class="detail-subheading-meta">
+            <span>${iconMapPin()} ${formatAreaLabel(b.area)}</span>
+            <span>${iconLang()} ${(b.languages || 'Bahasa').split(/[,+]+/).map(function(s){return s.trim();}).filter(Boolean).join(' \u00b7 ')}</span>
+          </div>
+        </div>
         <div class="detail-layout">
           <div class="detail-main">
             <div class="detail-rating-row">
@@ -1070,6 +1075,7 @@ async function renderProviderDetail(el, slug) {
             <div class="info-list mb-6">
               ${b.address ? '<div class="info-row"><span class="info-icon">'+iconMapPin()+'</span><span class="info-label">Address</span><span class="info-value">'+b.address+'</span></div>' : ''}
               ${b.phone ? '<div class="info-row"><span class="info-icon">'+iconPhone()+'</span><span class="info-label">Phone</span><span class="info-value"><a href="tel:'+b.phone+'">'+b.phone+'</a></span></div>' : ''}
+              ${b.phone ? '<div class="info-row"><span class="info-icon" style="color:#25D366;">'+iconWhatsApp()+'</span><span class="info-label">WhatsApp</span><span class="info-value"><a href="https://wa.me/'+waNum.replace('+','')+'" target="_blank" rel="noopener noreferrer">'+waNum+'</a></span></div>' : ''}
               ${b.website_url ? '<div class="info-row"><span class="info-icon">'+iconGlobe()+'</span><span class="info-label">Website</span><span class="info-value"><a href="'+b.website_url+'" target="_blank" rel="noopener noreferrer">Visit website '+iconExternalLink()+'</a></span></div>' : ''}
             </div>
             ${renderSocialLinks(b)}
@@ -1082,7 +1088,7 @@ async function renderProviderDetail(el, slug) {
               ${b.website_url ? '<a href="'+b.website_url+'" target="_blank" rel="noopener noreferrer" class="btn btn--primary btn--full" style="margin-top:var(--space-2)">'+iconGlobe()+' Visit Website</a>' : ''}
               ${isStore && b.tokopedia_url ? '<a href="'+b.tokopedia_url+'" target="_blank" rel="noopener noreferrer" class="btn btn--secondary btn--full" style="margin-top:var(--space-2)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg> Shop on Tokopedia</a>' : ''}
               ${b.google_maps_url ? '<a href="'+b.google_maps_url+'" target="_blank" rel="noopener noreferrer" class="btn btn--ghost btn--full" style="margin-top:var(--space-2)">'+iconMapPin()+' View on Map</a>' : ''}
-              ${renderFavBtn('provider', b.id)}
+              <div style="margin-top:var(--space-3);display:flex;align-items:center;justify-content:center;gap:var(--space-2);">${renderFavBtn('provider', b.id)}<span style="font-size:var(--text-xs);color:var(--color-text-muted);">Save to favourites</span></div>
             </div>
             <div class="detail-card">
               <div class="detail-card-title">Quick Info</div>
@@ -1122,7 +1128,7 @@ function renderDeveloperCard(dev, index = 0) {
   return `
     <article class="card card-animate" style="animation-delay:${index * 50}ms">
       <div class="card-visual-header">
-        ${hasPhoto ? `<img src="${thumbImg}" alt="${dev.name}" class="card-avatar${dev.logo_url ? ' card-avatar--logo' : ''}" loading="lazy">` : `<div class="card-avatar card-avatar--placeholder"><span>${(dev.name || 'D').charAt(0).toUpperCase()}</span></div>`}
+        ${hasPhoto ? `<img src="${thumbImg}" alt="${dev.name}" class="card-avatar${dev.logo_url ? ' card-avatar--logo' : ''}" loading="lazy" onerror="this.style.display='none'">` : `<div class="card-avatar card-avatar--placeholder"><span>${(dev.name || 'D').charAt(0).toUpperCase()}</span></div>`}
         <div class="card-header-info">
           <span class="card-category-label">${categoryLabel}</span>
           <div class="card-header-badges">${featuredBadge}${badge}</div>
@@ -1244,18 +1250,12 @@ async function renderDeveloperDetail(el, slug) {
 
   const devProjects = dev.projects || [];
 
+  const devSpecialties = (dev.categories && dev.categories.length > 0) ? dev.categories.map(c => formatCategoryLabel(c.key || c)).join(', ') : 'Property Developer';
   el.innerHTML = `
     <div class="detail-hero">
       <div class="container">
-        <div class="page-header-breadcrumb" style="color:rgba(250,248,244,.6);">
-          <a href="#home" onclick="navigate('home');return false;" style="color:rgba(250,248,244,.7);">Home</a>
-          <span>/</span>
-          <a href="#developers" onclick="navigate('developers');return false;" style="color:rgba(250,248,244,.7);">Developers</a>
-          <span>/</span>
-          <span style="color:rgba(250,248,244,.5);">${dev.name}</span>
-        </div>
         <div class="detail-hero-inner">
-          ${dev.logo_url ? '<img src="'+dev.logo_url+'" alt="'+dev.name+'" class="detail-hero-logo">' : (dev.profile_photo_url ? '<img src="'+dev.profile_photo_url+'" alt="'+dev.name+'" class="detail-hero-photo">' : '')}
+          ${dev.logo_url ? '<img src="'+dev.logo_url+'" alt="'+dev.name+'" class="detail-hero-logo" onerror="this.style.display=\'none\'">' : (dev.profile_photo_url ? '<img src="'+dev.profile_photo_url+'" alt="'+dev.name+'" class="detail-hero-photo" onerror="this.style.display=\'none\'">' : '')}
           <div class="detail-hero-info">
             <div class="detail-hero-badges">
               ${dev.is_featured ? '<span class="badge badge--light">\u2605 Featured</span>' : ''}
@@ -1263,18 +1263,20 @@ async function renderDeveloperDetail(el, slug) {
               ${dev.project_types.map(t => '<span class="badge badge--light">'+formatProjectType(t)+'</span>').join('')}
             </div>
             <h1 class="detail-hero-name">${dev.name}</h1>
-            <p class="detail-hero-specialty">${(dev.categories && dev.categories.length > 0) ? dev.categories.map(c => formatCategoryLabel(c.key || c)).join(', ') : 'Property Developer'}</p>
-            <div class="detail-hero-meta">
-              ${dev.areas_focus.map(a => '<span>'+iconMapPin()+' '+formatAreaLabel(a)+'</span>').join('')}
-              <span>${iconLang()} ${(dev.languages || 'Bahasa').split(/[,+]+/).map(function(s){return s.trim();}).filter(Boolean).join(' \u00b7 ')}</span>
-              ${dev.min_ticket_usd ? '<span>From '+formatUSD(dev.min_ticket_usd)+'</span>' : ''}
-            </div>
           </div>
         </div>
       </div>
     </div>
     <div class="section">
       <div class="container">
+        <div class="detail-subheading">
+          <p class="detail-subheading-specialty">${devSpecialties}</p>
+          <div class="detail-subheading-meta">
+            ${dev.areas_focus.map(a => '<span>'+iconMapPin()+' '+formatAreaLabel(a)+'</span>').join('')}
+            <span>${iconLang()} ${(dev.languages || 'Bahasa').split(/[,+]+/).map(function(s){return s.trim();}).filter(Boolean).join(' \u00b7 ')}</span>
+            ${dev.min_ticket_usd ? '<span>From '+formatUSD(dev.min_ticket_usd)+'</span>' : ''}
+          </div>
+        </div>
         <div class="detail-layout">
           <div class="detail-main">
             <div class="detail-rating-row">
@@ -1597,7 +1599,7 @@ function renderAgentCard(agent, index = 0) {
     <a href="#agent/${agent.slug}" class="card agent-card" onclick="navigate('agent/${agent.slug}');return false;" style="animation-delay:${index * 60}ms">
       <div class="agent-card-avatar">
         ${agent.profile_photo_url
-          ? '<img src="' + agent.profile_photo_url + '" alt="' + agent.display_name + '">'
+          ? '<img src="' + agent.profile_photo_url + '" alt="' + agent.display_name + '" onerror="this.style.display=\'none\'">'
           : '<div class="agent-avatar-placeholder">' + agent.display_name.charAt(0).toUpperCase() + '</div>'}
       </div>
       <div class="agent-card-info">
@@ -1710,32 +1712,27 @@ async function renderAgentDetail(el, slug) {
   el.innerHTML = `
     <div class="detail-hero">
       <div class="container">
-        <div class="page-header-breadcrumb" style="color:rgba(250,248,244,.6);">
-          <a href="#home" onclick="navigate('home');return false;" style="color:rgba(250,248,244,.7);">Home</a>
-          <span>/</span>
-          <a href="#agents" onclick="navigate('agents');return false;" style="color:rgba(250,248,244,.7);">Agents</a>
-          <span>/</span>
-          <span style="color:rgba(250,248,244,.5);">${agent.display_name}</span>
-        </div>
         <div class="detail-hero-inner">
-          ${agent.profile_photo_url ? '<img src="' + agent.profile_photo_url + '" alt="' + agent.display_name + '" class="detail-hero-photo" style="border-radius:50%;">' : '<div style="width:100px;height:100px;border-radius:50%;background:rgba(12,124,132,0.5);display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:700;color:#fff;flex-shrink:0;">' + agent.display_name.charAt(0).toUpperCase() + '</div>'}
+          ${agent.profile_photo_url ? '<img src="' + agent.profile_photo_url + '" alt="' + agent.display_name + '" class="detail-hero-photo" style="border-radius:50%;" onerror="this.style.display=\'none\'">' : '<div style="width:100px;height:100px;border-radius:50%;background:rgba(12,124,132,0.5);display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:700;color:#fff;flex-shrink:0;">' + agent.display_name.charAt(0).toUpperCase() + '</div>'}
           <div class="detail-hero-info">
             <div class="detail-hero-badges">
               ${agent.is_verified ? '<span class="badge badge--trusted-light">\u2713 Verified Agent</span>' : ''}
               ${agent.agency_name ? '<span class="badge badge--light">' + agent.agency_name + '</span>' : ''}
             </div>
             <h1 class="detail-hero-name">${agent.display_name}</h1>
-            <p class="detail-hero-specialty">Property Agent</p>
-            <div class="detail-hero-meta">
-              ${agent.area_label ? '<span>'+iconMapPin()+' '+agent.area_label+'</span>' : ''}
-              ${agent.listing_count ? '<span>'+agent.listing_count+' listing'+(agent.listing_count > 1 ? 's' : '')+'</span>' : ''}
-            </div>
           </div>
         </div>
       </div>
     </div>
     <div class="section">
       <div class="container">
+        <div class="detail-subheading">
+          <p class="detail-subheading-specialty">Property Agent</p>
+          <div class="detail-subheading-meta">
+            ${agent.area_label ? '<span>'+iconMapPin()+' '+agent.area_label+'</span>' : ''}
+            ${agent.listing_count ? '<span>'+agent.listing_count+' listing'+(agent.listing_count > 1 ? 's' : '')+'</span>' : ''}
+          </div>
+        </div>
         <div class="detail-layout">
           <div class="detail-main">
             ${agent.google_rating ? '<div class="detail-rating-row">' + renderGoogleRating(agent.google_rating, agent.google_review_count, 'detail') + '</div>' : ''}
