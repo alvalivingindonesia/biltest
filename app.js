@@ -575,7 +575,7 @@ async function renderHome(el) {
       <div class="hero-inner">
         <div class="container">
           <h1 class="hero-title">BUILD IN LOMBOK</h1>
-          <p class="hero-subtitle">Helping you build and invest in Lombok</p>
+          <p class="hero-subtitle">AI-powered tools to help you build &amp; invest in Lombok</p>
           <div class="hero-search">
             <svg class="hero-search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input type="search" class="hero-search-input" placeholder="Search providers, developers, projects..." autocomplete="off" id="hero-search-input">
@@ -647,8 +647,8 @@ async function renderHome(el) {
                 const isProject = !!item.developer_id;
                 const name = isProject ? item.project_name : (item.name || item.display_name || 'Unnamed');
                 const photo = item.profile_photo_url || item.hero_image_url || '';
-                const link = isProject ? '#project/' + item.id : '#developer/' + item.id;
-                const route = isProject ? 'project/' + item.id : 'developer/' + item.id;
+                const link = isProject ? '#project/' + (item.slug || item.id) : '#developer/' + (item.slug || item.id);
+                const route = isProject ? 'project/' + (item.slug || item.id) : 'developer/' + (item.slug || item.id);
                 return `
                   <a href="${link}" class="home-featured-thumb" onclick="navigate('${route}'); return false;">
                     <div class="home-featured-img" style="background-image:url('${photo}');"></div>
@@ -732,17 +732,16 @@ function renderProviderCard(b, index = 0) {
     : '';
 
   const thumbImg = b.logo_url || b.profile_photo_url;
-  const photoThumb = thumbImg
-    ? `<img src="${thumbImg}" alt="" class="card-thumb${b.logo_url ? ' card-thumb--logo' : ''}" loading="lazy">`
-    : '';
+  const hasPhoto = !!thumbImg;
+  const categoryLabel = (b.categories && b.categories.length > 0) ? b.categories.map(c => formatCategoryLabel(c.key || c)).join(' · ') : formatCategoryLabel(b.category);
 
   return `
     <article class="card card-animate" style="animation-delay: ${index * 50}ms" data-id="${b.id}">
-      <div class="card-top">
-        <div class="card-top-left">
-          ${photoThumb}
-          <span class="card-category-label">${(b.categories && b.categories.length > 0) ? b.categories.map(c => formatCategoryLabel(c.key || c)).join(' · ') : formatCategoryLabel(b.category)}</span>
-          ${trustedBadge}${badge}
+      <div class="card-visual-header">
+        ${hasPhoto ? `<img src="${thumbImg}" alt="${b.name}" class="card-avatar${b.logo_url ? ' card-avatar--logo' : ''}" loading="lazy">` : `<div class="card-avatar card-avatar--placeholder"><span>${(b.name || 'B').charAt(0).toUpperCase()}</span></div>`}
+        <div class="card-header-info">
+          <span class="card-category-label">${categoryLabel}</span>
+          <div class="card-header-badges">${trustedBadge}${badge}</div>
         </div>
         ${ratingInline}
       </div>
@@ -1118,14 +1117,15 @@ function renderDeveloperCard(dev, index = 0) {
     : '';
   const areas = dev.areas_focus.map(a => formatAreaLabel(a)).join(', ');
   const thumbImg = dev.logo_url || dev.profile_photo_url;
-  const devThumb = thumbImg ? `<img src="${thumbImg}" alt="" class="card-thumb${dev.logo_url ? ' card-thumb--logo' : ''}" loading="lazy">` : '';
+  const hasPhoto = !!thumbImg;
+  const categoryLabel = (dev.categories && dev.categories.length > 0) ? dev.categories.map(c => formatCategoryLabel(c.key || c)).join(' · ') : 'Developer';
   return `
     <article class="card card-animate" style="animation-delay:${index * 50}ms">
-      <div class="card-top">
-        <div class="card-top-left">
-          ${devThumb}
-          <span class="card-category-label">${(dev.categories && dev.categories.length > 0) ? dev.categories.map(c => formatCategoryLabel(c.key || c)).join(' · ') : 'Developer'}</span>
-          ${featuredBadge}${badge}
+      <div class="card-visual-header">
+        ${hasPhoto ? `<img src="${thumbImg}" alt="${dev.name}" class="card-avatar${dev.logo_url ? ' card-avatar--logo' : ''}" loading="lazy">` : `<div class="card-avatar card-avatar--placeholder"><span>${(dev.name || 'D').charAt(0).toUpperCase()}</span></div>`}
+        <div class="card-header-info">
+          <span class="card-category-label">${categoryLabel}</span>
+          <div class="card-header-badges">${featuredBadge}${badge}</div>
         </div>
         ${ratingInline}
       </div>
