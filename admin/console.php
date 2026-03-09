@@ -621,7 +621,16 @@ function toggleSidebarSub(e,id){
     <a href="?s=claims" class="<?= $section==='claims'?'active':'' ?>">Claims<?php if($claim_count):?> <span style="background:#f59e0b;color:#fff;border-radius:10px;padding:0 6px;font-size:11px;margin-left:4px"><?=$claim_count?></span><?php endif;?></a>
     <a href="?s=submissions" class="<?= $section==='submissions'?'active':'' ?>">Submissions<?php if($sub_count):?> <span style="background:#f59e0b;color:#fff;border-radius:10px;padding:0 6px;font-size:11px;margin-left:4px"><?=$sub_count?></span><?php endif;?></a>
     <h2>Configuration</h2>
-    <a href="?s=lookups" class="<?= $section==='lookups'?'active':'' ?>">Categories & Lookups</a>
+    <div class="sidebar-group">
+        <a href="?s=lookups" class="sidebar-parent <?= $section==='lookups'?'active':'' ?>" onclick="toggleSidebarSub(event,'sb-lookups')">Categories & Lookups <span class="sb-arrow">▸</span></a>
+        <div class="sidebar-sub" id="sb-lookups" <?= $section==='lookups'?'style="display:block"':'' ?>>
+            <a href="?s=lookups#lookup-groups" style="padding-left:32px;font-size:12px;">Provider Groups</a>
+            <a href="?s=lookups#lookup-categories" style="padding-left:32px;font-size:12px;">Provider Categories</a>
+            <a href="?s=lookups#lookup-areas" style="padding-left:32px;font-size:12px;">Areas / Locations</a>
+            <a href="?s=lookups#lookup-project_types" style="padding-left:32px;font-size:12px;">Project Types</a>
+            <a href="?s=lookups#lookup-project_statuses" style="padding-left:32px;font-size:12px;">Project Statuses</a>
+        </div>
+    </div>
     <h2>Tools</h2>
     <a href="import.php">Google Maps Importer</a>
     <a href="?s=batch_enrich" class="<?= $section==='batch_enrich'?'active':'' ?>">Batch Enrich</a>
@@ -2242,6 +2251,13 @@ function applyField(applyBtn, entityType, fieldName) {
     applyBtn.textContent = 'Applied';
     applyBtn.disabled = true;
     applyBtn.className = 'btn btn-o btn-sm';
+}
+</script>
+<script>
+// Auto-scroll to hash anchor (for sidebar lookup sub-links)
+if (window.location.hash) {
+    var tgt = document.getElementById(window.location.hash.substring(1));
+    if (tgt) { setTimeout(function(){ tgt.scrollIntoView({behavior:'smooth',block:'start'}); }, 100); }
 }
 </script>
 

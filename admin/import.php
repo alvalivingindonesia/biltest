@@ -36,62 +36,25 @@ if (empty($_SESSION['admin_auth'])) {
     exit;
 }
 
-// ─── CATEGORY TREE (must match schema.sql) ───────────────────────────
-$CATEGORY_TREE = [
-    'builders_trades' => [
-        'label' => 'Builders & Trades',
-        'cats' => [
-            'general_contractor' => 'General Contractor',
-            'carpenter' => 'Carpenter / Joiner',
-            'mason' => 'Mason / Concrete Worker',
-            'roofer' => 'Roofer',
-            'plumber' => 'Plumber',
-            'electrician' => 'Electrician',
-            'painter' => 'Painter / Finisher',
-            'tiler' => 'Tiler',
-        ],
-    ],
-    'professional_services' => [
-        'label' => 'Professional Services',
-        'cats' => [
-            'architect' => 'Architect',
-            'interior_designer' => 'Interior Designer',
-            'structural_engineer' => 'Structural Engineer',
-            'mep_engineer' => 'MEP Engineer',
-            'civil_engineer' => 'Civil Engineer',
-            'quantity_surveyor' => 'Quantity Surveyor / Cost Consultant',
-            'project_manager' => 'Project Manager / Construction Manager',
-            'legal_notary' => 'Lawyer / Notary',
-        ],
-    ],
-    'specialist_contractors' => [
-        'label' => 'Specialist Contractors',
-        'cats' => [
-            'pool_contractor' => 'Pool Builder / Pool Contractor',
-            'solar_installer' => 'Solar / PV Installer',
-            'waterproofing' => 'Waterproofing Specialist',
-            'glazing_contractor' => 'Windows & Doors / Glazing Contractor',
-            'metalwork_contractor' => 'Steel / Welding / Metalwork Contractor',
-            'hvac_contractor' => 'Air-conditioning / HVAC Contractor',
-            'landscaping_contractor' => 'Landscaping Contractor',
-        ],
-    ],
-    'suppliers_materials' => [
-        'label' => 'Suppliers & Materials',
-        'cats' => [
-            'building_materials_store' => 'General Building Materials Store',
-            'timber_workshop' => 'Timber & Carpentry Workshop',
-            'tiles_stone_supplier' => 'Tiles & Stone Finishes Supplier',
-            'sanitary_supplier' => 'Sanitary Ware & Plumbing Fixtures Supplier',
-            'lighting_supplier' => 'Lighting & Electrical Fixtures Supplier',
-            'sand_supplier' => 'Sand Supplier',
-            'gravel_supplier' => 'Gravel & Riverstone Supplier',
-            'aggregate_supplier' => 'Crushed Stone / Aggregate Supplier',
-            'earth_fill_supplier' => 'Earth Fill / Compacted Fill Supplier',
-            'topsoil_supplier' => 'Topsoil & Landscaping Materials Supplier',
-        ],
-    ],
-];
+// ─── CATEGORY TREE (loaded dynamically from database) ────────────────
+$CATEGORY_TREE = [];
+try {
+    $db_cat = get_db();
+    $grp_rows = $db_cat->query("SELECT `key`, `label` FROM `groups` ORDER BY sort_order")->fetchAll();
+    $cat_rows = $db_cat->query("SELECT `key`, `label`, `group_key` FROM categories ORDER BY sort_order")->fetchAll();
+    foreach ($grp_rows as $g) {
+        $CATEGORY_TREE[$g['key']] = ['label' => $g['label'], 'cats' => []];
+    }
+    foreach ($cat_rows as $c) {
+        $gk = $c['group_key'];
+        if (isset($CATEGORY_TREE[$gk])) {
+            $CATEGORY_TREE[$gk]['cats'][$c['key']] = $c['label'];
+        }
+    }
+} catch (Exception $e) {
+    // Fallback: if DB fails, detect_category will return empty results
+    $CATEGORY_TREE = [];
+}
 
 // ─── KEYWORD → CATEGORY MAPPING ─────────────────────────────────────
 // Maps Google Maps category text AND business name keywords to our categories.
