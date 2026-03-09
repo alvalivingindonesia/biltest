@@ -304,6 +304,83 @@ if (empty($existing['profile_image_url']) && !empty($found['profile_photo_url'])
     $found['profile_image_url'] = $found['profile_photo_url'];
 }
 
+// ── Extract hero image (large banner / og:image / first big image) ──
+if (empty($existing['hero_image_url'])) {
+    $hero_url = '';
+    // Priority 1: og:image (often a good hero/banner)
+    if (preg_match('/<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']/i', $html, $him)) {
+        $hero_url = html_entity_decode(trim($him[1]), ENT_QUOTES, 'UTF-8');
+    }
+    // Priority 2: twitter:image:src or twitter:image
+    if (!$hero_url && preg_match('/<meta[^>]+name=["\']twitter:image(?::src)?["\'][^>]+content=["\']([^"\']+)["\']/i', $html, $him)) {
+        $hero_url = html_entity_decode(trim($him[1]), ENT_QUOTES, 'UTF-8');
+    }
+    // Priority 3: First large image (width >= 400) not logo/icon
+    if (!$hero_url) {
+        preg_match_all('/<img[^>]+>/i', $html, $hero_img_tags);
+        foreach ($hero_img_tags[0] as $itag) {
+            if (!preg_match('/src=["\']([^"\']+)["\']/i', $itag, $src_m)) continue;
+            $candidate = html_entity_decode($src_m[1], ENT_QUOTES, 'UTF-8');
+            if (preg_match('/^data:|\.svg|pixel|track|spacer|blank|1x1|favicon|icon|logo/i', $candidate)) continue;
+            // Prefer images with explicit large dimensions
+            if (preg_match('/width=["\']?(\d+)/i', $itag, $wm) && (int)$wm[1] >= 400) {
+                $hero_url = $candidate;
+                break;
+            }
+        }
+    }
+    if ($hero_url) {
+        if (strpos($hero_url, '//') === 0) $hero_url = 'https:' . $hero_url;
+        elseif (strpos($hero_url, '/') === 0) $hero_url = $base . $hero_url;
+        elseif (strpos($hero_url, 'http') !== 0) $hero_url = $base . '/' . $hero_url;
+        $found['hero_image_url'] = $hero_url;
+        $log[] = 'Found hero image: ' . $hero_url;
+    }
+}
+
+// ── Extract additional images (up to 3 more gallery images) ──
+$extra_slots = [];
+if (empty($existing['image_url_2'])) $extra_slots[] = 'image_url_2';
+if (empty($existing['image_url_3'])) $extra_slots[] = 'image_url_3';
+if (empty($existing['image_url_4'])) $extra_slots[] = 'image_url_4';
+
+if (!empty($extra_slots)) {
+    $collected = [];
+    $skip_urls = [];
+    // Skip images we already assigned
+    if (!empty($found['profile_photo_url'])) $skip_urls[] = $found['profile_photo_url'];
+    if (!empty($existing['profile_photo_url'])) $skip_urls[] = $existing['profile_photo_url'];
+    if (!empty($found['logo_url'])) $skip_urls[] = $found['logo_url'];
+    if (!empty($existing['logo_url'])) $skip_urls[] = $existing['logo_url'];
+    if (!empty($found['hero_image_url'])) $skip_urls[] = $found['hero_image_url'];
+    if (!empty($existing['hero_image_url'])) $skip_urls[] = $existing['hero_image_url'];
+
+    preg_match_all('/<img[^>]+>/i', $html, $all_img_tags);
+    foreach ($all_img_tags[0] as $itag) {
+        if (count($collected) >= count($extra_slots)) break;
+        if (!preg_match('/src=["\']([^"\']+)["\']/i', $itag, $src_m)) continue;
+        $candidate = html_entity_decode($src_m[1], ENT_QUOTES, 'UTF-8');
+        // Skip small/icon/logo/svg images
+        if (preg_match('/^data:|\.svg|pixel|track|spacer|blank|1x1|favicon|icon|logo|placeholder/i', $candidate)) continue;
+        if (preg_match('/width=["\']?(\d+)/i', $itag, $wm) && (int)$wm[1] < 100) continue;
+        if (preg_match('/height=["\']?(\d+)/i', $itag, $hm) && (int)$hm[1] < 100) continue;
+        // Normalize
+        $norm = $candidate;
+        if (strpos($norm, '//') === 0) $norm = 'https:' . $norm;
+        elseif (strpos($norm, '/') === 0) $norm = $base . $norm;
+        elseif (strpos($norm, 'http') !== 0) $norm = $base . '/' . $norm;
+        // Skip duplicates
+        if (in_array($norm, $skip_urls) || in_array($norm, $collected)) continue;
+        $collected[] = $norm;
+    }
+    foreach ($collected as $idx => $img_url) {
+        if (isset($extra_slots[$idx])) {
+            $found[$extra_slots[$idx]] = $img_url;
+            $log[] = 'Found additional image (' . $extra_slots[$idx] . '): ' . $img_url;
+        }
+    }
+}
+
 echo json_encode([
     'found' => $found,
     'log' => $log,

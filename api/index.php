@@ -299,6 +299,7 @@ function handle_providers_list(): void {
                 p.short_description, p.address, p.google_rating, p.google_review_count,
                 p.phone, p.whatsapp_number, p.website_url, p.languages,
                 p.instagram_url, p.facebook_url, p.profile_photo_url, p.logo_url,
+                p.hero_image_url, p.image_url_2, p.image_url_3, p.image_url_4,
                 p.is_featured, p.is_trusted, p.badge,
                 g.label AS group_label, a.label AS area_label, a.region_key
          FROM providers p
@@ -397,7 +398,8 @@ function handle_developers_list(): void {
     $stmt = $db->prepare(
         "SELECT d.id, d.slug, d.name, d.short_description, d.min_ticket_usd,
                 d.google_rating, d.google_review_count, d.phone, d.whatsapp_number,
-                d.website_url, d.languages, d.is_featured, d.badge, d.profile_photo_url, d.logo_url
+                d.website_url, d.languages, d.is_featured, d.badge, d.profile_photo_url, d.logo_url,
+                d.hero_image_url, d.image_url_2, d.image_url_3, d.image_url_4
          FROM developers d
          WHERE {$where_sql}
          ORDER BY {$order}

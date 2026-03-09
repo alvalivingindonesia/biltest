@@ -66,13 +66,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     short_description=?, description=?, address=?, latitude=?, longitude=?,
                     google_maps_url=?, google_rating=?, google_review_count=?,
                     phone=?, whatsapp_number=?, website_url=?, languages=?,
-                    profile_photo_url=?, logo_url=?, instagram_url=?, facebook_url=?, linkedin_url=?,
+                    profile_photo_url=?, logo_url=?, hero_image_url=?, image_url_2=?, image_url_3=?, image_url_4=?,
+                    instagram_url=?, facebook_url=?, linkedin_url=?,
                     is_featured=?, is_trusted=?, badge=?, is_active=? WHERE id=?")->execute([
                     $data['name'], $slug, $data['group_key'], $data['area_key'],
                     $data['short_description'], $data['description'], $data['address'], $data['latitude'] ?: null, $data['longitude'] ?: null,
                     $data['google_maps_url'], $data['google_rating'] ?: null, $data['google_review_count'] ?: 0,
                     $data['phone'], $data['whatsapp_number'], $data['website_url'], $data['languages'],
-                    $data['profile_photo_url'] ?: null, $data['logo_url'] ?: null, $data['instagram_url'] ?: null, $data['facebook_url'] ?: null, $data['linkedin_url'] ?: null,
+                    $data['profile_photo_url'] ?: null, $data['logo_url'] ?: null, $data['hero_image_url'] ?: null, $data['image_url_2'] ?: null, $data['image_url_3'] ?: null, $data['image_url_4'] ?: null,
+                    $data['instagram_url'] ?: null, $data['facebook_url'] ?: null, $data['linkedin_url'] ?: null,
                     isset($data['is_featured']) ? 1 : 0, isset($data['is_trusted']) ? 1 : 0, $data['badge'] ?: null, isset($data['is_active']) ? 1 : 0, $id
                 ]);
                 // Update categories (junction table)
@@ -90,14 +92,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     short_description, description, address, latitude, longitude,
                     google_maps_url, google_rating, google_review_count,
                     phone, whatsapp_number, website_url, languages,
-                    profile_photo_url, logo_url, instagram_url, facebook_url, linkedin_url,
+                    profile_photo_url, logo_url, hero_image_url, image_url_2, image_url_3, image_url_4,
+                    instagram_url, facebook_url, linkedin_url,
                     is_featured, is_trusted, badge, is_active)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")->execute([
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")->execute([
                     $slug, $data['name'], $data['group_key'], ($data['categories'] ?? [''])[0] ?? '', $data['area_key'],
                     $data['short_description'], $data['description'], $data['address'], $data['latitude'] ?: null, $data['longitude'] ?: null,
                     $data['google_maps_url'], $data['google_rating'] ?: null, $data['google_review_count'] ?: 0,
                     $data['phone'], $data['whatsapp_number'], $data['website_url'], $data['languages'],
-                    $data['profile_photo_url'] ?: null, $data['logo_url'] ?: null, $data['instagram_url'] ?: null, $data['facebook_url'] ?: null, $data['linkedin_url'] ?: null,
+                    $data['profile_photo_url'] ?: null, $data['logo_url'] ?: null, $data['hero_image_url'] ?: null, $data['image_url_2'] ?: null, $data['image_url_3'] ?: null, $data['image_url_4'] ?: null,
+                    $data['instagram_url'] ?: null, $data['facebook_url'] ?: null, $data['linkedin_url'] ?: null,
                     isset($data['is_featured']) ? 1 : 0, isset($data['is_trusted']) ? 1 : 0, $data['badge'] ?: null, isset($data['is_active']) ? 1 : 0
                 ]);
                 $new_id = $db->lastInsertId();
@@ -119,12 +123,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $db->prepare("UPDATE developers SET name=?, slug=?, short_description=?, description=?,
                     min_ticket_usd=?, google_maps_url=?, google_rating=?, google_review_count=?,
                     phone=?, whatsapp_number=?, website_url=?, languages=?,
-                    profile_photo_url=?, logo_url=?, instagram_url=?, facebook_url=?, linkedin_url=?,
+                    profile_photo_url=?, logo_url=?, hero_image_url=?, image_url_2=?, image_url_3=?, image_url_4=?,
+                    instagram_url=?, facebook_url=?, linkedin_url=?,
                     is_featured=?, badge=?, is_active=? WHERE id=?")->execute([
                     $data['name'], $slug, $data['short_description'], $data['description'],
                     $data['min_ticket_usd'] ?: null, $data['google_maps_url'], $data['google_rating'] ?: null, $data['google_review_count'] ?: 0,
                     $data['phone'], $data['whatsapp_number'], $data['website_url'], $data['languages'],
-                    $data['profile_photo_url'] ?: null, $data['logo_url'] ?: null, $data['instagram_url'] ?: null, $data['facebook_url'] ?: null, $data['linkedin_url'] ?: null,
+                    $data['profile_photo_url'] ?: null, $data['logo_url'] ?: null, $data['hero_image_url'] ?: null, $data['image_url_2'] ?: null, $data['image_url_3'] ?: null, $data['image_url_4'] ?: null,
+                    $data['instagram_url'] ?: null, $data['facebook_url'] ?: null, $data['linkedin_url'] ?: null,
                     isset($data['is_featured']) ? 1 : 0, $data['badge'] ?: null, isset($data['is_active']) ? 1 : 0, $id
                 ]);
                 // Update areas
@@ -146,13 +152,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $db->prepare("INSERT INTO developers (slug, name, short_description, description,
                     min_ticket_usd, google_maps_url, google_rating, google_review_count,
                     phone, whatsapp_number, website_url, languages,
-                    profile_photo_url, logo_url, instagram_url, facebook_url, linkedin_url,
+                    profile_photo_url, logo_url, hero_image_url, image_url_2, image_url_3, image_url_4,
+                    instagram_url, facebook_url, linkedin_url,
                     is_featured, badge, is_active)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")->execute([
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")->execute([
                     $slug, $data['name'], $data['short_description'], $data['description'],
                     $data['min_ticket_usd'] ?: null, $data['google_maps_url'], $data['google_rating'] ?: null, $data['google_review_count'] ?: 0,
                     $data['phone'], $data['whatsapp_number'], $data['website_url'], $data['languages'],
-                    $data['profile_photo_url'] ?: null, $data['logo_url'] ?: null, $data['instagram_url'] ?: null, $data['facebook_url'] ?: null, $data['linkedin_url'] ?: null,
+                    $data['profile_photo_url'] ?: null, $data['logo_url'] ?: null, $data['hero_image_url'] ?: null, $data['image_url_2'] ?: null, $data['image_url_3'] ?: null, $data['image_url_4'] ?: null,
+                    $data['instagram_url'] ?: null, $data['facebook_url'] ?: null, $data['linkedin_url'] ?: null,
                     isset($data['is_featured']) ? 1 : 0, $data['badge'] ?: null, isset($data['is_active']) ? 1 : 0
                 ]);
                 $new_id = $db->lastInsertId();
@@ -837,6 +845,9 @@ elseif ($section === 'providers' && ($action === 'edit' || $action === 'save')):
                 <?php if ($id): ?>
                 <?php if (!empty($item['website_url'])): ?>
                 <button type="button" class="btn btn-o btn-sm" onclick="scanWebsite('providers')" id="scan-btn" title="Scan website for missing info">&#x1F50D; Scan</button>
+                <label style="font-size:11px;display:flex;align-items:center;gap:3px;white-space:nowrap;cursor:pointer" title="When checked, re-scan and overwrite existing field values">
+                    <input type="checkbox" id="scan-update-prov" style="margin:0"> Update existing
+                </label>
                 <?php else: ?>
                 <button type="button" class="btn btn-o btn-sm" onclick="window.open('https://www.google.com/search?q='+encodeURIComponent(document.querySelector('[name=name]').value+' Lombok'),'_blank')" title="Search Google for this entity">&#x1F50D; Search</button>
                 <?php endif; ?>
@@ -856,6 +867,15 @@ elseif ($section === 'providers' && ($action === 'edit' || $action === 'save')):
                 <?php if (!empty($item['logo_url'])): ?><img src="<?= $v('logo_url') ?>" style="height:36px;width:auto;border-radius:4px;object-fit:contain;background:#f5f5f5;padding:2px"><?php endif; ?>
             </div>
         </div>
+        <div class="fg span2"><label>Hero Image URL</label>
+            <div style="display:flex;gap:8px;align-items:center">
+                <input type="url" name="hero_image_url" value="<?= $v('hero_image_url') ?>" placeholder="https://... (banner / hero background)" style="flex:1">
+                <?php if (!empty($item['hero_image_url'])): ?><img src="<?= $v('hero_image_url') ?>" style="height:36px;width:auto;border-radius:4px;object-fit:cover"><?php endif; ?>
+            </div>
+        </div>
+        <div class="fg span2"><label>Image 2</label><input type="url" name="image_url_2" value="<?= $v('image_url_2') ?>" placeholder="https://... (additional image)"></div>
+        <div class="fg"><label>Image 3</label><input type="url" name="image_url_3" value="<?= $v('image_url_3') ?>" placeholder="https://..."></div>
+        <div class="fg"><label>Image 4</label><input type="url" name="image_url_4" value="<?= $v('image_url_4') ?>" placeholder="https://..."></div>
         <div class="fg"><label>Instagram URL</label><input type="url" name="instagram_url" value="<?= $v('instagram_url') ?>" placeholder="https://instagram.com/..."></div>
         <div class="fg"><label>Facebook URL</label><input type="url" name="facebook_url" value="<?= $v('facebook_url') ?>" placeholder="https://facebook.com/..."></div>
         <div class="fg"><label>LinkedIn URL</label><input type="url" name="linkedin_url" value="<?= $v('linkedin_url') ?>" placeholder="https://linkedin.com/..."></div>
@@ -1014,6 +1034,9 @@ elseif ($section === 'developers' && ($action === 'edit' || $action === 'save'))
                 <?php if ($id): ?>
                 <?php if (!empty($item['website_url'])): ?>
                 <button type="button" class="btn btn-o btn-sm" onclick="scanWebsite('developers')" id="scan-btn-dev" title="Scan website for missing info">&#x1F50D; Scan</button>
+                <label style="font-size:11px;display:flex;align-items:center;gap:3px;white-space:nowrap;cursor:pointer" title="When checked, re-scan and overwrite existing field values">
+                    <input type="checkbox" id="scan-update-dev" style="margin:0"> Update existing
+                </label>
                 <?php else: ?>
                 <button type="button" class="btn btn-o btn-sm" onclick="window.open('https://www.google.com/search?q='+encodeURIComponent(document.querySelector('[name=name]').value+' Lombok'),'_blank')" title="Search Google for this entity">&#x1F50D; Search</button>
                 <?php endif; ?>
@@ -1033,6 +1056,15 @@ elseif ($section === 'developers' && ($action === 'edit' || $action === 'save'))
                 <?php if (!empty($item['logo_url'])): ?><img src="<?= $v('logo_url') ?>" style="height:36px;width:auto;border-radius:4px;object-fit:contain;background:#f5f5f5;padding:2px"><?php endif; ?>
             </div>
         </div>
+        <div class="fg span2"><label>Hero Image URL</label>
+            <div style="display:flex;gap:8px;align-items:center">
+                <input type="url" name="hero_image_url" value="<?= $v('hero_image_url') ?>" placeholder="https://... (banner / hero background)" style="flex:1">
+                <?php if (!empty($item['hero_image_url'])): ?><img src="<?= $v('hero_image_url') ?>" style="height:36px;width:auto;border-radius:4px;object-fit:cover"><?php endif; ?>
+            </div>
+        </div>
+        <div class="fg span2"><label>Image 2</label><input type="url" name="image_url_2" value="<?= $v('image_url_2') ?>" placeholder="https://... (additional image)"></div>
+        <div class="fg"><label>Image 3</label><input type="url" name="image_url_3" value="<?= $v('image_url_3') ?>" placeholder="https://..."></div>
+        <div class="fg"><label>Image 4</label><input type="url" name="image_url_4" value="<?= $v('image_url_4') ?>" placeholder="https://..."></div>
         <div class="fg"><label>Instagram URL</label><input type="url" name="instagram_url" value="<?= $v('instagram_url') ?>" placeholder="https://instagram.com/..."></div>
         <div class="fg"><label>Facebook URL</label><input type="url" name="facebook_url" value="<?= $v('facebook_url') ?>" placeholder="https://facebook.com/..."></div>
         <div class="fg"><label>LinkedIn URL</label><input type="url" name="linkedin_url" value="<?= $v('linkedin_url') ?>" placeholder="https://linkedin.com/..."></div>
@@ -1906,6 +1938,10 @@ function beRenderCards() {
         html += '<label>Instagram</label><input type="text" id="be-f-' + i + '-instagram_url" placeholder="https://instagram.com/..." value="' + (e.instagram_url || '') + '">';
         html += '<label>Facebook</label><input type="text" id="be-f-' + i + '-facebook_url" placeholder="https://facebook.com/..." value="' + (e.facebook_url || '') + '">';
         html += '<label>Logo</label><input type="text" id="be-f-' + i + '-logo_url" placeholder="Logo image URL" value="' + (e.logo_url || '') + '">';
+        html += '<label>Hero Image</label><input type="text" id="be-f-' + i + '-hero_image_url" placeholder="Banner / hero image URL" value="' + (e.hero_image_url || '') + '">';
+        html += '<label>Image 2</label><input type="text" id="be-f-' + i + '-image_url_2" placeholder="Additional image" value="' + (e.image_url_2 || '') + '">';
+        html += '<label>Image 3</label><input type="text" id="be-f-' + i + '-image_url_3" placeholder="Additional image" value="' + (e.image_url_3 || '') + '">';
+        html += '<label>Image 4</label><input type="text" id="be-f-' + i + '-image_url_4" placeholder="Additional image" value="' + (e.image_url_4 || '') + '">';
         html += '<label>Phone</label><input type="text" id="be-f-' + i + '-phone" placeholder="+62..." value="' + (e.phone || '') + '">';
         html += '<label>Website</label><input type="text" id="be-f-' + i + '-website_url" placeholder="https://..." value="' + (e.website_url || '') + '">';
         html += '</div>';
@@ -1936,7 +1972,7 @@ function beToggle(idx) {
 function beSave(idx) {
     var e = beEntities[idx];
     var msg = document.getElementById('be-msg-' + idx);
-    var fieldNames = ['profile_photo_url','instagram_url','facebook_url','logo_url','phone','website_url'];
+    var fieldNames = ['profile_photo_url','instagram_url','facebook_url','logo_url','hero_image_url','image_url_2','image_url_3','image_url_4','phone','website_url'];
     var fields = {};
     var count = 0;
     for (var f = 0; f < fieldNames.length; f++) {
@@ -2080,8 +2116,12 @@ function scanWebsite(entityType) {
     resultsDiv.style.display = 'block';
     resultsDiv.innerHTML = '<span style="color:#666">Fetching website data…</span>';
 
+    /* Check if "Update existing" is ticked */
+    var updateChk = (entityType === 'providers') ? document.getElementById('scan-update-prov') : document.getElementById('scan-update-dev');
+    var forceUpdate = updateChk && updateChk.checked;
+
     /* Collect current form values so scraper knows what is already filled */
-    var existing = collectExisting(form);
+    var existing = forceUpdate ? {} : collectExisting(form);
 
     fetch('scrape_enrich.php', {
         method: 'POST',
@@ -2089,7 +2129,7 @@ function scanWebsite(entityType) {
         body: JSON.stringify({url: url, existing: existing})
     })
     .then(function(r) { return r.json(); })
-    .then(function(data) { handleScanResult(data, entityType, form, resultsDiv, btn); })
+    .then(function(data) { handleScanResult(data, entityType, form, resultsDiv, btn, forceUpdate); })
     .catch(function(err) {
         btn.disabled = false;
         btn.innerHTML = '&#x1F50D; Scan';
@@ -2124,6 +2164,7 @@ function scanGoogle(entityType, name, form, resultsDiv, btn) {
 function collectExisting(form) {
     var existing = {};
     var fieldNames = ['description','short_description','profile_photo_url','logo_url',
+        'hero_image_url','image_url_2','image_url_3','image_url_4',
         'instagram_url','facebook_url','linkedin_url','youtube_url','tiktok_url',
         'whatsapp_number','phone','email','website_url'];
     for (var i = 0; i < fieldNames.length; i++) {
@@ -2134,7 +2175,7 @@ function collectExisting(form) {
 }
 
 /* Handle scan/search results — shared by website scan and Google search */
-function handleScanResult(data, entityType, form, resultsDiv, btn) {
+function handleScanResult(data, entityType, form, resultsDiv, btn, forceUpdate) {
     btn.disabled = false;
     btn.innerHTML = '&#x1F50D; Scan';
     if (data.error) {
@@ -2160,9 +2201,9 @@ function handleScanResult(data, entityType, form, resultsDiv, btn) {
             html += (val && val.length > 120 ? val.substring(0, 120) + '…' : val);
         }
         html += ' <button type="button" onclick="applyField(this,\'' + entityType + '\',\'' + k + '\')" class="btn btn-g btn-sm" style="margin-left:6px;padding:2px 8px;font-size:11px">Apply</button></li>';
-        /* Auto-apply to empty fields */
+        /* Auto-apply to empty fields (or all fields if forceUpdate) */
         var inp = form.querySelector('[name="' + k + '"]');
-        if (inp && !inp.value.trim()) {
+        if (inp && (forceUpdate || !inp.value.trim())) {
             inp.value = val;
         }
     }

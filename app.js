@@ -1031,8 +1031,10 @@ async function renderProviderDetail(el, slug) {
   const specialties = (b.categories && b.categories.length > 0) ? b.categories.map(c => formatCategoryLabel(c.key || c)).join(', ') : formatCategoryLabel(b.category);
 
   const waNum = formatWhatsAppNumber(b.phone);
+  const heroImg = b.hero_image_url || '';
   el.innerHTML = `
     <div class="detail-hero">
+      ${heroImg ? '<div class="detail-hero-bg" style="background-image:url(\'' + heroImg + '\');"></div>' : ''}
       <div class="container">
         <div class="detail-hero-inner">
           ${b.logo_url ? '<img src="'+b.logo_url+'" alt="'+b.name+'" class="detail-hero-logo" onerror="this.style.display=\'none\'">' : (b.profile_photo_url ? '<img src="'+b.profile_photo_url+'" alt="'+b.name+'" class="detail-hero-photo" onerror="this.style.display=\'none\'">' : '')}
@@ -1251,8 +1253,10 @@ async function renderDeveloperDetail(el, slug) {
   const devProjects = dev.projects || [];
 
   const devSpecialties = (dev.categories && dev.categories.length > 0) ? dev.categories.map(c => formatCategoryLabel(c.key || c)).join(', ') : 'Property Developer';
+  const devHeroImg = dev.hero_image_url || '';
   el.innerHTML = `
     <div class="detail-hero">
+      ${devHeroImg ? '<div class="detail-hero-bg" style="background-image:url(\'' + devHeroImg + '\');"></div>' : ''}
       <div class="container">
         <div class="detail-hero-inner">
           ${dev.logo_url ? '<img src="'+dev.logo_url+'" alt="'+dev.name+'" class="detail-hero-logo" onerror="this.style.display=\'none\'">' : (dev.profile_photo_url ? '<img src="'+dev.profile_photo_url+'" alt="'+dev.name+'" class="detail-hero-photo" onerror="this.style.display=\'none\'">' : '')}
@@ -1307,7 +1311,8 @@ async function renderDeveloperDetail(el, slug) {
                 ${dev.google_maps_url ? `<div class="info-row"><span class="info-icon">${iconMapPin()}</span><span class="info-value"><a href="${dev.google_maps_url}" target="_blank" rel="noopener noreferrer">View on map ${iconExternalLink()}</a></span></div>` : ''}
               </div>
               ${renderSocialLinks(dev)}
-              ${dev.whatsapp_number ? `<a href="https://wa.me/${dev.whatsapp_number}" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--full">${iconWhatsApp()} WhatsApp</a>` : ''}
+              ${dev.whatsapp_number ? `<div style="margin-top:var(--space-4);"><a href="https://wa.me/${dev.whatsapp_number}" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--full">${iconWhatsApp()} WhatsApp</a></div>` : ''}
+              <div style="margin-top:var(--space-3);display:flex;align-items:center;justify-content:center;gap:var(--space-2);">${renderFavBtn('developer', dev.id)}<span style="font-size:var(--text-xs);color:var(--color-text-muted);">Save to favourites</span></div>
             </div>
           </div>
         </div>
@@ -2716,7 +2721,7 @@ const UserAuth = (() => {
       btn.className = 'btn-icon login-btn';
       btn.setAttribute('aria-label', 'Sign in');
       btn.title = 'Sign in';
-      btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+      btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Sign In`;
       btn.addEventListener('click', () => showAuthModal('login'));
       loginArea.appendChild(btn);
     }
