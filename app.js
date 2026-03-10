@@ -482,25 +482,46 @@ async function router() {
   currentRoute = { page, segments, params };
 
   // Update nav active states
-  document.querySelectorAll('.nav-links a, .mobile-menu a').forEach(a => {
+  var currentGroup = params.group || '';
+  document.querySelectorAll('.nav-links a, .mobile-menu a').forEach(function(a) {
     a.classList.remove('active');
-    const href = a.getAttribute('href')?.replace('#', '');
-    if (href && (page === href || page.startsWith(href + '/') || (href === 'directory' && (page === 'directory' || page === 'provider')))) {
+    var href = (a.getAttribute('href') || '').replace('#', '');
+    var hrefPage = href.split('?')[0];
+    var hrefParams = {};
+    if (href.indexOf('?') !== -1) {
+      href.split('?')[1].split('&').forEach(function(pair) {
+        var kv = pair.split('=');
+        hrefParams[kv[0]] = kv[1] || '';
+      });
+    }
+
+    // Listings / Property & Agents
+    if (hrefPage === 'listings' && (page === 'listings' || page === 'listing' || page === 'agents' || page === 'agent')) {
       a.classList.add('active');
     }
-    if (href === 'developers' && (page === 'developers' || page === 'developer')) {
+    // Developers & Investing
+    if (hrefPage === 'developers' && (page === 'developers' || page === 'developer' || page === 'projects' || page === 'project')) {
       a.classList.add('active');
     }
-    if (href === 'projects' && page === 'projects') {
+    // Directory group links (builders_trades, professional_services, suppliers_materials)
+    if (hrefPage === 'directory' && hrefParams.group && page === 'directory' && currentGroup === hrefParams.group) {
       a.classList.add('active');
     }
-    if (href === 'guides' && (page === 'guides' || page === 'guide')) {
+    // Provider detail inherits active from the matching group
+    if (hrefPage === 'directory' && hrefParams.group && page === 'provider') {
+      // Provider detail — highlight first directory link as fallback
+      // (We don't know the provider's group on the nav, so skip)
+    }
+    // Guides
+    if (hrefPage === 'guides' && (page === 'guides' || page === 'guide')) {
       a.classList.add('active');
     }
-    if (href === 'home' && page === 'home') {
+    // About
+    if (hrefPage === 'about' && page === 'about') {
       a.classList.add('active');
     }
-    if (href === 'listings' && (page === 'listings' || page === 'listing')) {
+    // Home
+    if (hrefPage === 'home' && page === 'home') {
       a.classList.add('active');
     }
   });
@@ -509,7 +530,8 @@ async function router() {
   const main = document.getElementById('main-content');
   if (!main) return;
 
-  main.innerHTML = '';
+  // Show loading spinner while page renders
+  main.innerHTML = '<div class="page-loading"><div class="page-loading-spinner"></div></div>';
   const view = document.createElement('div');
   view.className = 'page-view';
 
@@ -533,6 +555,7 @@ async function router() {
     case 'agent': await renderAgentDetail(view, segments[1]); break;
     case 'create-listing': await renderCreateListing(view); break;
     case 'agent-signup': await renderAgentSignup(view); break;
+    case 'about': renderAbout(view); break;
     default: await renderHome(view);
   }
 
@@ -907,11 +930,6 @@ async function renderDirectory(el, params = {}) {
   el.innerHTML = `
     <div class="dir-hero" data-group="${filters.group}">
       <div class="container">
-        <div class="page-header-breadcrumb">
-          <a href="#home" onclick="navigate('home');return false;">Home</a>
-          <span>/</span>
-          <span>Directory</span>
-        </div>
         <h1 class="dir-hero-title">${headerData.title}</h1>
         <p class="dir-hero-desc">${headerData.desc}</p>
       </div>
@@ -1175,11 +1193,6 @@ async function renderDevelopers(el, params = {}) {
   el.innerHTML = `
     <div class="dir-hero">
       <div class="container">
-        <div class="page-header-breadcrumb">
-          <a href="#home" onclick="navigate('home');return false;">Home</a>
-          <span>/</span>
-          <span>Developers</span>
-        </div>
         <h1 class="dir-hero-title">${isFeaturedFilter ? 'Featured ' : ''}Property Developers</h1>
         <p class="dir-hero-desc">Active developers building villas, apartments, and land projects across Lombok.</p>
       </div>
@@ -1343,7 +1356,7 @@ function renderListingCard(l, index) {
 
   return '<a href="' + linkHref + '" class="listing-card card"' + linkTarget + linkOnclick + ' style="animation-delay:' + (index * 60) + 'ms">'
     + '<div class="listing-card-image">'
-    + (imgUrl ? '<img src="' + imgUrl + '" alt="' + (l.title || '').replace(/"/g, '&quot;') + '" loading="lazy">' : '<div class="listing-card-noimg"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></div>')
+    + (imgUrl ? '<img src="' + imgUrl + '" alt="' + (l.title || '').replace(/"/g, '&quot;') + '" loading="lazy" onload="this.classList.add(\'loaded\')">' : '<div class="listing-card-noimg"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></div>')
     + '<span class="listing-card-type">' + typeLabel + '</span>'
     + (l.is_featured ? '<span class="listing-card-featured">Featured</span>' : '')
     + '</div>'
@@ -1398,11 +1411,6 @@ async function renderListings(el, params = {}) {
   el.innerHTML = `
     <div class="dir-hero">
       <div class="container">
-        <div class="page-header-breadcrumb">
-          <a href="#home" onclick="navigate('home');return false;">Home</a>
-          <span>/</span>
-          <span>Find Land & Property</span>
-        </div>
         <h1 class="dir-hero-title">Find Land & Property</h1>
         <p class="dir-hero-desc">Discover your dream location across Lombok — land, villas, and investment properties.</p>
       </div>
@@ -1635,13 +1643,6 @@ async function renderListingDetail(el, slug) {
   el.innerHTML = `
     <div class="page-header">
       <div class="container">
-        <div class="page-header-breadcrumb">
-          <a href="#home" onclick="navigate('home');return false;">Home</a>
-          <span>/</span>
-          <a href="#listings" onclick="navigate('listings');return false;">Find Land</a>
-          <span>/</span>
-          <span>${listing.title}</span>
-        </div>
       </div>
     </div>
     <div class="section">
@@ -1753,11 +1754,6 @@ async function renderAgents(el, params = {}) {
   el.innerHTML = `
     <div class="dir-hero">
       <div class="container">
-        <div class="page-header-breadcrumb">
-          <a href="#home" onclick="navigate('home');return false;">Home</a>
-          <span>/</span>
-          <span>Agents</span>
-        </div>
         <h1 class="dir-hero-title">Property Agents</h1>
         <p class="dir-hero-desc">Trusted advisors to guide you through every property decision in Lombok.</p>
       </div>
@@ -1904,13 +1900,6 @@ async function renderAgentSignup(el) {
   el.innerHTML = `
     <div class="page-header">
       <div class="container">
-        <div class="page-header-breadcrumb">
-          <a href="#home" onclick="navigate('home');return false;">Home</a>
-          <span>/</span>
-          <a href="#agents" onclick="navigate('agents');return false;">Agents</a>
-          <span>/</span>
-          <span>Register as Agent</span>
-        </div>
         <h1 class="page-title">Register as a Property Agent</h1>
         <p class="page-desc">Create your agent profile and start listing properties on Build in Lombok.</p>
       </div>
@@ -2000,11 +1989,6 @@ async function renderCreateListing(el) {
   el.innerHTML = `
     <div class="page-header">
       <div class="container">
-        <div class="page-header-breadcrumb">
-          <a href="#home" onclick="navigate('home');return false;">Home</a>
-          <span>/</span>
-          <span>Post a Property</span>
-        </div>
         <h1 class="page-title">Post a Property Listing</h1>
         <p class="page-desc">Create a listing to reach foreign investors and buyers across Lombok.</p>
       </div>
@@ -2295,11 +2279,6 @@ async function renderProjects(el, params = {}) {
   el.innerHTML = `
     <div class="dir-hero">
       <div class="container">
-        <div class="page-header-breadcrumb">
-          <a href="#home" onclick="navigate('home');return false;">Home</a>
-          <span>/</span>
-          <span>Projects</span>
-        </div>
         <h1 class="dir-hero-title">Investment Projects</h1>
         <p class="dir-hero-desc">Active villa, apartment, land, and mixed-use developments from verified Lombok developers.</p>
       </div>
@@ -2378,13 +2357,6 @@ async function renderProjectDetail(el, slug) {
   el.innerHTML = `
     <div class="page-header">
       <div class="container">
-        <div class="page-header-breadcrumb">
-          <a href="#home" onclick="navigate('home');return false;">Home</a>
-          <span>/</span>
-          <a href="#projects" onclick="navigate('projects');return false;">Projects</a>
-          <span>/</span>
-          <span>${p.name}</span>
-        </div>
         <div class="card-meta mb-3">
           <span class="badge ${getStatusBadgeClass(p.status)}">${formatProjectStatus(p.status)}</span>
           <span class="badge badge--project-type">${formatProjectType(p.project_type)}</span>
@@ -2493,11 +2465,6 @@ async function renderGuides(el) {
   el.innerHTML = `
     <div class="page-header">
       <div class="container">
-        <div class="page-header-breadcrumb">
-          <a href="#home" onclick="navigate('home');return false;">Home</a>
-          <span>/</span>
-          <span>Guides</span>
-        </div>
         <h1 class="page-title">Building & Investment Guides</h1>
         <p class="page-desc">Practical guidance for foreign investors and builders navigating Lombok's property and construction landscape.</p>
       </div>
@@ -2529,13 +2496,6 @@ async function renderGuideDetail(el, slug) {
   el.innerHTML = `
     <div class="page-header">
       <div class="container">
-        <div class="page-header-breadcrumb">
-          <a href="#home" onclick="navigate('home');return false;">Home</a>
-          <span>/</span>
-          <a href="#guides" onclick="navigate('guides');return false;">Guides</a>
-          <span>/</span>
-          <span>${g.category}</span>
-        </div>
         <div class="guide-category mb-3">${g.category} · ${g.read_time}</div>
         <h1 class="page-title">${g.title}</h1>
       </div>
@@ -3250,6 +3210,48 @@ async function checkReviewUpdates(entityType, entityId) {
 
 
 // =====================================================
+// RENDER: ABOUT
+// =====================================================
+
+function renderAbout(el) {
+  el.innerHTML = '\n'
+    + '<div class="dir-hero">\n'
+    + '  <div class="container">\n'
+    + '    <h1 class="dir-hero-title">About Build in Lombok</h1>\n'
+    + '    <p class="dir-hero-desc">Connecting foreign investors and builders with trusted local professionals across Lombok, Indonesia.</p>\n'
+    + '  </div>\n'
+    + '</div>\n'
+    + '<div class="section">\n'
+    + '  <div class="container" style="max-width:720px">\n'
+    + '    <div style="display:flex;flex-direction:column;gap:var(--space-8)">\n'
+    + '      <div>\n'
+    + '        <h2 style="font-family:var(--font-display);font-size:var(--text-2xl);margin-bottom:var(--space-4)">Our Mission</h2>\n'
+    + '        <p style="color:var(--color-text-muted);line-height:1.7">Build in Lombok is a comprehensive directory and resource platform designed to help foreign investors, expats, and property buyers navigate the construction and real estate landscape in Lombok. We connect you with verified builders, architects, engineers, developers, and material suppliers so you can build with confidence.</p>\n'
+    + '      </div>\n'
+    + '      <div>\n'
+    + '        <h2 style="font-family:var(--font-display);font-size:var(--text-2xl);margin-bottom:var(--space-4)">What We Offer</h2>\n'
+    + '        <ul style="color:var(--color-text-muted);line-height:2;padding-left:var(--space-5)">\n'
+    + '          <li>A curated directory of trusted builders, tradespeople, and professionals</li>\n'
+    + '          <li>Property and land listings across Lombok</li>\n'
+    + '          <li>Developer profiles and investment project showcases</li>\n'
+    + '          <li>Guides on building, land titles, and investment yields</li>\n'
+    + '          <li>Agent connections for buying and selling property</li>\n'
+    + '        </ul>\n'
+    + '      </div>\n'
+    + '      <div>\n'
+    + '        <h2 style="font-family:var(--font-display);font-size:var(--text-2xl);margin-bottom:var(--space-4)">Get in Touch</h2>\n'
+    + '        <p style="color:var(--color-text-muted);line-height:1.7;margin-bottom:var(--space-4)">Have questions or want to list your business? Reach out to us via WhatsApp.</p>\n'
+    + '        <a href="https://wa.me/628123456789" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp">\n'
+    + '          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>\n'
+    + '          WhatsApp Us\n'
+    + '        </a>\n'
+    + '      </div>\n'
+    + '    </div>\n'
+    + '  </div>\n'
+    + '</div>';
+}
+
+// =====================================================
 // RENDER: MY ACCOUNT PAGE
 // =====================================================
 
@@ -3269,11 +3271,6 @@ async function renderAccount(el, params = {}) {
   el.innerHTML = `
     <div class="page-header">
       <div class="container">
-        <div class="page-header-breadcrumb">
-          <a href="#home" onclick="navigate('home');return false;">Home</a>
-          <span>/</span>
-          <span>My Account</span>
-        </div>
         <h1 class="page-title">Welcome, ${user.display_name}</h1>
       </div>
     </div>
@@ -3420,11 +3417,6 @@ async function renderSubmitListing(el) {
   el.innerHTML = `
     <div class="page-header">
       <div class="container">
-        <div class="page-header-breadcrumb">
-          <a href="#home" onclick="navigate('home');return false;">Home</a>
-          <span>/</span>
-          <span>Submit a Listing</span>
-        </div>
         <h1 class="page-title">Submit Your Business</h1>
         <p class="page-desc">Add your company to the Build in Lombok directory. Submissions are reviewed before going live.</p>
       </div>
