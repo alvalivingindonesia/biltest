@@ -530,9 +530,9 @@ async function router() {
   const main = document.getElementById('main-content');
   if (!main) return;
 
-  // Show loading spinner while page renders
+  // Show loading spinner while page renders (delayed so fast pages skip it)
   main.innerHTML = '<div class="page-loading"><div class="page-loading-spinner"></div></div>';
-  const view = document.createElement('div');
+  var view = document.createElement('div');
   view.className = 'page-view';
 
   switch (page) {
@@ -559,6 +559,8 @@ async function router() {
     default: await renderHome(view);
   }
 
+  // Clear spinner, then show rendered page
+  main.innerHTML = '';
   main.appendChild(view);
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
