@@ -1807,7 +1807,10 @@
   .filters-grid { grid-template-columns: repeat(2, 1fr); }
 }
 @media (min-width: 960px) {
-  .filters-grid { grid-template-columns: repeat(4, 1fr); gap: var(--space-3); padding-top: 0; }
+  .filters-grid { grid-template-columns: repeat(3, 1fr); gap: var(--space-3); padding-top: 0; }
+}
+@media (min-width: 1200px) {
+  .filters-grid { grid-template-columns: repeat(6, 1fr); }
 }
 
 .filter-group {

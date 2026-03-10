@@ -734,6 +734,15 @@ function handle_listings_list(): void {
         $where[] = 'l.price_usd <= ?';
         $params[] = (int)$_GET['max_price_usd'];
     }
+    // Filter: price range (IDR)
+    if (!empty($_GET['min_price_idr'])) {
+        $where[] = 'l.price_idr >= ?';
+        $params[] = (int)$_GET['min_price_idr'];
+    }
+    if (!empty($_GET['max_price_idr'])) {
+        $where[] = 'l.price_idr <= ?';
+        $params[] = (int)$_GET['max_price_idr'];
+    }
     // Filter: size range
     if (!empty($_GET['min_size'])) {
         $where[] = 'l.land_size_sqm >= ?';
@@ -776,7 +785,9 @@ function handle_listings_list(): void {
     // Fetch with joins
     $stmt = $db->prepare(
         "SELECT l.id, l.slug, l.title, l.short_description, l.listing_type_key, l.area_key,
-                l.price_usd, l.price_idr, l.land_size_sqm, l.build_size_sqm,
+                l.price_usd, l.price_idr, l.price_idr_per_sqm, l.price_label,
+                l.land_size_sqm, l.land_size_are, l.building_size_sqm,
+                l.bedrooms, l.bathrooms,
                 l.certificate_type_key, l.is_featured, l.badge, l.agent_id,
                 l.source_url, l.source_site, l.location_detail,
                 l.photo_urls,
@@ -945,7 +956,7 @@ function handle_agent_detail(string $slug): void {
     // Active listings for this agent
     $l = $db->prepare(
         "SELECT l.id, l.slug, l.title, l.listing_type_key, l.area_key, l.price_usd,
-                l.land_size_sqm, l.build_size_sqm, l.certificate_type_key, l.is_featured,
+                l.land_size_sqm, l.building_size_sqm, l.certificate_type_key, l.is_featured,
                 lt.label AS listing_type_label, a.label AS area_label
          FROM listings l
          LEFT JOIN listing_types lt ON lt.`key` = l.listing_type_key

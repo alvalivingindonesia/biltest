@@ -1430,14 +1430,27 @@ async function renderListings(el, params = {}) {
                 </select>
               </div>
               <div class="filter-group">
-                <label class="filter-label">Price</label>
+                <label class="filter-label">Price (IDR)</label>
                 <select id="fil-price" class="filter-select" aria-label="Price range">
                   <option value="">Any price</option>
-                  <option value="0-50000" ${params.max_price_usd === '50000' ? 'selected' : ''}>Under $50k</option>
-                  <option value="50000-100000">$50k - $100k</option>
-                  <option value="100000-250000">$100k - $250k</option>
-                  <option value="250000-500000">$250k - $500k</option>
-                  <option value="500000-0">$500k+</option>
+                  <option value="0-500000000" ${params.max_price_idr === '500000000' ? 'selected' : ''}>Under 500 Juta</option>
+                  <option value="500000000-1000000000" ${params.min_price_idr === '500000000' && params.max_price_idr === '1000000000' ? 'selected' : ''}>500 Juta - 1 Miliar</option>
+                  <option value="1000000000-3000000000" ${params.min_price_idr === '1000000000' && params.max_price_idr === '3000000000' ? 'selected' : ''}>1 - 3 Miliar</option>
+                  <option value="3000000000-5000000000" ${params.min_price_idr === '3000000000' && params.max_price_idr === '5000000000' ? 'selected' : ''}>3 - 5 Miliar</option>
+                  <option value="5000000000-10000000000" ${params.min_price_idr === '5000000000' && params.max_price_idr === '10000000000' ? 'selected' : ''}>5 - 10 Miliar</option>
+                  <option value="10000000000-0" ${params.min_price_idr === '10000000000' && !params.max_price_idr ? 'selected' : ''}>10 Miliar+</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label class="filter-label">Land Size</label>
+                <select id="fil-size" class="filter-select" aria-label="Land size">
+                  <option value="">Any size</option>
+                  <option value="0-100" ${params.max_size === '100' ? 'selected' : ''}>Under 100 m&sup2;</option>
+                  <option value="100-500" ${params.min_size === '100' && params.max_size === '500' ? 'selected' : ''}>100 - 500 m&sup2;</option>
+                  <option value="500-1000" ${params.min_size === '500' && params.max_size === '1000' ? 'selected' : ''}>500 - 1,000 m&sup2;</option>
+                  <option value="1000-5000" ${params.min_size === '1000' && params.max_size === '5000' ? 'selected' : ''}>1,000 - 5,000 m&sup2;</option>
+                  <option value="5000-10000" ${params.min_size === '5000' && params.max_size === '10000' ? 'selected' : ''}>5,000 - 10,000 m&sup2;</option>
+                  <option value="10000-0" ${params.min_size === '10000' && !params.max_size ? 'selected' : ''}>10,000+ m&sup2;</option>
                 </select>
               </div>
             </div>
@@ -1472,18 +1485,24 @@ async function renderListings(el, params = {}) {
   `;
 
   function applyFilters(page) {
-    const type = el.querySelector('#fil-type').value;
-    const area = el.querySelector('#fil-area').value;
-    const cert = el.querySelector('#fil-cert').value;
-    const priceRange = el.querySelector('#fil-price').value;
-    const p = {};
+    var type = el.querySelector('#fil-type').value;
+    var area = el.querySelector('#fil-area').value;
+    var cert = el.querySelector('#fil-cert').value;
+    var priceRange = el.querySelector('#fil-price').value;
+    var sizeRange = el.querySelector('#fil-size').value;
+    var p = {};
     if (type) p.listing_type = type;
     if (area) p.area = area;
     if (cert) p.certificate_type = cert;
     if (priceRange) {
-      const [min, max] = priceRange.split('-');
-      if (min && min !== '0') p.min_price_usd = min;
-      if (max && max !== '0') p.max_price_usd = max;
+      var pParts = priceRange.split('-');
+      if (pParts[0] && pParts[0] !== '0') p.min_price_idr = pParts[0];
+      if (pParts[1] && pParts[1] !== '0') p.max_price_idr = pParts[1];
+    }
+    if (sizeRange) {
+      var sParts = sizeRange.split('-');
+      if (sParts[0] && sParts[0] !== '0') p.min_size = sParts[0];
+      if (sParts[1] && sParts[1] !== '0') p.max_size = sParts[1];
     }
     if (page && page > 1) p.page = page;
     navigate(buildHash('listings', p));
@@ -1491,9 +1510,9 @@ async function renderListings(el, params = {}) {
 
   window.applyListingFilters = applyFilters;
 
-  ['fil-type', 'fil-area', 'fil-cert', 'fil-price'].forEach(id => {
-    const sel = el.querySelector('#' + id);
-    if (sel) sel.addEventListener('change', () => applyFilters(1));
+  ['fil-type', 'fil-area', 'fil-cert', 'fil-price', 'fil-size'].forEach(function(id) {
+    var sel = el.querySelector('#' + id);
+    if (sel) sel.addEventListener('change', function() { applyFilters(1); });
   });
 
   requestAnimationFrame(() => animateCards(el));
