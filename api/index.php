@@ -778,6 +778,8 @@ function handle_listings_list(): void {
         "SELECT l.id, l.slug, l.title, l.short_description, l.listing_type_key, l.area_key,
                 l.price_usd, l.price_idr, l.land_size_sqm, l.build_size_sqm,
                 l.certificate_type_key, l.is_featured, l.badge, l.agent_id,
+                l.source_url, l.source_site, l.location_detail,
+                l.photo_urls,
                 ag.display_name AS agent_name, ag.slug AS agent_slug,
                 lt.label AS listing_type_label,
                 lct.label AS certificate_type_label,
@@ -861,7 +863,16 @@ function attach_listing_primary_image(array &$items): void {
         $map[$r['listing_id']] = ['url' => $r['url'], 'alt' => $r['alt_text']];
     }
     foreach ($items as &$item) {
-        $item['image'] = $map[$item['id']] ?? null;
+        if (isset($map[$item['id']])) {
+            $item['image'] = $map[$item['id']];
+        } elseif (!empty($item['photo_urls'])) {
+            $photos = json_decode($item['photo_urls'], true);
+            if (is_array($photos) && !empty($photos[0])) {
+                $item['image'] = ['url' => $photos[0], 'alt' => isset($item['title']) ? $item['title'] : ''];
+            }
+        } else {
+            $item['image'] = null;
+        }
     }
 }
 

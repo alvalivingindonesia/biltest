@@ -633,6 +633,7 @@ function toggleSidebarSub(e,id){
     </div>
     <h2>Tools</h2>
     <a href="import.php">Google Maps Importer</a>
+    <a href="scrape_listings.php">Property Listing Scraper</a>
     <a href="?s=batch_enrich" class="<?= $section==='batch_enrich'?'active':'' ?>">Batch Enrich</a>
     <a href="?s=review_updates" class="<?= $section==='review_updates'?'active':'' ?>">Review Update Log</a>
     <a href="https://biltest.roving-i.com.au" target="_blank" rel="noopener" style="opacity:.7;">🌐 View Live Site</a>

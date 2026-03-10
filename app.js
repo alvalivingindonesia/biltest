@@ -1326,34 +1326,41 @@ async function renderDeveloperDetail(el, slug) {
 // RENDER: LISTING CARD
 // =====================================================
 
-function renderListingCard(l, index = 0) {
-  const imgUrl = l.image && l.image.url ? l.image.url : '';
-  const priceStr = l.price_usd ? formatUSD(l.price_usd) : (l.price_idr ? formatIDR(l.price_idr) : 'Price on request');
-  const sizeStr = formatLandSize(l.land_size_sqm, l.land_size_are);
-  const typeLabel = l.listing_type_label || l.listing_type_key || '';
-  const certLabel = l.certificate_type_label || '';
+function renderListingCard(l, index) {
+  if (typeof index === 'undefined') index = 0;
+  var imgUrl = l.image && l.image.url ? l.image.url : '';
+  var priceStr = l.price_usd ? formatUSD(l.price_usd) : (l.price_idr ? formatIDR(l.price_idr) : 'Price on request');
+  var sizeStr = formatLandSize(l.land_size_sqm, l.land_size_are);
+  var typeLabel = l.listing_type_label || l.listing_type_key || '';
+  var certLabel = l.certificate_type_label || '';
+  var locationStr = l.location_detail || l.area_label || '';
 
-  return `
-    <a href="#listing/${l.slug}" class="listing-card card" onclick="navigate('listing/${l.slug}');return false;" style="animation-delay:${index * 60}ms">
-      <div class="listing-card-image">
-        ${imgUrl ? '<img src="' + imgUrl + '" alt="' + l.title + '" loading="lazy">' : '<div class="listing-card-noimg"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></div>'}
-        <span class="listing-card-type">${typeLabel}</span>
-        ${l.is_featured ? '<span class="listing-card-featured">Featured</span>' : ''}
-      </div>
-      <div class="listing-card-body">
-        <div class="listing-card-price">${priceStr}${l.price_label ? ' <span class="listing-card-price-note">' + l.price_label + '</span>' : ''}</div>
-        <h3 class="listing-card-title">${l.title}</h3>
-        <div class="listing-card-meta">
-          ${sizeStr ? '<span>' + sizeStr + '</span>' : ''}
-          ${certLabel ? '<span>' + certLabel + '</span>' : ''}
-          ${l.bedrooms ? '<span>' + l.bedrooms + ' bed</span>' : ''}
-          ${l.bathrooms ? '<span>' + l.bathrooms + ' bath</span>' : ''}
-        </div>
-        <div class="listing-card-location">${l.area_label || ''}</div>
-        ${l.agent_name ? '<div class="listing-card-agent">Agent: ' + l.agent_name + '</div>' : ''}
-      </div>
-    </a>
-  `;
+  // If listing has source_url, open external site in new tab; otherwise navigate internally
+  var linkHref = l.source_url ? l.source_url : '#listing/' + l.slug;
+  var linkTarget = l.source_url ? ' target="_blank" rel="noopener noreferrer"' : '';
+  var linkOnclick = l.source_url ? '' : ' onclick="navigate(\'listing/' + l.slug + '\');return false;"';
+  var sourceTag = l.source_site ? '<span class="listing-card-source">' + l.source_site + ' <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></span>' : '';
+
+  return '<a href="' + linkHref + '" class="listing-card card"' + linkTarget + linkOnclick + ' style="animation-delay:' + (index * 60) + 'ms">'
+    + '<div class="listing-card-image">'
+    + (imgUrl ? '<img src="' + imgUrl + '" alt="' + (l.title || '').replace(/"/g, '&quot;') + '" loading="lazy">' : '<div class="listing-card-noimg"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></div>')
+    + '<span class="listing-card-type">' + typeLabel + '</span>'
+    + (l.is_featured ? '<span class="listing-card-featured">Featured</span>' : '')
+    + '</div>'
+    + '<div class="listing-card-body">'
+    + '<div class="listing-card-price">' + priceStr + (l.price_label ? ' <span class="listing-card-price-note">' + l.price_label + '</span>' : '') + '</div>'
+    + '<h3 class="listing-card-title">' + (l.title || '') + '</h3>'
+    + '<div class="listing-card-meta">'
+    + (sizeStr ? '<span>' + sizeStr + '</span>' : '')
+    + (certLabel ? '<span>' + certLabel + '</span>' : '')
+    + (l.bedrooms ? '<span>' + l.bedrooms + ' bed</span>' : '')
+    + (l.bathrooms ? '<span>' + l.bathrooms + ' bath</span>' : '')
+    + '</div>'
+    + '<div class="listing-card-location"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> ' + locationStr + '</div>'
+    + (l.agent_name ? '<div class="listing-card-agent">' + l.agent_name + '</div>' : '')
+    + sourceTag
+    + '</div>'
+    + '</a>';
 }
 
 // =====================================================
