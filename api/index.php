@@ -757,6 +757,16 @@ function handle_listings_list(): void {
         $where[] = 'l.certificate_type_key = ?';
         $params[] = $_GET['certificate_type'];
     }
+    // Filter: bedrooms
+    if (!empty($_GET['min_beds'])) {
+        $where[] = 'l.bedrooms >= ?';
+        $params[] = (int)$_GET['min_beds'];
+    }
+    // Filter: bathrooms
+    if (!empty($_GET['min_baths'])) {
+        $where[] = 'l.bathrooms >= ?';
+        $params[] = (int)$_GET['min_baths'];
+    }
     // Filter: specific agent
     if (!empty($_GET['agent_id'])) {
         $where[] = 'l.agent_id = ?';
@@ -788,7 +798,7 @@ function handle_listings_list(): void {
                 l.price_usd, l.price_idr, l.price_idr_per_sqm, l.price_label,
                 l.land_size_sqm, l.land_size_are, l.building_size_sqm,
                 l.bedrooms, l.bathrooms,
-                l.certificate_type_key, l.is_featured, l.badge, l.agent_id,
+                l.certificate_type_key, l.is_featured, l.agent_id,
                 l.source_url, l.source_site, l.location_detail,
                 l.photo_urls,
                 ag.display_name AS agent_name, ag.slug AS agent_slug,
@@ -814,7 +824,7 @@ function handle_listings_list(): void {
 
     json_out(paginated_response($items, $total, $page, $per_page));
     } catch (Exception $e) {
-        json_out(paginated_response([], 0, 1, 20));
+        json_out(array('data' => array(), 'meta' => array('total' => 0, 'page' => 1, 'per_page' => 20, 'total_pages' => 0), 'debug_error' => $e->getMessage()));
     }
 }
 

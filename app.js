@@ -1387,6 +1387,14 @@ async function renderListings(el, params = {}) {
   const typeOptions = FilterData.listing_types.map(t => '<option value="' + t.key + '" ' + (params.listing_type === t.key ? 'selected' : '') + '>' + t.label + '</option>').join('');
   const certOptions = FilterData.land_certificate_types.map(c => '<option value="' + c.key + '" ' + (params.certificate_type === c.key ? 'selected' : '') + '>' + c.label + '</option>').join('');
 
+  // Count active "more" filters
+  var moreActiveCount = 0;
+  if (params.certificate_type) moreActiveCount++;
+  if (params.min_beds) moreActiveCount++;
+  if (params.min_baths) moreActiveCount++;
+  if (params.q) moreActiveCount++;
+  var anyFilterActive = params.listing_type || params.area || params.min_price_idr || params.max_price_idr || params.min_size || params.max_size || moreActiveCount > 0;
+
   el.innerHTML = `
     <div class="dir-hero">
       <div class="container">
@@ -1402,12 +1410,8 @@ async function renderListings(el, params = {}) {
     <div class="section">
       <div class="container">
         <div class="filters-bar">
-          <button class="filters-toggle-btn" onclick="this.closest('.filters-bar').querySelector('.filters-body').classList.toggle('open')">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
-            Filters
-          </button>
           <div class="filters-body open">
-            <div class="filters-grid">
+            <div class="filters-grid filters-grid--4">
               <div class="filter-group">
                 <label class="filter-label">Type</label>
                 <select id="fil-type" class="filter-select" aria-label="Property type">
@@ -1423,18 +1427,11 @@ async function renderListings(el, params = {}) {
                 </select>
               </div>
               <div class="filter-group">
-                <label class="filter-label">Certificate</label>
-                <select id="fil-cert" class="filter-select" aria-label="Certificate">
-                  <option value="">Any certificate</option>
-                  ${certOptions}
-                </select>
-              </div>
-              <div class="filter-group">
                 <label class="filter-label">Price (IDR)</label>
                 <select id="fil-price" class="filter-select" aria-label="Price range">
                   <option value="">Any price</option>
                   <option value="0-500000000" ${params.max_price_idr === '500000000' ? 'selected' : ''}>Under 500 Juta</option>
-                  <option value="500000000-1000000000" ${params.min_price_idr === '500000000' && params.max_price_idr === '1000000000' ? 'selected' : ''}>500 Juta - 1 Miliar</option>
+                  <option value="500000000-1000000000" ${params.min_price_idr === '500000000' && params.max_price_idr === '1000000000' ? 'selected' : ''}>500 Jt - 1 M</option>
                   <option value="1000000000-3000000000" ${params.min_price_idr === '1000000000' && params.max_price_idr === '3000000000' ? 'selected' : ''}>1 - 3 Miliar</option>
                   <option value="3000000000-5000000000" ${params.min_price_idr === '3000000000' && params.max_price_idr === '5000000000' ? 'selected' : ''}>3 - 5 Miliar</option>
                   <option value="5000000000-10000000000" ${params.min_price_idr === '5000000000' && params.max_price_idr === '10000000000' ? 'selected' : ''}>5 - 10 Miliar</option>
@@ -1452,6 +1449,55 @@ async function renderListings(el, params = {}) {
                   <option value="5000-10000" ${params.min_size === '5000' && params.max_size === '10000' ? 'selected' : ''}>5,000 - 10,000 m&sup2;</option>
                   <option value="10000-0" ${params.min_size === '10000' && !params.max_size ? 'selected' : ''}>10,000+ m&sup2;</option>
                 </select>
+              </div>
+            </div>
+            <div class="filters-more-row">
+              <button class="btn btn--ghost btn--sm filters-more-btn" id="moreFiltersBtn" type="button">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+                More Filters${moreActiveCount > 0 ? ' (' + moreActiveCount + ')' : ''}
+              </button>
+              ${anyFilterActive ? '<button class="btn btn--ghost btn--sm" type="button" id="clearAllFiltersBtn" style="margin-left:auto;color:var(--color-accent);">Clear all</button>' : ''}
+            </div>
+            <div class="filters-more-panel" id="moreFiltersPanel">
+              <div class="filters-grid filters-grid--3">
+                <div class="filter-group">
+                  <label class="filter-label">Certificate</label>
+                  <select id="fil-cert" class="filter-select" aria-label="Certificate">
+                    <option value="">Any certificate</option>
+                    ${certOptions}
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label class="filter-label">Bedrooms</label>
+                  <select id="fil-beds" class="filter-select" aria-label="Bedrooms">
+                    <option value="">Any</option>
+                    <option value="1" ${params.min_beds === '1' ? 'selected' : ''}>1+</option>
+                    <option value="2" ${params.min_beds === '2' ? 'selected' : ''}>2+</option>
+                    <option value="3" ${params.min_beds === '3' ? 'selected' : ''}>3+</option>
+                    <option value="4" ${params.min_beds === '4' ? 'selected' : ''}>4+</option>
+                    <option value="5" ${params.min_beds === '5' ? 'selected' : ''}>5+</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label class="filter-label">Bathrooms</label>
+                  <select id="fil-baths" class="filter-select" aria-label="Bathrooms">
+                    <option value="">Any</option>
+                    <option value="1" ${params.min_baths === '1' ? 'selected' : ''}>1+</option>
+                    <option value="2" ${params.min_baths === '2' ? 'selected' : ''}>2+</option>
+                    <option value="3" ${params.min_baths === '3' ? 'selected' : ''}>3+</option>
+                    <option value="4" ${params.min_baths === '4' ? 'selected' : ''}>4+</option>
+                  </select>
+                </div>
+              </div>
+              <div class="filter-group" style="margin-top:var(--space-3)">
+                <label class="filter-label">Features</label>
+                <div class="filter-tags" id="fil-tags">
+                  ${['Ocean View','Beachfront','Pool','Furnished','Cliff Top','Rice Field View','Near Airport','Freehold (SHM)'].map(function(tag) {
+                    var tagKey = tag.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/_$/, '');
+                    var isActive = params.q && params.q.toLowerCase().indexOf(tag.toLowerCase()) >= 0;
+                    return '<button type="button" class="filter-tag' + (isActive ? ' active' : '') + '" data-tag="' + tag + '">' + tag + '</button>';
+                  }).join('')}
+                </div>
               </div>
             </div>
           </div>
@@ -1487,13 +1533,25 @@ async function renderListings(el, params = {}) {
   function applyFilters(page) {
     var type = el.querySelector('#fil-type').value;
     var area = el.querySelector('#fil-area').value;
-    var cert = el.querySelector('#fil-cert').value;
+    var cert = el.querySelector('#fil-cert') ? el.querySelector('#fil-cert').value : '';
+    var beds = el.querySelector('#fil-beds') ? el.querySelector('#fil-beds').value : '';
+    var baths = el.querySelector('#fil-baths') ? el.querySelector('#fil-baths').value : '';
     var priceRange = el.querySelector('#fil-price').value;
     var sizeRange = el.querySelector('#fil-size').value;
+
+    // Collect active feature tags
+    var activeTags = [];
+    var tagBtns = el.querySelectorAll('#fil-tags .filter-tag.active');
+    for (var t = 0; t < tagBtns.length; t++) {
+      activeTags.push(tagBtns[t].getAttribute('data-tag'));
+    }
+
     var p = {};
     if (type) p.listing_type = type;
     if (area) p.area = area;
     if (cert) p.certificate_type = cert;
+    if (beds) p.min_beds = beds;
+    if (baths) p.min_baths = baths;
     if (priceRange) {
       var pParts = priceRange.split('-');
       if (pParts[0] && pParts[0] !== '0') p.min_price_idr = pParts[0];
@@ -1504,16 +1562,53 @@ async function renderListings(el, params = {}) {
       if (sParts[0] && sParts[0] !== '0') p.min_size = sParts[0];
       if (sParts[1] && sParts[1] !== '0') p.max_size = sParts[1];
     }
+    if (activeTags.length > 0) p.q = activeTags.join(' ');
     if (page && page > 1) p.page = page;
     navigate(buildHash('listings', p));
   }
 
   window.applyListingFilters = applyFilters;
 
-  ['fil-type', 'fil-area', 'fil-cert', 'fil-price', 'fil-size'].forEach(function(id) {
+  // Main filter selects
+  ['fil-type', 'fil-area', 'fil-price', 'fil-size'].forEach(function(id) {
     var sel = el.querySelector('#' + id);
     if (sel) sel.addEventListener('change', function() { applyFilters(1); });
   });
+
+  // More filters selects
+  ['fil-cert', 'fil-beds', 'fil-baths'].forEach(function(id) {
+    var sel = el.querySelector('#' + id);
+    if (sel) sel.addEventListener('change', function() { applyFilters(1); });
+  });
+
+  // More Filters toggle
+  var moreBtn = el.querySelector('#moreFiltersBtn');
+  var morePanel = el.querySelector('#moreFiltersPanel');
+  if (moreBtn && morePanel) {
+    // Auto-open if more filters are active
+    if (moreActiveCount > 0) morePanel.classList.add('open');
+    moreBtn.addEventListener('click', function() {
+      morePanel.classList.toggle('open');
+      moreBtn.classList.toggle('active');
+    });
+  }
+
+  // Clear all filters
+  var clearBtn = el.querySelector('#clearAllFiltersBtn');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', function() { navigate('listings'); });
+  }
+
+  // Feature tag toggles
+  var tagContainer = el.querySelector('#fil-tags');
+  if (tagContainer) {
+    tagContainer.addEventListener('click', function(e) {
+      var btn = e.target.closest('.filter-tag');
+      if (!btn) return;
+      btn.classList.toggle('active');
+      applyFilters(1);
+    });
+  }
 
   requestAnimationFrame(() => animateCards(el));
 }
