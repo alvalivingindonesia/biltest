@@ -198,121 +198,124 @@ function idr_to_usd($idr) {
 
 
 // ═══════════════════════════════════════════════════════════════════
-// PARSE __NEXT_DATA__ JSON FROM PASTED HTML
+// EXTRACT LISTINGS FROM PASTED HTML
+// Rumah123 uses Next.js App Router with RSC (React Server Components).
+// Listing data is in self.__next_f.push() flight data chunks.
 // ═══════════════════════════════════════════════════════════════════
 
-function extract_next_data($html_source) {
-    // Try to extract the __NEXT_DATA__ script tag content
-    if (preg_match('/<script\s+id="__NEXT_DATA__"\s+type="application\/json">\s*(.*?)\s*<\/script>/s', $html_source, $m)) {
-        $json = json_decode($m[1], true);
-        if ($json !== null) {
-            return $json;
-        }
+function extract_rsc_listings($html_source) {
+    // Step 1: Extract all self.__next_f.push() chunks
+    $chunks = array();
+    if (preg_match_all('/self\.__next_f\.push\(\[1,"(.*?)"\]\)/s', $html_source, $matches)) {
+        $chunks = $matches[1];
     }
 
-    // Fallback: maybe user pasted just the JSON directly
-    $json = json_decode(trim($html_source), true);
-    if ($json !== null && isset($json['props'])) {
-        return $json;
+    if (empty($chunks)) {
+        return null;
     }
 
-    return null;
-}
+    // Step 2: Combine and unescape the RSC payload
+    $combined = implode('', $chunks);
+    // Unescape JSON string escaping (the chunks are double-escaped)
+    $combined = str_replace('\\"', '"', $combined);
+    $combined = str_replace('\\\\', '\\', $combined);
+    $combined = str_replace('\\n', "\n", $combined);
+    $combined = str_replace('\\r', "\r", $combined);
 
-function find_listings_in_next_data($data) {
-    // Rumah123 uses Next.js — listings can be in various paths
+    // Step 3: Find listing objects by their unique structure
+    // Each listing has: {"slug":"/properti/...", ... "originId":{"formattedValue":"las..."},...}
     $listings = array();
+    $offset = 0;
 
-    // Path 1: props.pageProps.serverData.result.listings
-    if (isset($data['props']['pageProps']['serverData']['result']['listings'])) {
-        $listings = $data['props']['pageProps']['serverData']['result']['listings'];
-    }
-    // Path 2: props.pageProps.initialData.results
-    elseif (isset($data['props']['pageProps']['initialData']['results'])) {
-        $listings = $data['props']['pageProps']['initialData']['results'];
-    }
-    // Path 3: props.pageProps.listings
-    elseif (isset($data['props']['pageProps']['listings'])) {
-        $listings = $data['props']['pageProps']['listings'];
-    }
-    // Path 4: props.pageProps.serverData.listings
-    elseif (isset($data['props']['pageProps']['serverData']['listings'])) {
-        $listings = $data['props']['pageProps']['serverData']['listings'];
-    }
-    // Path 5: Search deeper — check all keys in pageProps for arrays of objects with 'id' and 'title'
-    elseif (isset($data['props']['pageProps'])) {
-        $pp = $data['props']['pageProps'];
-        foreach ($pp as $key => $val) {
-            if (is_array($val)) {
-                // Check if it's a flat array of listing objects
-                if (isset($val[0]) && is_array($val[0]) && isset($val[0]['id'])) {
-                    $listings = $val;
+    while (($pos = strpos($combined, '{"slug":"/properti/', $offset)) !== false) {
+        // Parse the JSON object by counting braces
+        $depth = 0;
+        $end = $pos;
+        $len = strlen($combined);
+        for ($i = $pos; $i < $len && $i < $pos + 15000; $i++) {
+            $ch = $combined[$i];
+            if ($ch === '{') {
+                $depth++;
+            } elseif ($ch === '}') {
+                $depth--;
+                if ($depth === 0) {
+                    $end = $i + 1;
                     break;
                 }
-                // Check nested: $val['result'], $val['data'], $val['listings']
-                foreach (array('result', 'data', 'listings', 'results', 'items') as $sub) {
-                    if (isset($val[$sub]) && is_array($val[$sub]) && isset($val[$sub][0]['id'])) {
-                        $listings = $val[$sub];
-                        break 2;
-                    }
-                }
             }
+        }
+
+        if ($depth !== 0) {
+            // Couldn't balance braces — skip
+            $offset = $pos + 20;
+            continue;
+        }
+
+        $json_str = substr($combined, $pos, $end - $pos);
+
+        // Try to decode as JSON
+        $obj = json_decode($json_str, true);
+        if ($obj !== null && isset($obj['originId']['formattedValue']) && isset($obj['title'])) {
+            $listings[] = $obj;
+        }
+
+        $offset = $end;
+    }
+
+    return $listings;
+}
+
+
+// Fallback: extract from rendered HTML when RSC data is not available
+function extract_html_listings($html_source) {
+    $listings = array();
+
+    // Find all listing links
+    if (!preg_match_all('/href="(\/properti\/lombok-tengah[^"]+-(las\d+|hos\d+)\/?)"/', $html_source, $link_matches)) {
+        return $listings;
+    }
+
+    $seen_ids = array();
+    foreach ($link_matches[1] as $idx => $url) {
+        $source_id = $link_matches[2][$idx];
+        if (in_array($source_id, $seen_ids)) continue;
+        $seen_ids[] = $source_id;
+
+        // Build a basic listing from whatever HTML context we can find
+        $listing = array(
+            'slug' => $url,
+            'originId' => array('formattedValue' => $source_id),
+            'url' => $url,
+            'title' => '',
+            'price' => array('display' => '', 'offer' => 0),
+            'location' => array('text' => '', 'district' => array('name' => '')),
+            'attributes' => array('landSize' => null, 'certification' => null, 'bedrooms' => null, 'bathrooms' => null, 'buildingSize' => null),
+            'medias' => array(),
+            'agent' => null,
+            'propertyType' => array('formattedValue' => 'Tanah'),
+            'shortDescription' => '',
+        );
+
+        // Try to extract title from nearby h2/h3 tag
+        $title_pattern = '/title="([^"]+)"[^>]*>\s*<h[23][^>]*>[^<]*<\/h[23]>.*?' . preg_quote($source_id, '/') . '/';
+        if (preg_match('/title="([^"]+)"[^>]*>[^<]*' . preg_quote($source_id, '/') . '/', $html_source, $tm)) {
+            $listing['title'] = html_entity_decode($tm[1], ENT_QUOTES, 'UTF-8');
+        }
+
+        if ($listing['title']) {
+            $listings[] = $listing;
         }
     }
 
     return $listings;
 }
 
-function find_pagination_in_next_data($data) {
-    $info = array('currentPage' => 1, 'totalPages' => 1, 'total' => 0);
-
-    // Try common pagination paths
-    $paths = array(
-        array('props', 'pageProps', 'serverData', 'result', 'pagination'),
-        array('props', 'pageProps', 'serverData', 'result', 'meta'),
-        array('props', 'pageProps', 'initialData', 'pagination'),
-        array('props', 'pageProps', 'initialData', 'meta'),
-        array('props', 'pageProps', 'pagination'),
-        array('props', 'pageProps', 'meta'),
-    );
-
-    foreach ($paths as $path) {
-        $val = $data;
-        foreach ($path as $key) {
-            if (isset($val[$key])) {
-                $val = $val[$key];
-            } else {
-                $val = null;
-                break;
-            }
-        }
-        if ($val && is_array($val)) {
-            if (isset($val['currentPage'])) $info['currentPage'] = intval($val['currentPage']);
-            if (isset($val['current_page'])) $info['currentPage'] = intval($val['current_page']);
-            if (isset($val['totalPages'])) $info['totalPages'] = intval($val['totalPages']);
-            if (isset($val['total_pages'])) $info['totalPages'] = intval($val['total_pages']);
-            if (isset($val['lastPage'])) $info['totalPages'] = intval($val['lastPage']);
-            if (isset($val['last_page'])) $info['totalPages'] = intval($val['last_page']);
-            if (isset($val['total'])) $info['total'] = intval($val['total']);
-            if (isset($val['totalCount'])) $info['total'] = intval($val['totalCount']);
-            if ($info['totalPages'] > 1 || $info['total'] > 0) break;
-        }
-    }
-
-    // Also try query params
-    if (isset($data['query']['page'])) {
-        $info['currentPage'] = intval($data['query']['page']);
-    }
-
-    return $info;
-}
-
 
 // ═══════════════════════════════════════════════════════════════════
-// PARSE ONE LISTING FROM __NEXT_DATA__
+// PARSE ONE RSC LISTING OBJECT
 // ═══════════════════════════════════════════════════════════════════
 
-function parse_next_data_listing($item) {
+function parse_rsc_listing($item) {
     $data = array(
         'source_url' => '',
         'source_listing_id' => '',
@@ -344,16 +347,17 @@ function parse_next_data_listing($item) {
     );
 
     // ─── ID & URL ─────────────────────────────────────────
-    $id = isset($item['id']) ? $item['id'] : '';
+    $id = isset($item['originId']['formattedValue']) ? $item['originId']['formattedValue'] : '';
     $data['source_listing_id'] = $id;
 
     // Skip housing estate / perumahan-baru listings (nps prefix)
     if (strpos($id, 'nps') === 0) {
-        return null; // skip new development listings
+        return null;
     }
 
-    // Build source URL
-    $item_url = isset($item['url']) ? $item['url'] : '';
+    // Build source URL from slug or url field
+    $slug = isset($item['slug']) ? $item['slug'] : '';
+    $item_url = isset($item['url']) ? $item['url'] : $slug;
     if ($item_url) {
         if (strpos($item_url, 'http') !== 0) {
             $item_url = 'https://www.rumah123.com' . $item_url;
@@ -362,7 +366,7 @@ function parse_next_data_listing($item) {
     }
 
     // Skip perumahan-baru URLs (housing estates)
-    if (strpos($data['source_url'], 'perumahan-baru') !== false) {
+    if (strpos($slug, 'perumahan-baru') !== false || strpos($data['source_url'], 'perumahan-baru') !== false) {
         return null;
     }
 
@@ -371,129 +375,102 @@ function parse_next_data_listing($item) {
     if (!$data['title']) return null;
 
     // ─── Price ────────────────────────────────────────────
-    // Price in __NEXT_DATA__ can be raw number or formatted
-    $price_raw = isset($item['price']) ? $item['price'] : 0;
-    $price_formatted = isset($item['priceFormatted']) ? $item['priceFormatted'] : '';
+    // RSC structure: price.display ("Rp 275 Juta /are"), price.offer (total IDR)
+    $price = isset($item['price']) ? $item['price'] : array();
+    if (is_array($price)) {
+        $price_display_text = isset($price['display']) ? $price['display'] : '';
+        $price_offer = isset($price['offer']) ? intval($price['offer']) : 0;
+        $price_total_display = isset($price['totalDisplay']) ? $price['totalDisplay'] : '';
+        $price_per_meter = isset($price['offerLandPerMeter']) ? intval($price['offerLandPerMeter']) : 0;
 
-    if ($price_raw && is_numeric($price_raw)) {
-        // Raw price might be in various units depending on the site
-        $price_val = intval($price_raw);
-        if ($price_val < 100000) {
-            // Likely in juta (millions) or per-unit price
-            // Check priceFormatted for hints
-            if ($price_formatted) {
-                $data['price_idr'] = parse_price_idr($price_formatted);
-            } else {
-                $data['price_idr'] = $price_val * 1000000; // assume juta
-            }
+        // The "offer" field is the total price in IDR
+        if ($price_offer > 0) {
+            $data['price_idr'] = $price_offer;
+        } elseif ($price_total_display) {
+            $data['price_idr'] = parse_price_idr($price_total_display);
+        } elseif ($price_display_text) {
+            $data['price_idr'] = parse_price_idr($price_display_text);
+        }
+
+        // Price label from display text
+        if (strpos($price_display_text, '/are') !== false) {
+            $data['price_label'] = 'Per Are';
+        } elseif (strpos($price_display_text, '/m') !== false) {
+            $data['price_label'] = 'Per m²';
         } else {
-            $data['price_idr'] = $price_val;
+            $data['price_label'] = 'Total';
         }
-    } elseif ($price_formatted) {
-        $data['price_idr'] = parse_price_idr($price_formatted);
-    }
 
-    // Also check nested price object
-    if (!$data['price_idr'] && isset($item['prices'])) {
-        $prices = $item['prices'];
-        if (isset($prices['price'])) {
-            $data['price_idr'] = intval($prices['price']);
-        } elseif (isset($prices['installment'])) {
-            // monthly installment, skip — look for total
+        // Use the display price text
+        if ($price_display_text) {
+            $data['price_display'] = $price_display_text;
+        } elseif ($data['price_idr']) {
+            $data['price_display'] = 'Rp ' . number_format($data['price_idr'], 0, ',', '.');
+        } else {
+            $data['price_display'] = 'Price on request';
         }
-    }
 
-    // Price label (per are, per m², total)
-    $price_tag = isset($item['priceTag']) ? strtolower($item['priceTag']) : '';
-    if (!$price_tag) {
-        $price_tag = isset($item['priceCurrency']) ? strtolower($item['priceCurrency']) : '';
-    }
-    if (strpos($price_tag, 'are') !== false || strpos($price_formatted, '/are') !== false) {
-        $data['price_label'] = 'Per Are';
-    } elseif (strpos($price_tag, 'm') !== false || strpos($price_formatted, '/m') !== false) {
-        $data['price_label'] = 'Per m²';
-    } else {
-        $data['price_label'] = 'Total';
+        // Price per sqm
+        if ($price_per_meter > 0) {
+            $data['price_idr_per_sqm'] = $price_per_meter;
+        }
     }
 
     $data['price_usd'] = idr_to_usd($data['price_idr']);
-    if ($data['price_idr']) {
-        $data['price_display'] = 'Rp ' . number_format($data['price_idr'], 0, ',', '.');
-    } else {
-        $data['price_display'] = 'Price on request';
-    }
 
     // ─── Land & Building Size ──────────────────────────────
-    if (isset($item['landArea'])) {
-        $data['land_size_sqm'] = intval($item['landArea']);
-    } elseif (isset($item['attributes']['landSize'])) {
-        $data['land_size_sqm'] = intval($item['attributes']['landSize']);
-    } elseif (isset($item['land_size'])) {
-        $data['land_size_sqm'] = intval($item['land_size']);
+    $attrs = isset($item['attributes']) ? $item['attributes'] : array();
+
+    if (isset($attrs['landSize']['value'])) {
+        $data['land_size_sqm'] = intval($attrs['landSize']['value']);
+    }
+    if (isset($attrs['buildingSize']['value'])) {
+        $data['building_size_sqm'] = intval($attrs['buildingSize']['value']);
     }
 
-    if (isset($item['buildingArea'])) {
-        $data['building_size_sqm'] = intval($item['buildingArea']);
-    } elseif (isset($item['buildingSize'])) {
-        $data['building_size_sqm'] = intval($item['buildingSize']);
-    } elseif (isset($item['attributes']['buildingSize'])) {
-        $data['building_size_sqm'] = intval($item['attributes']['buildingSize']);
-    }
-
-    // Price per sqm
+    // Price per sqm (calculate if we have total price and land size)
     if ($data['price_idr'] && $data['land_size_sqm'] && $data['land_size_sqm'] > 0 && $data['price_label'] === 'Total') {
         $data['price_idr_per_sqm'] = intval($data['price_idr'] / $data['land_size_sqm']);
     }
 
     // ─── Bedrooms & Bathrooms ──────────────────────────────
-    if (isset($item['bedroom'])) {
-        $data['bedrooms'] = intval($item['bedroom']);
-    } elseif (isset($item['attributes']['bedroom'])) {
-        $data['bedrooms'] = intval($item['attributes']['bedroom']);
+    if (isset($attrs['bedrooms']['value'])) {
+        $data['bedrooms'] = intval($attrs['bedrooms']['value']);
     }
-    if (isset($item['bathroom'])) {
-        $data['bathrooms'] = intval($item['bathroom']);
-    } elseif (isset($item['attributes']['bathroom'])) {
-        $data['bathrooms'] = intval($item['attributes']['bathroom']);
+    if (isset($attrs['bathrooms']['value'])) {
+        $data['bathrooms'] = intval($attrs['bathrooms']['value']);
     }
 
     // ─── Certificate ──────────────────────────────────────
-    $cert_text = '';
-    if (isset($item['certificate'])) {
-        $cert_text = $item['certificate'];
-    } elseif (isset($item['attributes']['certificate'])) {
-        $cert_text = $item['attributes']['certificate'];
-    }
-    if ($cert_text) {
+    if (isset($attrs['certification']['formattedValue'])) {
+        $cert_text = $attrs['certification']['formattedValue'];
         $data['certificate_type_key'] = detect_certificate($cert_text);
     }
 
     // ─── Property Type ────────────────────────────────────
-    $prop_type = isset($item['propertyType']) ? $item['propertyType'] : '';
-    if (!$prop_type && isset($item['property_type'])) {
-        $prop_type = $item['property_type'];
+    $prop_type = '';
+    if (isset($item['propertyType']['formattedValue'])) {
+        $prop_type = $item['propertyType']['formattedValue'];
+    } elseif (isset($item['propertyType']) && is_string($item['propertyType'])) {
+        $prop_type = $item['propertyType'];
     }
     $data['listing_type_key'] = detect_listing_type($data['title'], $prop_type);
 
     // ─── Location ─────────────────────────────────────────
     $district = '';
-    if (isset($item['location'])) {
-        $loc = $item['location'];
-        if (is_array($loc)) {
-            $district = isset($loc['area']) ? $loc['area'] : '';
-            if (!$district && isset($loc['district'])) $district = $loc['district'];
-        } elseif (is_string($loc)) {
-            $district = $loc;
-        }
-    }
-    if (!$district && isset($item['district'])) {
-        $district = $item['district'];
+    if (isset($item['location']['district']['name'])) {
+        $district = $item['location']['district']['name'];
+    } elseif (isset($item['location']['text'])) {
+        $district = $item['location']['text'];
     }
     $data['district'] = $district;
 
     // ─── Description ──────────────────────────────────────
     $desc = '';
-    if (isset($item['description'])) {
+    if (isset($item['shortDescription'])) {
+        $desc = strip_tags($item['shortDescription']);
+        $desc = preg_replace('/\s+/', ' ', trim($desc));
+    } elseif (isset($item['description'])) {
         $desc = strip_tags($item['description']);
         $desc = preg_replace('/\s+/', ' ', trim($desc));
     }
@@ -505,106 +482,77 @@ function parse_next_data_listing($item) {
     $data['location_detail'] = detect_location_detail($data['district'], $data['title'], $data['description']);
 
     // ─── Photos ───────────────────────────────────────────
+    // RSC structure: medias[].mediaInfo[].mediaUrl
     $photos = array();
-    if (isset($item['images']) && is_array($item['images'])) {
-        foreach ($item['images'] as $img) {
-            $url = '';
-            if (is_string($img)) {
-                $url = $img;
-            } elseif (is_array($img)) {
-                $url = isset($img['url']) ? $img['url'] : '';
-                if (!$url && isset($img['src'])) $url = $img['src'];
-                if (!$url && isset($img['nonOptimize'])) $url = $img['nonOptimize'];
-                if (!$url && isset($img['large'])) $url = $img['large'];
-                if (!$url && isset($img['medium'])) $url = $img['medium'];
-                if (!$url && isset($img['original'])) $url = $img['original'];
-            }
-            if ($url) {
-                // Ensure full URL
-                if (strpos($url, 'http') !== 0) {
-                    $url = 'https:' . $url;
-                }
-                // Try to get a decent resolution
-                $url = preg_replace('/\/\d+x\d+[^\/]*\//', '/720x420-crop/', $url);
-                $photos[] = $url;
-            }
-            if (count($photos) >= 3) break; // Only store 3 for now
-        }
-    }
-    // Fallback: check image/cover/photo fields
-    if (empty($photos)) {
-        foreach (array('image', 'cover', 'coverImage', 'photo', 'primaryImage') as $imgKey) {
-            if (isset($item[$imgKey]) && is_string($item[$imgKey]) && $item[$imgKey]) {
-                $url = $item[$imgKey];
-                if (strpos($url, 'http') !== 0) $url = 'https:' . $url;
-                $photos[] = $url;
-                break;
-            } elseif (isset($item[$imgKey]) && is_array($item[$imgKey])) {
-                $img = $item[$imgKey];
-                $url = isset($img['url']) ? $img['url'] : (isset($img['src']) ? $img['src'] : '');
-                if ($url) {
-                    if (strpos($url, 'http') !== 0) $url = 'https:' . $url;
-                    $photos[] = $url;
-                    break;
+    if (isset($item['medias']) && is_array($item['medias'])) {
+        foreach ($item['medias'] as $media) {
+            if (isset($media['mediaInfo']) && is_array($media['mediaInfo'])) {
+                foreach ($media['mediaInfo'] as $mi) {
+                    $url = isset($mi['mediaUrl']) ? $mi['mediaUrl'] : '';
+                    if (!$url && isset($mi['formatUrl'])) {
+                        // formatUrl is a template like "https://.../{width}x{height}-{type}/..."
+                        $url = str_replace(array('{width}', '{height}', '{type}'), array('720', '420', 'crop'), $mi['formatUrl']);
+                    }
+                    if ($url) {
+                        if (strpos($url, 'http') !== 0) {
+                            $url = 'https:' . $url;
+                        }
+                        $photos[] = $url;
+                    }
+                    if (count($photos) >= 3) break;
                 }
             }
+            if (count($photos) >= 3) break;
         }
     }
     $data['photos'] = $photos;
 
     // ─── Agent / Developer Info ────────────────────────────
-    // Check agent field
-    $agent = null;
-    foreach (array('agent', 'advertiser', 'listedBy', 'contact', 'developer') as $aKey) {
-        if (isset($item[$aKey]) && is_array($item[$aKey])) {
-            $agent = $item[$aKey];
-            break;
-        }
-    }
+    $agent = isset($item['agent']) ? $item['agent'] : null;
 
-    if ($agent) {
+    if ($agent && is_array($agent)) {
         $data['agent_name'] = isset($agent['name']) ? trim($agent['name']) : '';
-        if (!$data['agent_name'] && isset($agent['companyName'])) {
-            $data['agent_name'] = trim($agent['companyName']);
+
+        // Agent ID from originId
+        if (isset($agent['originId'])) {
+            $data['agent_source_id'] = $agent['originId'];
+        } elseif (isset($agent['id'])) {
+            $data['agent_source_id'] = $agent['id'];
         }
 
-        // Agent ID
-        $data['agent_source_id'] = isset($agent['id']) ? $agent['id'] : '';
-        if (!$data['agent_source_id'] && isset($agent['agentId'])) {
-            $data['agent_source_id'] = $agent['agentId'];
+        // Agent photo from medias[].mediaInfo[].mediaUrl
+        if (isset($agent['medias']) && is_array($agent['medias'])) {
+            foreach ($agent['medias'] as $am) {
+                if (isset($am['mediaInfo']) && is_array($am['mediaInfo'])) {
+                    foreach ($am['mediaInfo'] as $ami) {
+                        if (isset($ami['mediaUrl']) && $ami['mediaUrl']) {
+                            $aurl = $ami['mediaUrl'];
+                            if (strpos($aurl, 'http') !== 0) $aurl = 'https:' . $aurl;
+                            $data['agent_photo_url'] = $aurl;
+                            break 2;
+                        }
+                    }
+                }
+            }
         }
 
-        // Photo
-        $data['agent_photo_url'] = isset($agent['photo']) ? $agent['photo'] : '';
-        if (!$data['agent_photo_url'] && isset($agent['image'])) {
-            $data['agent_photo_url'] = is_string($agent['image']) ? $agent['image'] : '';
+        // Phone/WhatsApp from contacts[] array
+        if (isset($agent['contacts']) && is_array($agent['contacts'])) {
+            foreach ($agent['contacts'] as $contact) {
+                $ctype = isset($contact['type']) ? strtolower($contact['type']) : '';
+                $cval = isset($contact['value']) ? $contact['value'] : '';
+                if ($cval && ($ctype === 'phone' || $ctype === 'whatsapp' || $ctype === 'mobile')) {
+                    $data['agent_phone'] = $cval;
+                    break;
+                }
+            }
         }
 
-        // Phone
-        $data['agent_phone'] = isset($agent['phone']) ? $agent['phone'] : '';
-        if (!$data['agent_phone'] && isset($agent['phoneNumber'])) {
-            $data['agent_phone'] = $agent['phoneNumber'];
-        }
-
-        // Profile URL
-        if (isset($agent['url'])) {
-            $agent_url = $agent['url'];
-            if (strpos($agent_url, 'http') !== 0) $agent_url = 'https://www.rumah123.com' . $agent_url;
-            $data['agent_profile_url'] = $agent_url;
-        }
-
-        // Type
-        if (isset($agent['type'])) {
-            $data['agent_type'] = $agent['type'];
-        } elseif (isset($agent['isOfficial']) && $agent['isOfficial']) {
-            $data['agent_type'] = 'Developer Resmi';
-        }
-
-        // Verified
-        if (isset($agent['verified']) && $agent['verified']) {
-            $data['agent_verified'] = true;
-        } elseif (isset($agent['isVerified']) && $agent['isVerified']) {
-            $data['agent_verified'] = true;
+        // Agent type (marketerType)
+        if (isset($agent['marketerType']['value'])) {
+            $data['agent_type'] = $agent['marketerType']['value'];
+        } elseif (isset($agent['marketerType']['id'])) {
+            $data['agent_type'] = $agent['marketerType']['id'];
         }
     }
 
@@ -747,28 +695,21 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_paste') {
         exit;
     }
 
-    // Extract __NEXT_DATA__
-    $next_data = extract_next_data($source);
-    if (!$next_data) {
-        echo json_encode(array('success' => false, 'error' => 'Could not find __NEXT_DATA__ in the pasted content. Make sure you right-click the search results page and choose "View Page Source", then copy ALL the content.'));
-        exit;
-    }
+    // Extract listings from RSC flight data
+    $raw_listings = extract_rsc_listings($source);
 
-    // Find listings
-    $raw_listings = find_listings_in_next_data($next_data);
+    // Fallback: try HTML extraction if RSC parsing found nothing
     if (empty($raw_listings)) {
-        // Return debug info
-        $keys = isset($next_data['props']['pageProps']) ? array_keys($next_data['props']['pageProps']) : array();
-        echo json_encode(array(
-            'success' => false,
-            'error' => 'Found __NEXT_DATA__ but no listings array. The page structure may have changed. pageProps keys: ' . implode(', ', $keys),
-            'debug_keys' => $keys
-        ));
+        $raw_listings = extract_html_listings($source);
+    }
+
+    if (empty($raw_listings)) {
+        echo json_encode(array('success' => false, 'error' => 'Could not find any listings in the pasted content. Make sure you right-click the Rumah123 search results page and choose "View Page Source", then Select All and Copy everything.'));
         exit;
     }
 
-    // Get pagination info
-    $pagination = find_pagination_in_next_data($next_data);
+    // No pagination from RSC — user pastes one page at a time
+    $pagination = array('currentPage' => 1, 'totalPages' => 1);
 
     $db = get_db();
     $results = array();
@@ -781,7 +722,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_paste') {
     foreach ($raw_listings as $item) {
         if ($imported + $updated >= $max_listings) break;
 
-        $data = parse_next_data_listing($item);
+        $data = parse_rsc_listing($item);
         if (!$data) {
             $skipped_estates++;
             continue;
