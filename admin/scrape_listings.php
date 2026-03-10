@@ -1,9 +1,9 @@
 <?php
 /**
- * Build in Lombok — Admin: Property Listing Scraper
+ * Build in Lombok — Admin: Property Listing Importer
  *
- * Password-protected admin tool for importing property listings
- * from external sites (Rumah123.com, etc.)
+ * Paste-based importer for Rumah123.com and other property sites.
+ * User views page source in their browser and pastes it here.
  *
  * Place at: /admin/scrape_listings.php
  * SECURITY: Not linked from any menu. Access via direct URL only.
@@ -15,8 +15,8 @@ require_once('/home/rovin629/config/biltest_config.php');
 // ─── AUTH CHECK ──────────────────────────────────────────────────────
 $auth_error = '';
 if (isset($_POST['login'])) {
-    $u = $_POST['username'] ?? '';
-    $p = $_POST['password'] ?? '';
+    $u = isset($_POST['username']) ? $_POST['username'] : '';
+    $p = isset($_POST['password']) ? $_POST['password'] : '';
     if ($u === ADMIN_USER && $p === ADMIN_PASS) {
         $_SESSION['admin_auth'] = true;
     } else {
@@ -55,53 +55,7 @@ function make_slug($text) {
     return substr($text, 0, 150);
 }
 
-// ─── HELPER: Fetch URL with cURL (polite, with delays) ──────────────
-function fetch_url($url) {
-    $ch = curl_init();
-    curl_setopt_array($ch, array(
-        CURLOPT_URL => $url,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_MAXREDIRS => 5,
-        CURLOPT_TIMEOUT => 30,
-        CURLOPT_CONNECTTIMEOUT => 15,
-        CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        CURLOPT_HTTPHEADER => array(
-            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language: id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
-            'Cache-Control: no-cache',
-            'Connection: keep-alive',
-        ),
-        CURLOPT_ENCODING => 'gzip, deflate',
-        CURLOPT_SSL_VERIFYPEER => false,
-    ));
-    $html = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    if ($code >= 400 || $html === false) {
-        return false;
-    }
-    return $html;
-}
-
-// ─── HELPER: Output a progress line (flushed immediately) ────────────
-function emit($msg, $type = 'info') {
-    $cls = 'log-' . $type;
-    echo '<div class="log-line ' . $cls . '">' . htmlspecialchars($msg) . '</div>';
-    echo str_pad('', 4096) . "\n"; // padding to force flush
-    if (ob_get_level()) ob_flush();
-    flush();
-}
-
-function emit_html($html) {
-    echo $html;
-    echo str_pad('', 4096) . "\n";
-    if (ob_get_level()) ob_flush();
-    flush();
-}
-
 // ─── AREA DETECTION ──────────────────────────────────────────────────
-// Maps Rumah123 district/kecamatan names to our area_key system
 function detect_area_key($district, $title, $description) {
     $combined = strtolower($district . ' ' . $title . ' ' . $description);
 
@@ -121,7 +75,6 @@ function detect_area_key($district, $title, $description) {
         'other_lombok' => array('lombok'),
     );
 
-    // More specific matches first
     $priority_order = array('kuta', 'selong_belanak', 'mawi', 'are_guling', 'gerupuk', 'ekas',
                            'senggigi', 'mataram', 'north_lombok', 'gili_islands', 'sekotong', 'praya', 'other_lombok');
 
@@ -135,12 +88,10 @@ function detect_area_key($district, $title, $description) {
         }
     }
 
-    // Default for Lombok Tengah searches
     return 'praya';
 }
 
 // ─── DETECT LOCATION DETAIL ─────────────────────────────────────────
-// Extracts granular location names from title/description
 function detect_location_detail($district, $title, $description) {
     $combined = strtolower($title . ' ' . $description);
 
@@ -180,7 +131,6 @@ function detect_location_detail($district, $title, $description) {
         'Jerowaru' => array('jerowaru'),
     );
 
-    // Check from most specific to least
     foreach ($locations as $label => $keywords) {
         foreach ($keywords as $kw) {
             if (strpos($combined, $kw) !== false) {
@@ -189,44 +139,11 @@ function detect_location_detail($district, $title, $description) {
         }
     }
 
-    // Fall back to district name from Rumah123
     if ($district) {
         return ucwords(strtolower(str_replace(array('-', '_'), ' ', $district)));
     }
 
     return 'Lombok Tengah';
-}
-
-// ─── PARSE PRICE ────────────────────────────────────────────────────
-function parse_price_idr($price_text) {
-    $price_text = strtolower(trim($price_text));
-    $price_text = str_replace(array('.', ','), '', $price_text);
-    $price_text = preg_replace('/\s+/', ' ', $price_text);
-
-    // Remove "rp" prefix
-    $price_text = preg_replace('/^rp\s*/', '', $price_text);
-
-    $number = 0;
-    if (preg_match('/(\d+)\s*miliar/', $price_text, $m)) {
-        $number = intval($m[1]) * 1000000000;
-    } elseif (preg_match('/(\d+)\s*juta/', $price_text, $m)) {
-        $number = intval($m[1]) * 1000000;
-    } elseif (preg_match('/(\d+)/', $price_text, $m)) {
-        $number = intval($m[1]);
-        // If small number, probably in millions or billions
-        if ($number < 1000) {
-            $number = $number * 1000000; // assume juta
-        }
-    }
-
-    return $number > 0 ? $number : null;
-}
-
-// Convert IDR to USD (approximate)
-function idr_to_usd($idr) {
-    if (!$idr) return null;
-    $rate = 15800; // approximate IDR/USD rate
-    return (int)round($idr / $rate);
 }
 
 // ─── DETECT LISTING TYPE ────────────────────────────────────────────
@@ -237,7 +154,7 @@ function detect_listing_type($title, $property_type_text) {
     if (strpos($combined, 'apartment') !== false || strpos($combined, 'apartemen') !== false) return 'apartment';
     if (strpos($combined, 'tanah') !== false || strpos($combined, 'land') !== false) return 'land';
     if (strpos($combined, 'ruko') !== false || strpos($combined, 'komersial') !== false) return 'commercial';
-    return 'land'; // default for our search
+    return 'land';
 }
 
 // ─── DETECT CERTIFICATE TYPE ────────────────────────────────────────
@@ -251,196 +168,161 @@ function detect_certificate($text) {
     return null;
 }
 
+// ─── PARSE PRICE ────────────────────────────────────────────────────
+function parse_price_idr($price_text) {
+    $price_text = strtolower(trim($price_text));
+    $price_text = str_replace(array('.', ','), '', $price_text);
+    $price_text = preg_replace('/\s+/', ' ', $price_text);
+    $price_text = preg_replace('/^rp\s*/', '', $price_text);
 
-// ═══════════════════════════════════════════════════════════════════
-// RUMAH123 SCRAPER
-// ═══════════════════════════════════════════════════════════════════
-
-function scrape_rumah123($search_type, $max_listings) {
-    $db = get_db();
-
-    // Search URLs for Lombok Tengah
-    $base_urls = array();
-    if ($search_type === 'land' || $search_type === 'all') {
-        $base_urls[] = array('url' => 'https://www.rumah123.com/jual/lombok-tengah/tanah/', 'type' => 'land');
-    }
-    if ($search_type === 'houses' || $search_type === 'all') {
-        $base_urls[] = array('url' => 'https://www.rumah123.com/jual/lombok-tengah/rumah/', 'type' => 'house');
-    }
-
-    $total_imported = 0;
-    $total_skipped = 0;
-    $total_updated = 0;
-    $total_errors = 0;
-    $seen_source_ids = array(); // Track source IDs for dedup within this run
-
-    foreach ($base_urls as $search) {
-        $base_url = $search['url'];
-        $default_type = $search['type'];
-
-        emit("Starting search: {$base_url}", 'info');
-        $page = 1;
-        $consecutive_empty = 0;
-
-        while ($total_imported + $total_skipped + $total_updated < $max_listings * 3 && $total_imported + $total_updated < $max_listings) {
-            $url = $page === 1 ? $base_url : $base_url . '?page=' . $page;
-            emit("Fetching page {$page}: {$url}", 'info');
-
-            $html = fetch_url($url);
-            if (!$html) {
-                emit("Failed to fetch page {$page}. Stopping.", 'error');
-                break;
-            }
-
-            // Extract listing URLs from search results
-            $listing_urls = array();
-            // Match both /properti/ links (individual) — skip /perumahan-baru/ (estates)
-            if (preg_match_all('/"(https?:\/\/www\.rumah123\.com\/properti\/[^"]+)"/', $html, $matches)) {
-                foreach ($matches[1] as $lurl) {
-                    // Skip perumahan-baru (housing estates)
-                    if (strpos($lurl, 'perumahan-baru') !== false) continue;
-                    // Deduplicate within page
-                    if (!in_array($lurl, $listing_urls)) {
-                        $listing_urls[] = $lurl;
-                    }
-                }
-            }
-
-            if (empty($listing_urls)) {
-                $consecutive_empty++;
-                emit("No listings found on page {$page}.", 'warn');
-                if ($consecutive_empty >= 2) {
-                    emit("Two consecutive empty pages. Done with this search.", 'info');
-                    break;
-                }
-                $page++;
-                sleep(rand(2, 4));
-                continue;
-            }
-
-            $consecutive_empty = 0;
-            emit("Found " . count($listing_urls) . " listing(s) on page {$page}.", 'info');
-
-            foreach ($listing_urls as $listing_url) {
-                if ($total_imported + $total_updated >= $max_listings) {
-                    emit("Reached max listings limit ({$max_listings}). Stopping.", 'success');
-                    break 3;
-                }
-
-                // Extract source listing ID from URL (e.g., las8951048)
-                $source_id = '';
-                if (preg_match('/(las\d+|hos\d+)\/?$/', $listing_url, $idm)) {
-                    $source_id = $idm[1];
-                } elseif (preg_match('/-(las\d+|hos\d+)\/?/', $listing_url, $idm)) {
-                    $source_id = $idm[1];
-                }
-
-                // Skip if we've already processed this source ID in this run
-                if ($source_id && in_array($source_id, $seen_source_ids)) {
-                    emit("  Duplicate in this run: {$source_id}. Skipping.", 'warn');
-                    $total_skipped++;
-                    continue;
-                }
-                if ($source_id) {
-                    $seen_source_ids[] = $source_id;
-                }
-
-                // Check if already in DB
-                if ($source_id) {
-                    $existing = $db->prepare("SELECT id, price_idr FROM listings WHERE source_site = 'rumah123' AND source_listing_id = ?");
-                    $existing->execute(array($source_id));
-                    $ex = $existing->fetch();
-                    // We'll handle update-if-cheaper below
-                }
-
-                // Polite delay between detail page fetches: 2-5 seconds
-                sleep(rand(2, 5));
-
-                emit("  Fetching detail: {$listing_url}", 'info');
-                $detail_html = fetch_url($listing_url);
-                if (!$detail_html) {
-                    emit("  Failed to fetch detail page. Skipping.", 'error');
-                    $total_errors++;
-                    continue;
-                }
-
-                // ─── Parse detail page ─────────────────────────────────
-                $data = parse_rumah123_detail($detail_html, $listing_url, $default_type);
-                if (!$data) {
-                    emit("  Could not parse listing data. Skipping.", 'error');
-                    $total_errors++;
-                    continue;
-                }
-
-                $data['source_listing_id'] = $source_id;
-
-                // ─── Handle agent ──────────────────────────────────────
-                $agent_id = null;
-                if (!empty($data['agent_name'])) {
-                    $agent_id = upsert_agent($db, $data);
-                }
-
-                // ─── Handle listing ────────────────────────────────────
-                if (isset($ex) && $ex) {
-                    // Listing exists — only update if new price is lower
-                    $new_price = $data['price_idr'];
-                    $old_price = intval($ex['price_idr']);
-                    if ($new_price && $old_price && $new_price < $old_price) {
-                        $upd = $db->prepare("UPDATE listings SET price_idr = ?, price_usd = ?, price_idr_per_sqm = ?, updated_at = NOW() WHERE id = ?");
-                        $upd->execute(array($new_price, idr_to_usd($new_price), $data['price_idr_per_sqm'], $ex['id']));
-                        emit("  Updated price: " . $data['title'] . " (lower price found)", 'success');
-                        $total_updated++;
-                    } else {
-                        emit("  Already in DB: " . ($data['title'] ? substr($data['title'], 0, 60) : $source_id) . ". Skipping.", 'warn');
-                        $total_skipped++;
-                    }
-                    unset($ex);
-                    continue;
-                }
-                unset($ex);
-
-                // ─── Insert new listing ────────────────────────────────
-                $result = insert_listing($db, $data, $agent_id);
-                if ($result === 'inserted') {
-                    $total_imported++;
-                    emit_html('<div class="log-line log-success">✓ <strong>' . htmlspecialchars(substr($data['title'], 0, 70)) . '</strong> — '
-                        . htmlspecialchars($data['price_display']) . ' — '
-                        . htmlspecialchars($data['location_detail'])
-                        . ($data['land_size_sqm'] ? ' — ' . number_format($data['land_size_sqm']) . ' m²' : '')
-                        . ' [' . $total_imported . '/' . $max_listings . ']</div>');
-                } elseif ($result === 'duplicate') {
-                    $total_skipped++;
-                    emit("  Duplicate: " . substr($data['title'], 0, 60), 'warn');
-                } else {
-                    $total_errors++;
-                    emit("  Error inserting: " . substr($data['title'], 0, 60), 'error');
-                }
-            }
-
-            $page++;
-            // Polite delay between pages: 3-6 seconds
-            sleep(rand(3, 6));
+    $number = 0;
+    if (preg_match('/(\d+)\s*miliar/', $price_text, $m)) {
+        $number = intval($m[1]) * 1000000000;
+    } elseif (preg_match('/(\d+)\s*juta/', $price_text, $m)) {
+        $number = intval($m[1]) * 1000000;
+    } elseif (preg_match('/(\d+)/', $price_text, $m)) {
+        $number = intval($m[1]);
+        if ($number < 1000) {
+            $number = $number * 1000000;
         }
     }
 
-    emit("", 'info');
-    emit("═══════════════════════════════════════════════════", 'info');
-    emit("COMPLETE: {$total_imported} imported, {$total_updated} updated, {$total_skipped} skipped, {$total_errors} errors", 'success');
-    emit("═══════════════════════════════════════════════════", 'info');
+    return $number > 0 ? $number : null;
+}
+
+function idr_to_usd($idr) {
+    if (!$idr) return null;
+    $rate = 15800;
+    return (int)round($idr / $rate);
 }
 
 
-// ─── PARSE RUMAH123 DETAIL PAGE ─────────────────────────────────────
-function parse_rumah123_detail($html, $url, $default_type) {
+// ═══════════════════════════════════════════════════════════════════
+// PARSE __NEXT_DATA__ JSON FROM PASTED HTML
+// ═══════════════════════════════════════════════════════════════════
+
+function extract_next_data($html_source) {
+    // Try to extract the __NEXT_DATA__ script tag content
+    if (preg_match('/<script\s+id="__NEXT_DATA__"\s+type="application\/json">\s*(.*?)\s*<\/script>/s', $html_source, $m)) {
+        $json = json_decode($m[1], true);
+        if ($json !== null) {
+            return $json;
+        }
+    }
+
+    // Fallback: maybe user pasted just the JSON directly
+    $json = json_decode(trim($html_source), true);
+    if ($json !== null && isset($json['props'])) {
+        return $json;
+    }
+
+    return null;
+}
+
+function find_listings_in_next_data($data) {
+    // Rumah123 uses Next.js — listings can be in various paths
+    $listings = array();
+
+    // Path 1: props.pageProps.serverData.result.listings
+    if (isset($data['props']['pageProps']['serverData']['result']['listings'])) {
+        $listings = $data['props']['pageProps']['serverData']['result']['listings'];
+    }
+    // Path 2: props.pageProps.initialData.results
+    elseif (isset($data['props']['pageProps']['initialData']['results'])) {
+        $listings = $data['props']['pageProps']['initialData']['results'];
+    }
+    // Path 3: props.pageProps.listings
+    elseif (isset($data['props']['pageProps']['listings'])) {
+        $listings = $data['props']['pageProps']['listings'];
+    }
+    // Path 4: props.pageProps.serverData.listings
+    elseif (isset($data['props']['pageProps']['serverData']['listings'])) {
+        $listings = $data['props']['pageProps']['serverData']['listings'];
+    }
+    // Path 5: Search deeper — check all keys in pageProps for arrays of objects with 'id' and 'title'
+    elseif (isset($data['props']['pageProps'])) {
+        $pp = $data['props']['pageProps'];
+        foreach ($pp as $key => $val) {
+            if (is_array($val)) {
+                // Check if it's a flat array of listing objects
+                if (isset($val[0]) && is_array($val[0]) && isset($val[0]['id'])) {
+                    $listings = $val;
+                    break;
+                }
+                // Check nested: $val['result'], $val['data'], $val['listings']
+                foreach (array('result', 'data', 'listings', 'results', 'items') as $sub) {
+                    if (isset($val[$sub]) && is_array($val[$sub]) && isset($val[$sub][0]['id'])) {
+                        $listings = $val[$sub];
+                        break 2;
+                    }
+                }
+            }
+        }
+    }
+
+    return $listings;
+}
+
+function find_pagination_in_next_data($data) {
+    $info = array('currentPage' => 1, 'totalPages' => 1, 'total' => 0);
+
+    // Try common pagination paths
+    $paths = array(
+        array('props', 'pageProps', 'serverData', 'result', 'pagination'),
+        array('props', 'pageProps', 'serverData', 'result', 'meta'),
+        array('props', 'pageProps', 'initialData', 'pagination'),
+        array('props', 'pageProps', 'initialData', 'meta'),
+        array('props', 'pageProps', 'pagination'),
+        array('props', 'pageProps', 'meta'),
+    );
+
+    foreach ($paths as $path) {
+        $val = $data;
+        foreach ($path as $key) {
+            if (isset($val[$key])) {
+                $val = $val[$key];
+            } else {
+                $val = null;
+                break;
+            }
+        }
+        if ($val && is_array($val)) {
+            if (isset($val['currentPage'])) $info['currentPage'] = intval($val['currentPage']);
+            if (isset($val['current_page'])) $info['currentPage'] = intval($val['current_page']);
+            if (isset($val['totalPages'])) $info['totalPages'] = intval($val['totalPages']);
+            if (isset($val['total_pages'])) $info['totalPages'] = intval($val['total_pages']);
+            if (isset($val['lastPage'])) $info['totalPages'] = intval($val['lastPage']);
+            if (isset($val['last_page'])) $info['totalPages'] = intval($val['last_page']);
+            if (isset($val['total'])) $info['total'] = intval($val['total']);
+            if (isset($val['totalCount'])) $info['total'] = intval($val['totalCount']);
+            if ($info['totalPages'] > 1 || $info['total'] > 0) break;
+        }
+    }
+
+    // Also try query params
+    if (isset($data['query']['page'])) {
+        $info['currentPage'] = intval($data['query']['page']);
+    }
+
+    return $info;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// PARSE ONE LISTING FROM __NEXT_DATA__
+// ═══════════════════════════════════════════════════════════════════
+
+function parse_next_data_listing($item) {
     $data = array(
-        'source_url' => $url,
+        'source_url' => '',
+        'source_listing_id' => '',
         'title' => '',
         'price_display' => '',
         'price_idr' => null,
         'price_usd' => null,
         'price_label' => '',
         'price_idr_per_sqm' => null,
-        'listing_type_key' => $default_type,
+        'listing_type_key' => 'land',
         'land_size_sqm' => null,
         'building_size_sqm' => null,
         'bedrooms' => null,
@@ -461,208 +343,298 @@ function parse_rumah123_detail($html, $url, $default_type) {
         'agent_verified' => false,
     );
 
-    // ─── Title ─────────────────────────────────────────────
-    // Try og:title first
-    if (preg_match('/<meta\s+property="og:title"\s+content="([^"]+)"/i', $html, $m)) {
-        $data['title'] = html_entity_decode(trim($m[1]), ENT_QUOTES, 'UTF-8');
-    } elseif (preg_match('/<h1[^>]*>([^<]+)<\/h1>/i', $html, $m)) {
-        $data['title'] = html_entity_decode(trim($m[1]), ENT_QUOTES, 'UTF-8');
+    // ─── ID & URL ─────────────────────────────────────────
+    $id = isset($item['id']) ? $item['id'] : '';
+    $data['source_listing_id'] = $id;
+
+    // Skip housing estate / perumahan-baru listings (nps prefix)
+    if (strpos($id, 'nps') === 0) {
+        return null; // skip new development listings
     }
+
+    // Build source URL
+    $item_url = isset($item['url']) ? $item['url'] : '';
+    if ($item_url) {
+        if (strpos($item_url, 'http') !== 0) {
+            $item_url = 'https://www.rumah123.com' . $item_url;
+        }
+        $data['source_url'] = $item_url;
+    }
+
+    // Skip perumahan-baru URLs (housing estates)
+    if (strpos($data['source_url'], 'perumahan-baru') !== false) {
+        return null;
+    }
+
+    // ─── Title ────────────────────────────────────────────
+    $data['title'] = isset($item['title']) ? trim($item['title']) : '';
     if (!$data['title']) return null;
 
-    // ─── Price ─────────────────────────────────────────────
-    // Look for price in structured data or visible text
-    if (preg_match('/"price"\s*:\s*"?(\d+)"?/', $html, $m)) {
-        $data['price_idr'] = intval($m[1]);
-    }
-    // Also check og:price or visible price patterns
-    if (preg_match('/"priceCurrency"\s*:\s*"IDR"/i', $html)) {
-        // structured data price already captured above
-    }
-    // Fallback: look for Rp in page
-    if (!$data['price_idr']) {
-        if (preg_match('/Rp\s*([\d.,]+)\s*(Miliar|Juta|Ribu)?/i', $html, $pm)) {
-            $num = str_replace(array('.', ','), '', $pm[1]);
-            $mult = 1;
-            if (isset($pm[2])) {
-                $unit = strtolower($pm[2]);
-                if ($unit === 'miliar') $mult = 1000000000;
-                elseif ($unit === 'juta') $mult = 1000000;
-                elseif ($unit === 'ribu') $mult = 1000;
+    // ─── Price ────────────────────────────────────────────
+    // Price in __NEXT_DATA__ can be raw number or formatted
+    $price_raw = isset($item['price']) ? $item['price'] : 0;
+    $price_formatted = isset($item['priceFormatted']) ? $item['priceFormatted'] : '';
+
+    if ($price_raw && is_numeric($price_raw)) {
+        // Raw price might be in various units depending on the site
+        $price_val = intval($price_raw);
+        if ($price_val < 100000) {
+            // Likely in juta (millions) or per-unit price
+            // Check priceFormatted for hints
+            if ($price_formatted) {
+                $data['price_idr'] = parse_price_idr($price_formatted);
+            } else {
+                $data['price_idr'] = $price_val * 1000000; // assume juta
             }
-            $data['price_idr'] = intval($num) * $mult;
+        } else {
+            $data['price_idr'] = $price_val;
+        }
+    } elseif ($price_formatted) {
+        $data['price_idr'] = parse_price_idr($price_formatted);
+    }
+
+    // Also check nested price object
+    if (!$data['price_idr'] && isset($item['prices'])) {
+        $prices = $item['prices'];
+        if (isset($prices['price'])) {
+            $data['price_idr'] = intval($prices['price']);
+        } elseif (isset($prices['installment'])) {
+            // monthly installment, skip — look for total
         }
     }
-    // Price per are/sqm label
-    if (preg_match('/\/are|per are/i', $html)) {
+
+    // Price label (per are, per m², total)
+    $price_tag = isset($item['priceTag']) ? strtolower($item['priceTag']) : '';
+    if (!$price_tag) {
+        $price_tag = isset($item['priceCurrency']) ? strtolower($item['priceCurrency']) : '';
+    }
+    if (strpos($price_tag, 'are') !== false || strpos($price_formatted, '/are') !== false) {
         $data['price_label'] = 'Per Are';
-    } elseif (preg_match('/\/m²|per m/i', $html)) {
+    } elseif (strpos($price_tag, 'm') !== false || strpos($price_formatted, '/m') !== false) {
         $data['price_label'] = 'Per m²';
-    } elseif (preg_match('/total/i', $html)) {
+    } else {
         $data['price_label'] = 'Total';
     }
 
     $data['price_usd'] = idr_to_usd($data['price_idr']);
-    $data['price_display'] = $data['price_idr'] ? 'Rp ' . number_format($data['price_idr'], 0, ',', '.') : 'Price on request';
-
-    // ─── Land & building size ──────────────────────────────
-    // "Luas Tanah" or "LT:" patterns
-    if (preg_match('/(?:Luas Tanah|LT)\s*:?\s*([\d.,]+)\s*m/i', $html, $m)) {
-        $data['land_size_sqm'] = intval(str_replace(array('.', ','), '', $m[1]));
-    } elseif (preg_match('/(\d[\d.,]*)\s*m²?\s*\(?\s*[\d.,]*\s*are/i', $html, $m)) {
-        $data['land_size_sqm'] = intval(str_replace(array('.', ','), '', $m[1]));
+    if ($data['price_idr']) {
+        $data['price_display'] = 'Rp ' . number_format($data['price_idr'], 0, ',', '.');
+    } else {
+        $data['price_display'] = 'Price on request';
     }
-    // "Luas Bangunan" or "LB:"
-    if (preg_match('/(?:Luas Bangunan|LB)\s*:?\s*([\d.,]+)\s*m/i', $html, $m)) {
-        $data['building_size_sqm'] = intval(str_replace(array('.', ','), '', $m[1]));
+
+    // ─── Land & Building Size ──────────────────────────────
+    if (isset($item['landArea'])) {
+        $data['land_size_sqm'] = intval($item['landArea']);
+    } elseif (isset($item['attributes']['landSize'])) {
+        $data['land_size_sqm'] = intval($item['attributes']['landSize']);
+    } elseif (isset($item['land_size'])) {
+        $data['land_size_sqm'] = intval($item['land_size']);
+    }
+
+    if (isset($item['buildingArea'])) {
+        $data['building_size_sqm'] = intval($item['buildingArea']);
+    } elseif (isset($item['buildingSize'])) {
+        $data['building_size_sqm'] = intval($item['buildingSize']);
+    } elseif (isset($item['attributes']['buildingSize'])) {
+        $data['building_size_sqm'] = intval($item['attributes']['buildingSize']);
     }
 
     // Price per sqm
-    if ($data['price_idr'] && $data['land_size_sqm'] && $data['land_size_sqm'] > 0) {
+    if ($data['price_idr'] && $data['land_size_sqm'] && $data['land_size_sqm'] > 0 && $data['price_label'] === 'Total') {
         $data['price_idr_per_sqm'] = intval($data['price_idr'] / $data['land_size_sqm']);
     }
 
-    // ─── Bedrooms & bathrooms ──────────────────────────────
-    if (preg_match('/(\d+)\s*(?:Kamar Tidur|KT|bedroom)/i', $html, $m)) {
-        $data['bedrooms'] = intval($m[1]);
+    // ─── Bedrooms & Bathrooms ──────────────────────────────
+    if (isset($item['bedroom'])) {
+        $data['bedrooms'] = intval($item['bedroom']);
+    } elseif (isset($item['attributes']['bedroom'])) {
+        $data['bedrooms'] = intval($item['attributes']['bedroom']);
     }
-    if (preg_match('/(\d+)\s*(?:Kamar Mandi|KM|bathroom)/i', $html, $m)) {
-        $data['bathrooms'] = intval($m[1]);
-    }
-
-    // ─── Certificate type ──────────────────────────────────
-    if (preg_match('/Sertifikat\s*:?\s*([^<\n]+)/i', $html, $m)) {
-        $data['certificate_type_key'] = detect_certificate($m[1]);
-    }
-
-    // ─── Listing type ──────────────────────────────────────
-    $property_type_text = '';
-    if (preg_match('/Tipe Properti\s*:?\s*([^<\n]+)/i', $html, $m)) {
-        $property_type_text = trim($m[1]);
-    }
-    $data['listing_type_key'] = detect_listing_type($data['title'], $property_type_text);
-
-    // ─── Location / district ───────────────────────────────
-    // From URL: /properti/lombok-tengah-pujut/...
-    if (preg_match('/\/properti\/lombok-tengah-([^\/]+)\//', $url, $m)) {
-        $data['district'] = str_replace('-', ' ', $m[1]);
-    } elseif (preg_match('/\/properti\/([^\/]+)\//', $url, $m)) {
-        $data['district'] = str_replace('-', ' ', $m[1]);
-    }
-    // Also check visible location text
-    if (preg_match('/"addressLocality"\s*:\s*"([^"]+)"/i', $html, $m)) {
-        $data['district'] = $m[1];
+    if (isset($item['bathroom'])) {
+        $data['bathrooms'] = intval($item['bathroom']);
+    } elseif (isset($item['attributes']['bathroom'])) {
+        $data['bathrooms'] = intval($item['attributes']['bathroom']);
     }
 
-    // ─── Description ───────────────────────────────────────
-    // Try structured data description
-    if (preg_match('/"description"\s*:\s*"((?:[^"\\\\]|\\\\.)*)"/i', $html, $m)) {
-        $desc = stripcslashes($m[1]);
-        $desc = strip_tags($desc);
+    // ─── Certificate ──────────────────────────────────────
+    $cert_text = '';
+    if (isset($item['certificate'])) {
+        $cert_text = $item['certificate'];
+    } elseif (isset($item['attributes']['certificate'])) {
+        $cert_text = $item['attributes']['certificate'];
+    }
+    if ($cert_text) {
+        $data['certificate_type_key'] = detect_certificate($cert_text);
+    }
+
+    // ─── Property Type ────────────────────────────────────
+    $prop_type = isset($item['propertyType']) ? $item['propertyType'] : '';
+    if (!$prop_type && isset($item['property_type'])) {
+        $prop_type = $item['property_type'];
+    }
+    $data['listing_type_key'] = detect_listing_type($data['title'], $prop_type);
+
+    // ─── Location ─────────────────────────────────────────
+    $district = '';
+    if (isset($item['location'])) {
+        $loc = $item['location'];
+        if (is_array($loc)) {
+            $district = isset($loc['area']) ? $loc['area'] : '';
+            if (!$district && isset($loc['district'])) $district = $loc['district'];
+        } elseif (is_string($loc)) {
+            $district = $loc;
+        }
+    }
+    if (!$district && isset($item['district'])) {
+        $district = $item['district'];
+    }
+    $data['district'] = $district;
+
+    // ─── Description ──────────────────────────────────────
+    $desc = '';
+    if (isset($item['description'])) {
+        $desc = strip_tags($item['description']);
         $desc = preg_replace('/\s+/', ' ', trim($desc));
-        if (strlen($desc) > 30) {
-            $data['description'] = $desc;
-        }
     }
-    // Fallback: og:description
-    if (empty($data['description'])) {
-        if (preg_match('/<meta\s+(?:property|name)="(?:og:)?description"\s+content="([^"]+)"/i', $html, $m)) {
-            $data['description'] = html_entity_decode(trim($m[1]), ENT_QUOTES, 'UTF-8');
-        }
-    }
-    $data['short_description'] = $data['description'] ? mb_substr($data['description'], 0, 200) : $data['title'];
+    $data['description'] = $desc;
+    $data['short_description'] = $desc ? mb_substr($desc, 0, 200) : $data['title'];
 
-    // ─── Location detection ────────────────────────────────
+    // Location & area detection
     $data['area_key'] = detect_area_key($data['district'], $data['title'], $data['description']);
     $data['location_detail'] = detect_location_detail($data['district'], $data['title'], $data['description']);
 
-    // ─── Photos ────────────────────────────────────────────
-    // Look for image URLs from Rumah123's CDN
-    if (preg_match_all('/https?:\/\/picture\.rumah123\.com\/[^"\'<>\s]+\.(?:jpg|jpeg|png|webp)/i', $html, $pm)) {
-        $unique_photos = array();
-        foreach ($pm[0] as $photo_url) {
-            // Get the higher resolution version
-            $photo_url = preg_replace('/\/\d+x\d+[^\/]*\//', '/720x420-crop/', $photo_url);
-            if (!in_array($photo_url, $unique_photos)) {
-                $unique_photos[] = $photo_url;
+    // ─── Photos ───────────────────────────────────────────
+    $photos = array();
+    if (isset($item['images']) && is_array($item['images'])) {
+        foreach ($item['images'] as $img) {
+            $url = '';
+            if (is_string($img)) {
+                $url = $img;
+            } elseif (is_array($img)) {
+                $url = isset($img['url']) ? $img['url'] : '';
+                if (!$url && isset($img['src'])) $url = $img['src'];
+                if (!$url && isset($img['nonOptimize'])) $url = $img['nonOptimize'];
+                if (!$url && isset($img['large'])) $url = $img['large'];
+                if (!$url && isset($img['medium'])) $url = $img['medium'];
+                if (!$url && isset($img['original'])) $url = $img['original'];
             }
-            if (count($unique_photos) >= 3) break; // Only grab 3 for now
-        }
-        $data['photos'] = $unique_photos;
-    }
-
-    // ─── Agent info ────────────────────────────────────────
-    // Agent name from the listing agent section
-    if (preg_match('/agen-properti\/[^\/]+\/([^\/]+)-(\d+)\//i', $html, $m)) {
-        $data['agent_source_id'] = $m[2];
-        $data['agent_profile_url'] = 'https://www.rumah123.com/agen-properti/' . $m[0];
-        // Reconstruct name from slug
-        $name_slug = $m[1];
-        $data['agent_name'] = ucwords(str_replace('-', ' ', $name_slug));
-    }
-    // Try to find agent name more directly
-    if (preg_match('/"name"\s*:\s*"([^"]+)"[^}]*"@type"\s*:\s*"RealEstateAgent"/i', $html, $m)) {
-        $data['agent_name'] = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
-    } elseif (preg_match('/"@type"\s*:\s*"RealEstateAgent"[^}]*"name"\s*:\s*"([^"]+)"/i', $html, $m)) {
-        $data['agent_name'] = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
-    }
-
-    // Agent phone
-    if (preg_match('/"telephone"\s*:\s*"([^"]+)"/i', $html, $m)) {
-        $data['agent_phone'] = trim($m[1]);
-    } elseif (preg_match('/(\+62[\d\s-]{8,15})/', $html, $m)) {
-        $data['agent_phone'] = preg_replace('/[\s-]/', '', $m[1]);
-    }
-
-    // Agent photo
-    if (preg_match('/agen.*?<img[^>]+src="(https?:\/\/[^"]+)"[^>]*>/is', $html, $m)) {
-        if (strpos($m[1], 'rumah123') !== false || strpos($m[1], 'r123') !== false) {
-            $data['agent_photo_url'] = $m[1];
+            if ($url) {
+                // Ensure full URL
+                if (strpos($url, 'http') !== 0) {
+                    $url = 'https:' . $url;
+                }
+                // Try to get a decent resolution
+                $url = preg_replace('/\/\d+x\d+[^\/]*\//', '/720x420-crop/', $url);
+                $photos[] = $url;
+            }
+            if (count($photos) >= 3) break; // Only store 3 for now
         }
     }
+    // Fallback: check image/cover/photo fields
+    if (empty($photos)) {
+        foreach (array('image', 'cover', 'coverImage', 'photo', 'primaryImage') as $imgKey) {
+            if (isset($item[$imgKey]) && is_string($item[$imgKey]) && $item[$imgKey]) {
+                $url = $item[$imgKey];
+                if (strpos($url, 'http') !== 0) $url = 'https:' . $url;
+                $photos[] = $url;
+                break;
+            } elseif (isset($item[$imgKey]) && is_array($item[$imgKey])) {
+                $img = $item[$imgKey];
+                $url = isset($img['url']) ? $img['url'] : (isset($img['src']) ? $img['src'] : '');
+                if ($url) {
+                    if (strpos($url, 'http') !== 0) $url = 'https:' . $url;
+                    $photos[] = $url;
+                    break;
+                }
+            }
+        }
+    }
+    $data['photos'] = $photos;
 
-    // Agent type
-    if (preg_match('/(?:Agen\s+)?Independen/i', $html)) {
-        $data['agent_type'] = 'Independen';
-    } elseif (preg_match('/Agen\s+Kantor/i', $html)) {
-        $data['agent_type'] = 'Agen Kantor';
+    // ─── Agent / Developer Info ────────────────────────────
+    // Check agent field
+    $agent = null;
+    foreach (array('agent', 'advertiser', 'listedBy', 'contact', 'developer') as $aKey) {
+        if (isset($item[$aKey]) && is_array($item[$aKey])) {
+            $agent = $item[$aKey];
+            break;
+        }
     }
 
-    // Verified/trusted
-    if (preg_match('/verified|terverifikasi/i', $html)) {
-        $data['agent_verified'] = true;
+    if ($agent) {
+        $data['agent_name'] = isset($agent['name']) ? trim($agent['name']) : '';
+        if (!$data['agent_name'] && isset($agent['companyName'])) {
+            $data['agent_name'] = trim($agent['companyName']);
+        }
+
+        // Agent ID
+        $data['agent_source_id'] = isset($agent['id']) ? $agent['id'] : '';
+        if (!$data['agent_source_id'] && isset($agent['agentId'])) {
+            $data['agent_source_id'] = $agent['agentId'];
+        }
+
+        // Photo
+        $data['agent_photo_url'] = isset($agent['photo']) ? $agent['photo'] : '';
+        if (!$data['agent_photo_url'] && isset($agent['image'])) {
+            $data['agent_photo_url'] = is_string($agent['image']) ? $agent['image'] : '';
+        }
+
+        // Phone
+        $data['agent_phone'] = isset($agent['phone']) ? $agent['phone'] : '';
+        if (!$data['agent_phone'] && isset($agent['phoneNumber'])) {
+            $data['agent_phone'] = $agent['phoneNumber'];
+        }
+
+        // Profile URL
+        if (isset($agent['url'])) {
+            $agent_url = $agent['url'];
+            if (strpos($agent_url, 'http') !== 0) $agent_url = 'https://www.rumah123.com' . $agent_url;
+            $data['agent_profile_url'] = $agent_url;
+        }
+
+        // Type
+        if (isset($agent['type'])) {
+            $data['agent_type'] = $agent['type'];
+        } elseif (isset($agent['isOfficial']) && $agent['isOfficial']) {
+            $data['agent_type'] = 'Developer Resmi';
+        }
+
+        // Verified
+        if (isset($agent['verified']) && $agent['verified']) {
+            $data['agent_verified'] = true;
+        } elseif (isset($agent['isVerified']) && $agent['isVerified']) {
+            $data['agent_verified'] = true;
+        }
     }
 
     return $data;
 }
 
 
-// ─── UPSERT AGENT ───────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+// UPSERT AGENT
+// ═══════════════════════════════════════════════════════════════════
+
 function upsert_agent($db, $data) {
     $source_id = $data['agent_source_id'];
     if (!$source_id && $data['agent_name']) {
-        // Generate a pseudo source_id from name
         $source_id = 'name_' . md5(strtolower($data['agent_name']));
     }
     if (!$source_id) return null;
 
-    // Check if agent exists
     $stmt = $db->prepare("SELECT id FROM agents WHERE source_site = 'rumah123' AND source_agent_id = ?");
     $stmt->execute(array($source_id));
     $existing = $stmt->fetch();
 
     if ($existing) {
-        // Update phone if we have new data
         if ($data['agent_phone']) {
             $db->prepare("UPDATE agents SET phone = COALESCE(NULLIF(phone, ''), ?) WHERE id = ?")->execute(array($data['agent_phone'], $existing['id']));
         }
         return intval($existing['id']);
     }
 
-    // Insert new agent
     $slug = make_slug($data['agent_name']);
-
-    // Ensure slug is unique
     $slug_check = $db->prepare("SELECT COUNT(*) FROM agents WHERE slug = ?");
     $slug_check->execute(array($slug));
     if ($slug_check->fetchColumn() > 0) {
@@ -677,34 +649,33 @@ function upsert_agent($db, $data) {
     $ins->execute(array(
         $slug,
         $data['agent_name'],
-        $data['agent_photo_url'] ?: null,
-        $data['agent_phone'] ?: null,
-        $data['agent_phone'] ?: null, // whatsapp same as phone
+        $data['agent_photo_url'] ? $data['agent_photo_url'] : null,
+        $data['agent_phone'] ? $data['agent_phone'] : null,
+        $data['agent_phone'] ? $data['agent_phone'] : null,
         $data['agent_verified'] ? 1 : 0,
         $source_id,
-        $data['agent_profile_url'] ?: null,
+        $data['agent_profile_url'] ? $data['agent_profile_url'] : null,
         $data['agent_verified'] ? 1 : 0,
-        $data['agent_type'] ?: null,
+        $data['agent_type'] ? $data['agent_type'] : null,
     ));
 
-    $agent_id = intval($db->lastInsertId());
-    emit("    → Agent added: " . $data['agent_name'] . ($data['agent_verified'] ? ' ✓ Verified' : ''), 'success');
-    return $agent_id;
+    return intval($db->lastInsertId());
 }
 
 
-// ─── INSERT LISTING ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+// INSERT LISTING
+// ═══════════════════════════════════════════════════════════════════
+
 function insert_listing($db, $data, $agent_id) {
     $slug = make_slug($data['title']);
 
-    // Ensure slug uniqueness
     $slug_check = $db->prepare("SELECT COUNT(*) FROM listings WHERE slug = ?");
     $slug_check->execute(array($slug));
     if ($slug_check->fetchColumn() > 0) {
         $slug = $slug . '-' . substr(md5($data['source_listing_id'] . time()), 0, 6);
     }
 
-    // Encode photos as JSON array for the TEXT column
     $photo_urls_json = !empty($data['photos']) ? json_encode(array_values($data['photos'])) : null;
 
     try {
@@ -736,7 +707,7 @@ function insert_listing($db, $data, $agent_id) {
             $data['location_detail'],
             $data['price_idr'],
             $data['price_usd'],
-            $data['price_label'] ?: null,
+            $data['price_label'] ? $data['price_label'] : null,
             $data['price_idr_per_sqm'],
             $data['land_size_sqm'],
             $land_size_are,
@@ -755,31 +726,188 @@ function insert_listing($db, $data, $agent_id) {
         if (strpos($e->getMessage(), 'Duplicate') !== false) {
             return 'duplicate';
         }
-        emit("    DB Error: " . $e->getMessage(), 'error');
-        return 'error';
+        return 'error: ' . $e->getMessage();
     }
 }
 
 
 // ═══════════════════════════════════════════════════════════════════
-// HANDLE SCRAPE REQUEST
+// HANDLE AJAX IMPORT REQUEST
 // ═══════════════════════════════════════════════════════════════════
 
-$running = false;
-if (isset($_POST['start_scrape'])) {
-    $running = true;
-    $scrape_site = $_POST['scrape_site'] ?? 'rumah123';
-    $search_type = $_POST['search_type'] ?? 'all';
-    $max_listings = max(1, min(2000, intval($_POST['max_listings'] ?? 30)));
+if (isset($_POST['action']) && $_POST['action'] === 'import_paste') {
+    header('Content-Type: application/json');
+
+    $source = isset($_POST['html_source']) ? $_POST['html_source'] : '';
+    $max_listings = max(1, min(2000, intval(isset($_POST['max_listings']) ? $_POST['max_listings'] : 30)));
+    $search_type = isset($_POST['search_type']) ? $_POST['search_type'] : 'all';
+
+    if (strlen($source) < 100) {
+        echo json_encode(array('success' => false, 'error' => 'Pasted content is too short. Make sure you copy the full page source.'));
+        exit;
+    }
+
+    // Extract __NEXT_DATA__
+    $next_data = extract_next_data($source);
+    if (!$next_data) {
+        echo json_encode(array('success' => false, 'error' => 'Could not find __NEXT_DATA__ in the pasted content. Make sure you right-click the search results page and choose "View Page Source", then copy ALL the content.'));
+        exit;
+    }
+
+    // Find listings
+    $raw_listings = find_listings_in_next_data($next_data);
+    if (empty($raw_listings)) {
+        // Return debug info
+        $keys = isset($next_data['props']['pageProps']) ? array_keys($next_data['props']['pageProps']) : array();
+        echo json_encode(array(
+            'success' => false,
+            'error' => 'Found __NEXT_DATA__ but no listings array. The page structure may have changed. pageProps keys: ' . implode(', ', $keys),
+            'debug_keys' => $keys
+        ));
+        exit;
+    }
+
+    // Get pagination info
+    $pagination = find_pagination_in_next_data($next_data);
+
+    $db = get_db();
+    $results = array();
+    $imported = 0;
+    $updated = 0;
+    $skipped = 0;
+    $errors = 0;
+    $skipped_estates = 0;
+
+    foreach ($raw_listings as $item) {
+        if ($imported + $updated >= $max_listings) break;
+
+        $data = parse_next_data_listing($item);
+        if (!$data) {
+            $skipped_estates++;
+            continue;
+        }
+
+        // Filter by search type
+        if ($search_type === 'land' && !in_array($data['listing_type_key'], array('land'))) {
+            $skipped++;
+            $results[] = array('status' => 'skip_type', 'title' => $data['title'], 'msg' => 'Not land — skipped');
+            continue;
+        }
+        if ($search_type === 'houses' && !in_array($data['listing_type_key'], array('house', 'villa', 'apartment'))) {
+            $skipped++;
+            $results[] = array('status' => 'skip_type', 'title' => $data['title'], 'msg' => 'Not house/villa — skipped');
+            continue;
+        }
+
+        $source_id = $data['source_listing_id'];
+
+        // Check for existing listing
+        $existing = null;
+        if ($source_id) {
+            $stmt = $db->prepare("SELECT id, price_idr FROM listings WHERE source_site = 'rumah123' AND source_listing_id = ?");
+            $stmt->execute(array($source_id));
+            $existing = $stmt->fetch();
+        }
+
+        if ($existing) {
+            // Update if new price is lower
+            $new_price = $data['price_idr'];
+            $old_price = intval($existing['price_idr']);
+            if ($new_price && $old_price && $new_price < $old_price) {
+                $upd = $db->prepare("UPDATE listings SET price_idr = ?, price_usd = ?, price_idr_per_sqm = ?, updated_at = NOW() WHERE id = ?");
+                $upd->execute(array($new_price, idr_to_usd($new_price), $data['price_idr_per_sqm'], $existing['id']));
+                $updated++;
+                $results[] = array('status' => 'updated', 'title' => $data['title'], 'msg' => 'Price updated (lower)');
+            } else {
+                $skipped++;
+                $results[] = array('status' => 'exists', 'title' => $data['title'], 'msg' => 'Already in database');
+            }
+            continue;
+        }
+
+        // Handle agent
+        $agent_id = null;
+        if (!empty($data['agent_name'])) {
+            $agent_id = upsert_agent($db, $data);
+        }
+
+        // Insert listing
+        $result = insert_listing($db, $data, $agent_id);
+        if ($result === 'inserted') {
+            $imported++;
+            $results[] = array(
+                'status' => 'imported',
+                'title' => $data['title'],
+                'price' => $data['price_display'],
+                'location' => $data['location_detail'],
+                'size' => $data['land_size_sqm'] ? number_format($data['land_size_sqm']) . ' m²' : '-',
+                'type' => $data['listing_type_key'],
+                'agent' => $data['agent_name'] ? $data['agent_name'] : '-',
+                'photos' => count($data['photos']),
+                'msg' => 'Imported'
+            );
+        } elseif ($result === 'duplicate') {
+            $skipped++;
+            $results[] = array('status' => 'exists', 'title' => $data['title'], 'msg' => 'Duplicate');
+        } else {
+            $errors++;
+            $results[] = array('status' => 'error', 'title' => $data['title'], 'msg' => $result);
+        }
+    }
+
+    echo json_encode(array(
+        'success' => true,
+        'imported' => $imported,
+        'updated' => $updated,
+        'skipped' => $skipped,
+        'skipped_estates' => $skipped_estates,
+        'errors' => $errors,
+        'total_in_page' => count($raw_listings),
+        'pagination' => $pagination,
+        'results' => $results
+    ));
+    exit;
 }
 
+
+// ═══════════════════════════════════════════════════════════════════
+// HANDLE CLEAR RUMAH123 DATA REQUEST
+// ═══════════════════════════════════════════════════════════════════
+
+if (isset($_POST['action']) && $_POST['action'] === 'clear_rumah123') {
+    header('Content-Type: application/json');
+    $db = get_db();
+    $stmt = $db->prepare("DELETE FROM listings WHERE source_site = 'rumah123'");
+    $stmt->execute();
+    $deleted = $stmt->rowCount();
+    echo json_encode(array('success' => true, 'deleted' => $deleted));
+    exit;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// HANDLE COUNT REQUEST
+// ═══════════════════════════════════════════════════════════════════
+
+if (isset($_POST['action']) && $_POST['action'] === 'get_counts') {
+    header('Content-Type: application/json');
+    $db = get_db();
+    $stmt = $db->query("SELECT COUNT(*) as cnt FROM listings WHERE source_site = 'rumah123'");
+    $row = $stmt->fetch();
+    echo json_encode(array('success' => true, 'count' => intval($row['cnt'])));
+    exit;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// HTML PAGE
+// ═══════════════════════════════════════════════════════════════════
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <meta name="robots" content="noindex,nofollow">
-<title>Listing Scraper — Build in Lombok Admin</title>
+<title>Property Importer — Build in Lombok Admin</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
@@ -787,7 +915,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .header{background:linear-gradient(135deg,#0c7c84,#065f65);padding:20px 28px;border-bottom:1px solid rgba(255,255,255,.1)}
 .header h1{font-size:1.3rem;font-weight:700;color:#fff}
 .header p{font-size:.8rem;color:rgba(255,255,255,.7);margin-top:4px}
-.header-nav{display:flex;gap:12px;margin-top:10px}
+.header-nav{display:flex;gap:12px;margin-top:10px;flex-wrap:wrap}
 .header-nav a{color:rgba(255,255,255,.8);font-size:.78rem;text-decoration:none;padding:4px 10px;border-radius:4px;background:rgba(255,255,255,.1)}
 .header-nav a:hover{background:rgba(255,255,255,.2)}
 
@@ -798,12 +926,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 .card h2 .icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1rem}
 
 .site-card{display:flex;align-items:center;gap:16px;background:#0f172a;border-radius:8px;padding:16px;margin-bottom:12px;border:1px solid #334155}
-.site-card .site-logo{width:48px;height:48px;border-radius:8px;background:#e11d48;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.85rem}
+.site-card .site-logo{width:48px;height:48px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.85rem;flex-shrink:0}
 .site-card .site-info{flex:1}
 .site-card .site-info h3{font-size:.95rem;color:#f1f5f9}
 .site-card .site-info p{font-size:.75rem;color:#94a3b8;margin-top:2px}
 
-form.scrape-form{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:12px}
+.form-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin:12px 0}
 .form-group{display:flex;flex-direction:column;gap:4px}
 .form-group label{font-size:.72rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.04em;font-weight:600}
 .form-group select,.form-group input[type="number"]{background:#0f172a;border:1px solid #475569;color:#e2e8f0;padding:8px 12px;border-radius:6px;font-size:.85rem;min-width:120px}
@@ -813,29 +941,78 @@ form.scrape-form{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margi
 .btn-primary{background:#0c7c84;color:#fff}
 .btn-primary:hover{background:#0a6a70}
 .btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.btn-danger{background:#dc2626;color:#fff}
+.btn-danger:hover{background:#b91c1c}
+.btn-sm{padding:5px 12px;font-size:.78rem}
 
-.log-container{background:#0a0f1a;border-radius:8px;padding:16px;max-height:600px;overflow-y:auto;font-family:'SF Mono',Consolas,'Courier New',monospace;font-size:.78rem;line-height:1.7;border:1px solid #1e293b}
-.log-line{padding:1px 0}
-.log-info{color:#94a3b8}
-.log-success{color:#22c55e}
-.log-warn{color:#f59e0b}
-.log-error{color:#ef4444}
-.log-success strong{color:#4ade80}
+.steps{margin:16px 0}
+.step{display:flex;gap:12px;margin-bottom:14px;align-items:flex-start}
+.step-num{width:28px;height:28px;border-radius:50%;background:#0c7c84;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8rem;flex-shrink:0}
+.step-text{font-size:.85rem;color:#cbd5e1;line-height:1.5}
+.step-text strong{color:#f1f5f9}
+.step-text code{background:#0f172a;padding:2px 6px;border-radius:3px;font-size:.78rem;color:#22d3ee}
+.step-text a{color:#22d3ee;text-decoration:none}
+.step-text a:hover{text-decoration:underline}
 
-.stats-bar{display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap}
-.stat{background:#0f172a;border-radius:8px;padding:12px 16px;border:1px solid #334155;min-width:100px;text-align:center}
-.stat .num{font-size:1.5rem;font-weight:700;color:#0c7c84}
-.stat .label{font-size:.7rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
+textarea.paste-area{width:100%;height:200px;background:#0a0f1a;border:2px dashed #334155;border-radius:8px;color:#94a3b8;font-family:'SF Mono',Consolas,'Courier New',monospace;font-size:.75rem;padding:12px;resize:vertical;transition:border-color .2s}
+textarea.paste-area:focus{outline:none;border-color:#0c7c84;color:#e2e8f0}
+textarea.paste-area.drag-over{border-color:#22d3ee;background:#0c1825}
+
+.import-status{margin-top:16px;display:none}
+.import-status.active{display:block}
+
+.progress-bar{height:6px;background:#1e293b;border-radius:3px;overflow:hidden;margin:8px 0}
+.progress-bar .fill{height:100%;background:#0c7c84;border-radius:3px;transition:width .3s;width:0}
+
+.stats-bar{display:flex;gap:12px;margin:16px 0;flex-wrap:wrap}
+.stat{background:#0f172a;border-radius:8px;padding:10px 14px;border:1px solid #334155;min-width:80px;text-align:center}
+.stat .num{font-size:1.3rem;font-weight:700;color:#0c7c84}
+.stat .label{font-size:.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
+.stat.imported .num{color:#22c55e}
+.stat.updated .num{color:#3b82f6}
+.stat.skipped .num{color:#f59e0b}
+.stat.errors .num{color:#ef4444}
+
+.result-list{max-height:400px;overflow-y:auto;font-size:.78rem;margin-top:12px}
+.result-item{padding:6px 10px;border-bottom:1px solid #1e293b;display:flex;gap:8px;align-items:center}
+.result-item:last-child{border-bottom:none}
+.result-item .badge{padding:2px 8px;border-radius:3px;font-size:.68rem;font-weight:600;text-transform:uppercase;flex-shrink:0}
+.badge-imported{background:#065f46;color:#34d399}
+.badge-updated{background:#1e3a5f;color:#60a5fa}
+.badge-exists{background:#422006;color:#fbbf24}
+.badge-skip{background:#334155;color:#94a3b8}
+.badge-error{background:#450a0a;color:#fca5a5}
+.result-item .r-title{flex:1;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.result-item .r-meta{color:#94a3b8;flex-shrink:0;text-align:right;font-size:.72rem}
+
+.db-count{font-size:.85rem;color:#94a3b8;margin-bottom:12px}
+.db-count strong{color:#0c7c84}
+
+.url-links{margin:12px 0;display:flex;flex-wrap:wrap;gap:6px}
+.url-link{background:#0f172a;border:1px solid #334155;border-radius:4px;padding:4px 10px;font-size:.72rem;color:#22d3ee;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
+.url-link:hover{border-color:#0c7c84;background:#0c1825}
 
 .future-site{opacity:.4;pointer-events:none;position:relative}
 .future-site::after{content:'Coming Soon';position:absolute;right:16px;top:50%;transform:translateY(-50%);background:#334155;color:#94a3b8;padding:3px 10px;border-radius:4px;font-size:.7rem;font-weight:600}
+
+.help-toggle{font-size:.78rem;color:#64748b;cursor:pointer;margin-top:8px;display:inline-block}
+.help-toggle:hover{color:#94a3b8}
+.help-detail{display:none;margin-top:8px;padding:12px;background:#0a0f1a;border-radius:6px;font-size:.78rem;color:#94a3b8;line-height:1.6;border:1px solid #1e293b}
+.help-detail.show{display:block}
+
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.toast{position:fixed;bottom:24px;right:24px;background:#22c55e;color:#fff;padding:12px 20px;border-radius:8px;font-size:.85rem;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.3);display:none;z-index:100;animation:slideUp .3s ease}
+.toast.error{background:#dc2626}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
 </style>
 </head>
 <body>
 
 <div class="header">
-    <h1>Property Listing Scraper</h1>
-    <p>Import property listings from external sites into the Build in Lombok database.</p>
+    <h1>Property Listing Importer</h1>
+    <p>Import property listings by pasting page source from external sites.</p>
     <div class="header-nav">
         <a href="console.php">← Admin Console</a>
         <a href="import.php">Google Maps Importer</a>
@@ -846,40 +1023,100 @@ form.scrape-form{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margi
 
 <div class="container">
 
-<?php if (!$running): ?>
+    <!-- Current DB count -->
+    <div class="db-count">Rumah123 listings in database: <strong id="dbCount">...</strong></div>
 
+    <!-- ═══ Rumah123 ═══ -->
     <div class="card">
-        <h2><span class="icon" style="background:#0c7c84;">🌐</span> Listing Sources</h2>
-        <p style="font-size:.8rem;color:#94a3b8;margin-bottom:16px;">Select a source site to import property listings from. Listings are automatically de-duplicated.</p>
+        <h2><span class="icon" style="background:#e11d48;">R123</span> Rumah123.com</h2>
 
-        <!-- Rumah123 -->
         <div class="site-card">
             <div class="site-logo" style="background:#e11d48;">R123</div>
             <div class="site-info">
-                <h3>Rumah123.com</h3>
-                <p>Indonesia's leading property portal — Land, villas, and houses in Lombok Tengah.</p>
+                <h3>Paste & Import from Rumah123</h3>
+                <p>Copy page source from Rumah123 search results and paste below to import listings.</p>
             </div>
         </div>
-        <form method="POST" class="scrape-form">
-            <input type="hidden" name="start_scrape" value="1">
-            <input type="hidden" name="scrape_site" value="rumah123">
+
+        <!-- Instructions -->
+        <div class="steps">
+            <div class="step">
+                <div class="step-num">1</div>
+                <div class="step-text">Open one of these search pages in your browser:
+                    <div class="url-links">
+                        <a href="https://www.rumah123.com/jual/lombok-tengah/tanah/" target="_blank" class="url-link">🏝 Land (Tanah)</a>
+                        <a href="https://www.rumah123.com/jual/lombok-tengah/rumah/" target="_blank" class="url-link">🏠 Houses (Rumah)</a>
+                        <a href="https://www.rumah123.com/jual/lombok-tengah/tanah/?page=2" target="_blank" class="url-link">📄 Land Page 2</a>
+                        <a href="https://www.rumah123.com/jual/lombok-tengah/tanah/?page=3" target="_blank" class="url-link">📄 Land Page 3</a>
+                    </div>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <div class="step-text"><strong>Right-click</strong> anywhere on the page and select <strong>"View Page Source"</strong> (or press <code>Ctrl+U</code> / <code>Cmd+Option+U</code>).</div>
+            </div>
+            <div class="step">
+                <div class="step-num">3</div>
+                <div class="step-text">Press <code>Ctrl+A</code> to <strong>Select All</strong>, then <code>Ctrl+C</code> to <strong>Copy</strong>.</div>
+            </div>
+            <div class="step">
+                <div class="step-num">4</div>
+                <div class="step-text"><strong>Paste</strong> into the box below and click <strong>Import</strong>. Repeat for additional pages.</div>
+            </div>
+        </div>
+
+        <span class="help-toggle" onclick="toggleHelp()">ℹ Having trouble? Click here for help</span>
+        <div class="help-detail" id="helpDetail">
+            <strong>Why paste?</strong> Rumah123 uses Cloudflare protection which blocks automated requests. By pasting the page source from your browser, we bypass this limitation while still extracting all listing data accurately from the page's embedded JSON.<br><br>
+            <strong>What data is extracted?</strong> Title, price, land size, building size, location, property type, certificate, photos, agent info, and listing URL.<br><br>
+            <strong>Duplicates?</strong> The importer automatically checks for duplicates using the Rumah123 listing ID. If a listing already exists and the new price is lower, the price is updated.<br><br>
+            <strong>Multiple pages?</strong> Each Rumah123 search page shows ~20 listings. Paste one page at a time — the tool handles deduplication across pastes.
+        </div>
+
+        <!-- Settings & paste area -->
+        <div class="form-row">
             <div class="form-group">
-                <label>Search Type</label>
-                <select name="search_type">
-                    <option value="all">Land + Houses/Villas</option>
+                <label>Search Type Filter</label>
+                <select id="searchType">
+                    <option value="all">All Types</option>
                     <option value="land">Land Only (Tanah)</option>
                     <option value="houses">Houses/Villas Only</option>
                 </select>
             </div>
             <div class="form-group">
-                <label>Max Listings</label>
-                <input type="number" name="max_listings" value="30" min="1" max="2000" style="width:100px;">
+                <label>Max Listings Per Paste</label>
+                <input type="number" id="maxListings" value="30" min="1" max="200">
             </div>
-            <button type="submit" class="btn btn-primary">▶ Start Scraping</button>
-        </form>
+        </div>
 
-        <!-- Future sites -->
-        <div class="site-card future-site" style="margin-top:20px;">
+        <textarea class="paste-area" id="pasteArea" placeholder="Paste the full page source here...&#10;&#10;Right-click the Rumah123 search results page → View Page Source → Select All → Copy → Paste here"></textarea>
+
+        <div class="form-row" style="margin-top:12px;">
+            <button class="btn btn-primary" id="importBtn" onclick="doImport()">📥 Import Listings</button>
+            <button class="btn btn-danger btn-sm" id="clearBtn" onclick="doClear()" style="margin-left:auto;">🗑 Clear All Rumah123 Data</button>
+        </div>
+
+        <!-- Results area -->
+        <div class="import-status" id="importStatus">
+            <div class="progress-bar"><div class="fill" id="progressFill"></div></div>
+            <div id="statusText" style="font-size:.8rem;color:#94a3b8;margin:8px 0;"></div>
+
+            <div class="stats-bar" id="statsBar" style="display:none;">
+                <div class="stat imported"><div class="num" id="statImported">0</div><div class="label">Imported</div></div>
+                <div class="stat updated"><div class="num" id="statUpdated">0</div><div class="label">Updated</div></div>
+                <div class="stat skipped"><div class="num" id="statSkipped">0</div><div class="label">Skipped</div></div>
+                <div class="stat errors"><div class="num" id="statErrors">0</div><div class="label">Errors</div></div>
+            </div>
+
+            <div class="result-list" id="resultList"></div>
+        </div>
+    </div>
+
+    <!-- ═══ Future sites ═══ -->
+    <div class="card">
+        <h2><span class="icon" style="background:#334155;">🌐</span> Other Sources</h2>
+
+        <div class="site-card future-site">
             <div class="site-logo" style="background:#3b82f6;">OLX</div>
             <div class="site-info">
                 <h3>OLX.co.id</h3>
@@ -896,45 +1133,208 @@ form.scrape-form{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margi
         </div>
     </div>
 
-<?php else: ?>
-
-    <div class="card">
-        <h2><span class="icon" style="background:#e11d48;">R123</span> Scraping Rumah123.com</h2>
-        <div class="stats-bar">
-            <div class="stat"><div class="label">Source</div><div class="num" style="font-size:1rem;">Rumah123</div></div>
-            <div class="stat"><div class="label">Type</div><div class="num" style="font-size:1rem;"><?= htmlspecialchars($search_type) ?></div></div>
-            <div class="stat"><div class="label">Max Listings</div><div class="num"><?= $max_listings ?></div></div>
-        </div>
-
-        <div class="log-container" id="log">
-<?php
-    // Start output buffering for real-time progress
-    if (ob_get_level()) ob_end_flush();
-    ob_implicit_flush(true);
-
-    scrape_rumah123($search_type, $max_listings);
-?>
-        </div>
-
-        <div style="margin-top:16px;text-align:center;">
-            <a href="scrape_listings.php" class="btn btn-primary">← Back to Scraper</a>
-            <a href="console.php?s=listings" class="btn btn-primary" style="background:#334155;margin-left:8px;">View Listings in Console</a>
-        </div>
-    </div>
-
-<?php endif; ?>
-
 </div>
 
+<div class="toast" id="toast"></div>
+
 <script>
-// Auto-scroll log to bottom
-var logEl = document.getElementById('log');
-if (logEl) {
-    var observer = new MutationObserver(function() {
-        logEl.scrollTop = logEl.scrollHeight;
-    });
-    observer.observe(logEl, { childList: true, subtree: true });
+/* global vars */
+var importRunning = false;
+
+/* Helpers */
+function $(id) { return document.getElementById(id); }
+
+function showToast(msg, isError) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.className = 'toast' + (isError ? ' error' : '');
+    t.style.display = 'block';
+    setTimeout(function() { t.style.display = 'none'; }, 4000);
 }
+
+function toggleHelp() {
+    var el = $('helpDetail');
+    el.className = el.className.indexOf('show') >= 0 ? 'help-detail' : 'help-detail show';
+}
+
+function badgeClass(status) {
+    if (status === 'imported') return 'badge-imported';
+    if (status === 'updated') return 'badge-updated';
+    if (status === 'exists') return 'badge-exists';
+    if (status === 'error') return 'badge-error';
+    return 'badge-skip';
+}
+
+function badgeLabel(status) {
+    if (status === 'imported') return 'NEW';
+    if (status === 'updated') return 'UPD';
+    if (status === 'exists') return 'SKIP';
+    if (status === 'error') return 'ERR';
+    return 'SKIP';
+}
+
+/* Load DB count on page load */
+function loadCount() {
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', 'scrape_listings.php', true);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhr.onload = function() {
+        try {
+            var res = JSON.parse(xhr.responseText);
+            if (res.success) {
+                $('dbCount').textContent = res.count;
+            }
+        } catch(e) {}
+    };
+    xhr.send('action=get_counts');
+}
+loadCount();
+
+/* Import */
+function doImport() {
+    if (importRunning) return;
+
+    var source = $('pasteArea').value.trim();
+    if (!source) {
+        showToast('Please paste the page source first.', true);
+        return;
+    }
+    if (source.length < 500) {
+        showToast('Content seems too short. Copy the FULL page source.', true);
+        return;
+    }
+
+    importRunning = true;
+    $('importBtn').disabled = true;
+    $('importBtn').innerHTML = '<span class="spinner"></span> Importing...';
+
+    var statusEl = $('importStatus');
+    statusEl.className = 'import-status active';
+    $('statusText').textContent = 'Parsing page source and extracting listings...';
+    $('progressFill').style.width = '30%';
+    $('statsBar').style.display = 'none';
+    $('resultList').innerHTML = '';
+
+    var formData = new FormData();
+    formData.append('action', 'import_paste');
+    formData.append('html_source', source);
+    formData.append('max_listings', $('maxListings').value);
+    formData.append('search_type', $('searchType').value);
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', 'scrape_listings.php', true);
+    xhr.onload = function() {
+        importRunning = false;
+        $('importBtn').disabled = false;
+        $('importBtn').innerHTML = '📥 Import Listings';
+        $('progressFill').style.width = '100%';
+
+        try {
+            var res = JSON.parse(xhr.responseText);
+
+            if (!res.success) {
+                $('statusText').innerHTML = '<span style="color:#ef4444;">Error: ' + res.error + '</span>';
+                showToast('Import failed', true);
+                return;
+            }
+
+            // Show stats
+            $('statsBar').style.display = 'flex';
+            $('statImported').textContent = res.imported;
+            $('statUpdated').textContent = res.updated;
+            $('statSkipped').textContent = res.skipped;
+            $('statErrors').textContent = res.errors;
+
+            var pageInfo = '';
+            if (res.pagination && res.pagination.totalPages > 1) {
+                pageInfo = ' (Page ' + res.pagination.currentPage + ' of ' + res.pagination.totalPages + ')';
+            }
+
+            $('statusText').innerHTML = 'Done! Found <strong>' + res.total_in_page + '</strong> listings in this page' + pageInfo + '.'
+                + (res.skipped_estates > 0 ? ' <span style="color:#f59e0b;">' + res.skipped_estates + ' housing estates skipped.</span>' : '');
+
+            // Show results
+            var html = '';
+            for (var i = 0; i < res.results.length; i++) {
+                var r = res.results[i];
+                var meta = '';
+                if (r.price) meta += r.price;
+                if (r.size && r.size !== '-') meta += ' · ' + r.size;
+                if (r.location) meta += ' · ' + r.location;
+
+                html += '<div class="result-item">'
+                    + '<span class="badge ' + badgeClass(r.status) + '">' + badgeLabel(r.status) + '</span>'
+                    + '<span class="r-title">' + (r.title || '').replace(/</g, '&lt;') + '</span>'
+                    + (meta ? '<span class="r-meta">' + meta.replace(/</g, '&lt;') + '</span>' : '')
+                    + '</div>';
+            }
+            $('resultList').innerHTML = html;
+
+            if (res.imported > 0) {
+                showToast(res.imported + ' listing(s) imported!', false);
+            } else {
+                showToast('No new listings to import.', false);
+            }
+
+            // Refresh count
+            loadCount();
+
+            // Clear textarea
+            $('pasteArea').value = '';
+
+        } catch(e) {
+            $('statusText').innerHTML = '<span style="color:#ef4444;">Error parsing response: ' + e.message + '</span>';
+            showToast('Import failed', true);
+        }
+    };
+    xhr.onerror = function() {
+        importRunning = false;
+        $('importBtn').disabled = false;
+        $('importBtn').innerHTML = '📥 Import Listings';
+        $('statusText').innerHTML = '<span style="color:#ef4444;">Network error. Please try again.</span>';
+        showToast('Network error', true);
+    };
+    xhr.send(formData);
+}
+
+/* Clear all Rumah123 data */
+function doClear() {
+    if (!confirm('Are you sure you want to DELETE ALL Rumah123 listings from the database? This cannot be undone.')) return;
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', 'scrape_listings.php', true);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhr.onload = function() {
+        try {
+            var res = JSON.parse(xhr.responseText);
+            if (res.success) {
+                showToast(res.deleted + ' listing(s) deleted.', false);
+                loadCount();
+            }
+        } catch(e) {
+            showToast('Error deleting data.', true);
+        }
+    };
+    xhr.send('action=clear_rumah123');
+}
+
+/* Drag-drop support for the textarea */
+var pa = $('pasteArea');
+pa.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    pa.className = 'paste-area drag-over';
+});
+pa.addEventListener('dragleave', function() {
+    pa.className = 'paste-area';
+});
+pa.addEventListener('drop', function(e) {
+    e.preventDefault();
+    pa.className = 'paste-area';
+    var text = e.dataTransfer.getData('text');
+    if (text) {
+        pa.value = text;
+    }
+});
 </script>
 
 </body>
@@ -945,7 +1345,7 @@ if (logEl) {
 function show_login($error = '') {
 ?><!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<meta name="robots" content="noindex,nofollow"><title>Listing Scraper Login</title>
+<meta name="robots" content="noindex,nofollow"><title>Property Importer Login</title>
 <style>
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#0f172a;display:flex;align-items:center;justify-content:center;min-height:100vh}
 .lc{background:#1e293b;border-radius:10px;padding:40px;box-shadow:0 2px 12px rgba(0,0,0,.3);width:100%;max-width:360px;border:1px solid #334155}
@@ -956,9 +1356,9 @@ button{width:100%;padding:11px;background:#0c7c84;color:#fff;border:none;border-
 button:hover{background:#0a6a70}.err{background:#fee2e2;color:#dc2626;padding:10px;border-radius:6px;margin-bottom:14px;font-size:.85rem}
 </style></head><body>
 <div class="lc">
-    <h1>Listing Scraper</h1>
+    <h1>Property Importer</h1>
     <p>Build in Lombok — Admin Tool</p>
-    <?php if ($error): ?><div class="err"><?= htmlspecialchars($error) ?></div><?php endif; ?>
+    <?php if ($error): ?><div class="err"><?php echo htmlspecialchars($error); ?></div><?php endif; ?>
     <form method="POST">
         <label>Username</label><input type="text" name="username" required autofocus>
         <label>Password</label><input type="password" name="password" required>
