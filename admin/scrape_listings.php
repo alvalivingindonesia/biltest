@@ -1322,6 +1322,167 @@ function insert_dotproperty_listing($db, $data, $agent_id) {
 }
 
 
+
+
+// ═══════════════════════════════════════════════════════════════════
+// OLX: EXTRACT LISTINGS FROM PASTED HTML
+// Cards are <li id="item-card-{id}" data-aut-id="itemBox">
+// ═══════════════════════════════════════════════════════════════════
+
+function extract_olx_listings($html_source) {
+    $listings = array();
+
+    // Split by item-card IDs
+    if (!preg_match_all('/id="item-card-(\d+)"[^>]*data-aut-id="itemBox"[^>]*class="[^"]*">(.*?)(?=<li\s+id="item-card-|\s*<\/ul>)/s', $html_source, $matches, PREG_SET_ORDER)) {
+        return $listings;
+    }
+
+    foreach ($matches as $m) {
+        $listings[] = array('olx_id' => $m[1], 'html' => $m[2]);
+    }
+
+    return $listings;
+}
+
+
+function parse_olx_listing($item) {
+    $data = array(
+        'source_url' => '',
+        'source_listing_id' => '',
+        'title' => '',
+        'price_display' => '',
+        'price_idr' => null,
+        'price_usd' => null,
+        'price_label' => '',
+        'price_idr_per_sqm' => null,
+        'listing_type_key' => 'land',
+        'land_size_sqm' => null,
+        'building_size_sqm' => null,
+        'bedrooms' => null,
+        'bathrooms' => null,
+        'certificate_type_key' => null,
+        'district' => '',
+        'description' => '',
+        'short_description' => '',
+        'location_detail' => '',
+        'area_key' => 'praya',
+        'photos' => array(),
+        'agent_name' => '',
+        'agent_photo_url' => '',
+        'agent_type' => '',
+        'agent_phone' => '',
+        'agent_profile_url' => '',
+        'agent_source_id' => '',
+        'agent_verified' => false,
+    );
+
+    $olx_id = $item['olx_id'];
+    $html = $item['html'];
+    $data['source_listing_id'] = $olx_id;
+
+    // ─── URL ─────────────────────────────────────────────
+    if (preg_match('/href="(\/item\/[^"]+)"/', $html, $um)) {
+        $data['source_url'] = 'https://www.olx.co.id' . $um[1];
+    }
+
+    // ─── Title ───────────────────────────────────────────
+    if (preg_match('/data-aut-id="itemTitle">([^<]+)/', $html, $tm)) {
+        $data['title'] = html_entity_decode(trim($tm[1]), ENT_QUOTES, 'UTF-8');
+    }
+    if (!$data['title']) return null;
+
+    // ─── Price ───────────────────────────────────────────
+    if (preg_match('/data-aut-id="itemPrice">([^<]+)/', $html, $pm)) {
+        $price_text = trim($pm[1]);
+        $data['price_display'] = $price_text;
+        $data['price_idr'] = parse_olx_price($price_text);
+    }
+    if ($data['price_idr']) {
+        $data['price_usd'] = idr_to_usd($data['price_idr']);
+    }
+
+    // ─── Location ────────────────────────────────────────
+    if (preg_match('/data-aut-id="item-location">([^<]+)/', $html, $lm)) {
+        $data['district'] = trim($lm[1]);
+    }
+
+    // ─── Image ───────────────────────────────────────────
+    if (preg_match('/data-aut-id="itemImage"><img src="([^"]+)"/', $html, $im)) {
+        $img_url = $im[1];
+        // Get higher-res version
+        $img_url = preg_replace('/;s=\d+x\d+/', ';s=600x1200', $img_url);
+        $data['photos'] = array($img_url);
+    }
+
+    // ─── Extract info from title text ────────────────────
+    $title_lower = strtolower($data['title']);
+    $desc_combined = $title_lower . ' ' . strtolower($data['district']);
+
+    // Property type detection
+    $data['listing_type_key'] = detect_listing_type($data['title'], '');
+
+    // Certificate detection
+    $data['certificate_type_key'] = detect_certificate($data['title']);
+
+    // Size from title: "1000 m2", "10 are", "1.5 hectare", "500m2"
+    if (preg_match('/(\d[\d.,]*)\s*(?:m2|m²|sqm|meter)/i', $title_lower, $szm)) {
+        $sqm = floatval(str_replace(',', '.', str_replace('.', '', $szm[1])));
+        if ($sqm > 0 && $sqm < 1000000) {
+            if ($data['listing_type_key'] === 'land') {
+                $data['land_size_sqm'] = intval($sqm);
+            } else {
+                $data['building_size_sqm'] = intval($sqm);
+            }
+        }
+    } elseif (preg_match('/(\d[\d.,]*)\s*(?:are)\b/i', $title_lower, $szm)) {
+        $are = floatval(str_replace(',', '.', str_replace('.', '', $szm[1])));
+        if ($are > 0 && $are < 10000) {
+            $data['land_size_sqm'] = intval($are * 100);
+        }
+    } elseif (preg_match('/(\d[\d.,]*)\s*(?:ha|hektar|hectare)/i', $title_lower, $szm)) {
+        $ha = floatval(str_replace(',', '.', str_replace('.', '', $szm[1])));
+        if ($ha > 0 && $ha < 1000) {
+            $data['land_size_sqm'] = intval($ha * 10000);
+        }
+    }
+
+    // Price per sqm calculation
+    if ($data['price_idr'] && $data['land_size_sqm'] && $data['land_size_sqm'] > 0) {
+        $data['price_idr_per_sqm'] = intval($data['price_idr'] / $data['land_size_sqm']);
+    }
+
+    // Bedrooms from title
+    if (preg_match('/(\d+)\s*(?:kt|kamar tidur|bedroom|bed\b|br\b)/i', $title_lower, $bedm)) {
+        $data['bedrooms'] = intval($bedm[1]);
+    }
+    // Bathrooms from title
+    if (preg_match('/(\d+)\s*(?:km|kamar mandi|bathroom|bath\b)/i', $title_lower, $bathm)) {
+        $data['bathrooms'] = intval($bathm[1]);
+    }
+
+    // Location & area detection
+    $data['area_key'] = detect_area_key($data['district'], $data['title'], '');
+    $data['location_detail'] = detect_location_detail($data['district'], $data['title'], '');
+
+    // Short description = title (OLX cards have no separate description)
+    $data['short_description'] = $data['title'];
+    $data['description'] = $data['title'];
+
+    return $data;
+}
+
+
+function parse_olx_price($price_text) {
+    // OLX format: "Rp 1.750.000" or "Rp 4.300.000.000"
+    // Indonesian uses dots as thousands separator
+    $clean = preg_replace('/[^0-9]/', '', $price_text);
+    if ($clean && strlen($clean) >= 5) {
+        return intval($clean);
+    }
+    return null;
+}
+
+
 // ═══════════════════════════════════════════════════════════════════
 // HANDLE CLEAR DOTPROPERTY DATA REQUEST
 // ═══════════════════════════════════════════════════════════════════
@@ -1345,6 +1506,216 @@ if (isset($_POST['action']) && $_POST['action'] === 'get_dotproperty_counts') {
     header('Content-Type: application/json');
     $db = get_db();
     $stmt = $db->query("SELECT COUNT(*) as cnt FROM listings WHERE source_site = 'dotproperty'");
+    $row = $stmt->fetch();
+    echo json_encode(array('success' => true, 'count' => intval($row['cnt'])));
+    exit;
+}
+
+
+
+// ═══════════════════════════════════════════════════════════════════
+// HANDLE OLX IMPORT REQUEST
+// ═══════════════════════════════════════════════════════════════════
+
+if (isset($_POST['action']) && $_POST['action'] === 'import_olx') {
+    header('Content-Type: application/json');
+
+    $source = isset($_POST['html_source']) ? $_POST['html_source'] : '';
+    $max_listings = max(1, min(2000, intval(isset($_POST['max_listings']) ? $_POST['max_listings'] : 30)));
+    $search_type = isset($_POST['search_type']) ? $_POST['search_type'] : 'all';
+
+    if (strlen($source) < 100) {
+        echo json_encode(array('success' => false, 'error' => 'Pasted content is too short. Make sure you copy the full page source.'));
+        exit;
+    }
+
+    $raw_listings = extract_olx_listings($source);
+
+    if (empty($raw_listings)) {
+        echo json_encode(array('success' => false, 'error' => 'Could not find any OLX listings in the pasted content. Make sure you right-click the OLX search results page and choose "View Page Source", then Select All and Copy everything.'));
+        exit;
+    }
+
+    $db = get_db();
+    $results = array();
+    $imported = 0;
+    $updated = 0;
+    $skipped = 0;
+    $errors = 0;
+
+    foreach ($raw_listings as $item) {
+        if ($imported + $updated >= $max_listings) break;
+
+        $data = parse_olx_listing($item);
+        if (!$data) {
+            $skipped++;
+            continue;
+        }
+
+        // Filter by search type
+        if ($search_type === 'land' && !in_array($data['listing_type_key'], array('land'))) {
+            $skipped++;
+            $results[] = array('status' => 'skip_type', 'title' => $data['title'], 'msg' => 'Not land');
+            continue;
+        }
+        if ($search_type === 'houses' && !in_array($data['listing_type_key'], array('house', 'villa', 'apartment'))) {
+            $skipped++;
+            $results[] = array('status' => 'skip_type', 'title' => $data['title'], 'msg' => 'Not house/villa');
+            continue;
+        }
+
+        $source_id = $data['source_listing_id'];
+
+        // Check for existing listing
+        $existing = null;
+        if ($source_id) {
+            $stmt = $db->prepare("SELECT id, price_idr FROM listings WHERE source_site = 'olx' AND source_listing_id = ?");
+            $stmt->execute(array($source_id));
+            $existing = $stmt->fetch();
+        }
+
+        if ($existing) {
+            $new_price = $data['price_idr'];
+            $old_price = intval($existing['price_idr']);
+            if ($new_price && $old_price && $new_price < $old_price) {
+                $upd = $db->prepare("UPDATE listings SET price_idr = ?, price_usd = ?, price_idr_per_sqm = ?, updated_at = NOW() WHERE id = ?");
+                $upd->execute(array($new_price, idr_to_usd($new_price), $data['price_idr_per_sqm'], $existing['id']));
+                $updated++;
+                $results[] = array('status' => 'updated', 'title' => $data['title'], 'msg' => 'Price updated (lower)');
+            } else {
+                $skipped++;
+                $results[] = array('status' => 'exists', 'title' => $data['title'], 'msg' => 'Already in database');
+            }
+            continue;
+        }
+
+        // Insert listing (OLX listings are mostly private sellers, no agent)
+        $result = insert_olx_listing($db, $data);
+        if ($result === 'inserted') {
+            $imported++;
+            $results[] = array(
+                'status' => 'imported',
+                'title' => $data['title'],
+                'price' => $data['price_display'],
+                'location' => $data['location_detail'],
+                'size' => $data['land_size_sqm'] ? number_format($data['land_size_sqm']) . ' m2' : '-',
+                'type' => $data['listing_type_key'],
+                'agent' => '-',
+                'photos' => count($data['photos']),
+                'msg' => 'Imported'
+            );
+        } elseif ($result === 'duplicate') {
+            $skipped++;
+            $results[] = array('status' => 'exists', 'title' => $data['title'], 'msg' => 'Duplicate');
+        } else {
+            $errors++;
+            $results[] = array('status' => 'error', 'title' => $data['title'], 'msg' => $result);
+        }
+    }
+
+    echo json_encode(array(
+        'success' => true,
+        'imported' => $imported,
+        'updated' => $updated,
+        'skipped' => $skipped,
+        'errors' => $errors,
+        'total_in_page' => count($raw_listings),
+        'results' => $results
+    ));
+    exit;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// OLX: INSERT LISTING
+// ═══════════════════════════════════════════════════════════════════
+
+function insert_olx_listing($db, $data) {
+    $slug = make_slug($data['title']);
+
+    $slug_check = $db->prepare("SELECT COUNT(*) FROM listings WHERE slug = ?");
+    $slug_check->execute(array($slug));
+    if ($slug_check->fetchColumn() > 0) {
+        $slug = $slug . '-' . substr(md5($data['source_listing_id'] . time()), 0, 6);
+    }
+
+    $photo_urls_json = !empty($data['photos']) ? json_encode(array_values($data['photos'])) : null;
+
+    try {
+        $ins = $db->prepare(
+            "INSERT INTO listings (slug, agent_id, listing_type_key, status, title, short_description, description,
+                                   area_key, location_detail, price_idr, price_usd, price_label, price_idr_per_sqm,
+                                   land_size_sqm, land_size_are, certificate_type_key,
+                                   building_size_sqm, bedrooms, bathrooms,
+                                   is_featured, is_approved, source_site, source_url, source_listing_id, source_scraped_at,
+                                   photo_urls)
+             VALUES (?, NULL, ?, 'active', ?, ?, ?,
+                     ?, ?, ?, ?, ?, ?,
+                     ?, ?, ?,
+                     ?, ?, ?,
+                     0, 1, 'olx', ?, ?, NOW(),
+                     ?)"
+        );
+
+        $land_size_are = $data['land_size_sqm'] ? round($data['land_size_sqm'] / 100, 2) : null;
+
+        $params = array(
+            $slug,
+            $data['listing_type_key'],
+            $data['title'],
+            $data['short_description'],
+            $data['description'],
+            $data['area_key'],
+            $data['location_detail'],
+            $data['price_idr'],
+            $data['price_usd'],
+            $data['price_label'] ? $data['price_label'] : null,
+            $data['price_idr_per_sqm'],
+            $data['land_size_sqm'],
+            $land_size_are,
+            $data['certificate_type_key'],
+            $data['building_size_sqm'],
+            $data['bedrooms'],
+            $data['bathrooms'],
+            $data['source_url'],
+            $data['source_listing_id'],
+            $photo_urls_json,
+        );
+
+        $ins->execute($params);
+        return 'inserted';
+    } catch (PDOException $e) {
+        if (strpos($e->getMessage(), 'Duplicate') !== false) {
+            return 'duplicate';
+        }
+        return 'error: ' . $e->getMessage();
+    }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// HANDLE CLEAR OLX DATA REQUEST
+// ═══════════════════════════════════════════════════════════════════
+
+if (isset($_POST['action']) && $_POST['action'] === 'clear_olx') {
+    header('Content-Type: application/json');
+    $db = get_db();
+    $stmt = $db->prepare("DELETE FROM listings WHERE source_site = 'olx'");
+    $stmt->execute();
+    $deleted = $stmt->rowCount();
+    echo json_encode(array('success' => true, 'deleted' => $deleted));
+    exit;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// HANDLE OLX COUNT REQUEST
+// ═══════════════════════════════════════════════════════════════════
+
+if (isset($_POST['action']) && $_POST['action'] === 'get_olx_counts') {
+    header('Content-Type: application/json');
+    $db = get_db();
+    $stmt = $db->query("SELECT COUNT(*) as cnt FROM listings WHERE source_site = 'olx'");
     $row = $stmt->fetch();
     echo json_encode(array('success' => true, 'count' => intval($row['cnt'])));
     exit;
@@ -1477,7 +1848,7 @@ textarea.paste-area.drag-over{border-color:#22d3ee;background:#0c1825}
 <div class="container">
 
     <!-- Current DB count -->
-    <div class="db-count">Rumah123 listings: <strong id="dbCount">...</strong> &nbsp;|&nbsp; DotProperty listings: <strong id="dbCountDP">...</strong></div>
+    <div class="db-count">Rumah123: <strong id="dbCount">...</strong> &nbsp;|&nbsp; DotProperty: <strong id="dbCountDP">...</strong> &nbsp;|&nbsp; OLX: <strong id="dbCountOLX">...</strong></div>
 
     <!-- ═══ Rumah123 ═══ -->
     <div class="card">
@@ -1642,6 +2013,86 @@ textarea.paste-area.drag-over{border-color:#22d3ee;background:#0c1825}
             </div>
 
             <div class="result-list" id="dpResultList"></div>
+        </div>
+    </div>
+
+        <!-- ═══ OLX ═══ -->
+    <div class="card">
+        <h2><span class="icon" style="background:#002f34;">OLX</span> OLX Indonesia</h2>
+
+        <div class="site-card">
+            <div class="site-logo" style="background:#002f34;">OLX</div>
+            <div class="site-info">
+                <h3>Paste & Import from OLX</h3>
+                <p>Copy page source from OLX.co.id search results and paste below to import listings. OLX cards contain title, price, location, and one photo. Size/beds are extracted from the title text when available.</p>
+            </div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="steps">
+            <div class="step">
+                <div class="step-num">1</div>
+                <div class="step-text">Open one of these search pages in your browser:
+                    <div class="url-links">
+                        <a href="https://www.olx.co.id/lombok-tengah-kab_g4000434/tanah_c4827?filter=type_eq_dijual" target="_blank" class="url-link">&#127965; Lombok Tengah - Tanah</a>
+                        <a href="https://www.olx.co.id/lombok-barat-kab_g4000433/tanah_c4827?filter=type_eq_dijual" target="_blank" class="url-link">&#127965; Lombok Barat - Tanah</a>
+                        <a href="https://www.olx.co.id/lombok-utara-kab_g4000435/tanah_c4827?filter=type_eq_dijual" target="_blank" class="url-link">&#127965; Lombok Utara - Tanah</a>
+                        <a href="https://www.olx.co.id/lombok-tengah-kab_g4000434/rumah_c5156?filter=type_eq_dijual" target="_blank" class="url-link">&#127968; Lombok Tengah - Rumah</a>
+                        <a href="https://www.olx.co.id/lombok-tengah-kab_g4000434/tanah_c4827?filter=type_eq_dijual&page=2" target="_blank" class="url-link">&#128196; Page 2</a>
+                        <a href="https://www.olx.co.id/lombok-tengah-kab_g4000434/tanah_c4827?filter=type_eq_dijual&page=3" target="_blank" class="url-link">&#128196; Page 3</a>
+                    </div>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <div class="step-text"><strong>Right-click</strong> anywhere on the page and select <strong>"View Page Source"</strong> (or press <code>Ctrl+U</code> / <code>Cmd+Option+U</code>).</div>
+            </div>
+            <div class="step">
+                <div class="step-num">3</div>
+                <div class="step-text">Press <code>Ctrl+A</code> to <strong>Select All</strong>, then <code>Ctrl+C</code> to <strong>Copy</strong>.</div>
+            </div>
+            <div class="step">
+                <div class="step-num">4</div>
+                <div class="step-text"><strong>Paste</strong> into the box below and click <strong>Import</strong>. Repeat for additional pages.</div>
+            </div>
+        </div>
+
+        <!-- Settings & paste area -->
+        <div class="form-row">
+            <div class="form-group">
+                <label>Search Type Filter</label>
+                <select id="olxSearchType">
+                    <option value="all">All Types</option>
+                    <option value="land">Land Only</option>
+                    <option value="houses">Houses/Villas Only</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Max Listings Per Paste</label>
+                <input type="number" id="olxMaxListings" value="30" min="1" max="200">
+            </div>
+        </div>
+
+        <textarea class="paste-area" id="olxPasteArea" placeholder="Paste the full OLX page source here...&#10;&#10;Right-click the OLX search results page &#8594; View Page Source &#8594; Select All &#8594; Copy &#8594; Paste here"></textarea>
+
+        <div class="form-row" style="margin-top:12px;">
+            <button class="btn btn-primary" id="olxImportBtn" onclick="doOLXImport()">&#128229; Import OLX Listings</button>
+            <button class="btn btn-danger btn-sm" id="olxClearBtn" onclick="doOLXClear()" style="margin-left:auto;">&#128465; Clear All OLX Data</button>
+        </div>
+
+        <!-- Results area -->
+        <div class="import-status" id="olxImportStatus">
+            <div class="progress-bar"><div class="fill" id="olxProgressFill"></div></div>
+            <div id="olxStatusText" style="font-size:.8rem;color:#94a3b8;margin:8px 0;"></div>
+
+            <div class="stats-bar" id="olxStatsBar" style="display:none;">
+                <div class="stat imported"><div class="num" id="olxStatImported">0</div><div class="label">Imported</div></div>
+                <div class="stat updated"><div class="num" id="olxStatUpdated">0</div><div class="label">Updated</div></div>
+                <div class="stat skipped"><div class="num" id="olxStatSkipped">0</div><div class="label">Skipped</div></div>
+                <div class="stat errors"><div class="num" id="olxStatErrors">0</div><div class="label">Errors</div></div>
+            </div>
+
+            <div class="result-list" id="olxResultList"></div>
         </div>
     </div>
 
@@ -1984,6 +2435,159 @@ function doDPClear() {
     };
     xhr.send('action=clear_dotproperty');
 }
+
+/* Load OLX DB count on page load */
+function loadOLXCount() {
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', 'scrape_listings.php', true);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhr.onload = function() {
+        try {
+            var res = JSON.parse(xhr.responseText);
+            if (res.success) {
+                $('dbCountOLX').textContent = res.count;
+            }
+        } catch(e) {}
+    };
+    xhr.send('action=get_olx_counts');
+}
+loadOLXCount();
+
+/* OLX Import */
+function doOLXImport() {
+    if (importRunning) return;
+
+    var source = $('olxPasteArea').value.trim();
+    if (!source) {
+        showToast('Please paste the OLX page source first.', true);
+        return;
+    }
+    if (source.length < 500) {
+        showToast('Content seems too short. Copy the FULL page source.', true);
+        return;
+    }
+
+    importRunning = true;
+    $('olxImportBtn').disabled = true;
+    $('olxImportBtn').innerHTML = '<span class="spinner"></span> Importing...';
+
+    var statusEl = $('olxImportStatus');
+    statusEl.className = 'import-status active';
+    $('olxStatusText').textContent = 'Parsing OLX page source and extracting listings...';
+    $('olxProgressFill').style.width = '30%';
+    $('olxStatsBar').style.display = 'none';
+    $('olxResultList').innerHTML = '';
+
+    var formData = new FormData();
+    formData.append('action', 'import_olx');
+    formData.append('html_source', source);
+    formData.append('max_listings', $('olxMaxListings').value);
+    formData.append('search_type', $('olxSearchType').value);
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', 'scrape_listings.php', true);
+    xhr.onload = function() {
+        importRunning = false;
+        $('olxImportBtn').disabled = false;
+        $('olxImportBtn').innerHTML = '&#128229; Import OLX Listings';
+        $('olxProgressFill').style.width = '100%';
+
+        try {
+            var res = JSON.parse(xhr.responseText);
+
+            if (!res.success) {
+                $('olxStatusText').innerHTML = '<span style="color:#ef4444;">Error: ' + res.error + '</span>';
+                showToast('OLX import failed', true);
+                return;
+            }
+
+            $('olxStatsBar').style.display = 'flex';
+            $('olxStatImported').textContent = res.imported;
+            $('olxStatUpdated').textContent = res.updated;
+            $('olxStatSkipped').textContent = res.skipped;
+            $('olxStatErrors').textContent = res.errors;
+
+            $('olxStatusText').innerHTML = 'Done! Found <strong>' + res.total_in_page + '</strong> listings in this page.';
+
+            var html = '';
+            for (var i = 0; i < res.results.length; i++) {
+                var r = res.results[i];
+                var meta = '';
+                if (r.price) meta += r.price;
+                if (r.size && r.size !== '-') meta += ' \u00b7 ' + r.size;
+                if (r.location) meta += ' \u00b7 ' + r.location;
+
+                html += '<div class="result-item">'
+                    + '<span class="badge ' + badgeClass(r.status) + '">' + badgeLabel(r.status) + '</span>'
+                    + '<span class="r-title">' + (r.title || '').replace(/</g, '&lt;') + '</span>'
+                    + (meta ? '<span class="r-meta">' + meta.replace(/</g, '&lt;') + '</span>' : '')
+                    + '</div>';
+            }
+            $('olxResultList').innerHTML = html;
+
+            if (res.imported > 0) {
+                showToast(res.imported + ' OLX listing(s) imported!', false);
+            } else {
+                showToast('No new OLX listings to import.', false);
+            }
+
+            loadOLXCount();
+            $('olxPasteArea').value = '';
+
+        } catch(e) {
+            $('olxStatusText').innerHTML = '<span style="color:#ef4444;">Error parsing response: ' + e.message + '</span>';
+            showToast('OLX import failed', true);
+        }
+    };
+    xhr.onerror = function() {
+        importRunning = false;
+        $('olxImportBtn').disabled = false;
+        $('olxImportBtn').innerHTML = '&#128229; Import OLX Listings';
+        $('olxStatusText').innerHTML = '<span style="color:#ef4444;">Network error. Please try again.</span>';
+        showToast('Network error', true);
+    };
+    xhr.send(formData);
+}
+
+/* Clear all OLX data */
+function doOLXClear() {
+    if (!confirm('Are you sure you want to DELETE ALL OLX listings from the database? This cannot be undone.')) return;
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', 'scrape_listings.php', true);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhr.onload = function() {
+        try {
+            var res = JSON.parse(xhr.responseText);
+            if (res.success) {
+                showToast(res.deleted + ' OLX listing(s) deleted.', false);
+                loadOLXCount();
+            }
+        } catch(e) {
+            showToast('Error deleting OLX data.', true);
+        }
+    };
+    xhr.send('action=clear_olx');
+}
+
+/* Drag-drop support for OLX textarea */
+var olxpa = $('olxPasteArea');
+olxpa.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    olxpa.className = 'paste-area drag-over';
+});
+olxpa.addEventListener('dragleave', function() {
+    olxpa.className = 'paste-area';
+});
+olxpa.addEventListener('drop', function(e) {
+    e.preventDefault();
+    olxpa.className = 'paste-area';
+    var text = e.dataTransfer.getData('text');
+    if (text) {
+        olxpa.value = text;
+    }
+});
+
 
 /* Drag-drop support for DotProperty textarea */
 var dppa = $('dpPasteArea');
