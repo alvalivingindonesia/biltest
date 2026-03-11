@@ -1589,8 +1589,10 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_olx') {
             continue;
         }
 
-        // Insert listing (OLX listings are mostly private sellers, no agent)
-        $result = insert_olx_listing($db, $data);
+        // OLX listings are private sellers — use a shared placeholder agent
+        $agent_id = get_olx_private_seller_agent($db);
+
+        $result = insert_olx_listing($db, $data, $agent_id);
         if ($result === 'inserted') {
             $imported++;
             $results[] = array(
@@ -1630,7 +1632,24 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_olx') {
 // OLX: INSERT LISTING
 // ═══════════════════════════════════════════════════════════════════
 
-function insert_olx_listing($db, $data) {
+function get_olx_private_seller_agent($db) {
+    $stmt = $db->prepare("SELECT id FROM agents WHERE source_site = 'olx' AND source_agent_id = 'olx_private_seller'");
+    $stmt->execute();
+    $existing = $stmt->fetch();
+    if ($existing) return intval($existing['id']);
+
+    $ins = $db->prepare(
+        "INSERT INTO agents (user_id, slug, display_name, agency_name, bio, profile_photo_url, phone, whatsapp_number, email, website_url,
+                             areas_served, languages, is_verified, is_active, source_site, source_agent_id, source_profile_url, is_trusted, agent_type)
+         VALUES (NULL, 'olx-private-seller', 'Private Seller (OLX)', NULL, 'Private seller listing from OLX Indonesia', NULL, NULL, NULL, NULL, NULL,
+                 'lombok_tengah', 'Bahasa, English', 0, 1, 'olx', 'olx_private_seller', NULL, 0, NULL)"
+    );
+    $ins->execute();
+    return intval($db->lastInsertId());
+}
+
+
+function insert_olx_listing($db, $data, $agent_id) {
     $slug = make_slug($data['title']);
 
     $slug_check = $db->prepare("SELECT COUNT(*) FROM listings WHERE slug = ?");
@@ -1649,7 +1668,7 @@ function insert_olx_listing($db, $data) {
                                    building_size_sqm, bedrooms, bathrooms,
                                    is_featured, is_approved, source_site, source_url, source_listing_id, source_scraped_at,
                                    photo_urls)
-             VALUES (?, NULL, ?, 'active', ?, ?, ?,
+             VALUES (?, ?, ?, 'active', ?, ?, ?,
                      ?, ?, ?, ?, ?, ?,
                      ?, ?, ?,
                      ?, ?, ?,
@@ -1661,6 +1680,7 @@ function insert_olx_listing($db, $data) {
 
         $params = array(
             $slug,
+            $agent_id,
             $data['listing_type_key'],
             $data['title'],
             $data['short_description'],
