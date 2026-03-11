@@ -560,6 +560,256 @@ function parse_rsc_listing($item) {
 }
 
 
+
+
+// ═══════════════════════════════════════════════════════════════════
+// DOTPROPERTY.ID: EXTRACT LISTINGS FROM PASTED HTML
+// Standard HTML parsing — listings are <article class="listing-snippet">
+// ═══════════════════════════════════════════════════════════════════
+
+function extract_dotproperty_listings($html_source) {
+    $listings = array();
+
+    // Split by <article> tags with listing-snippet class
+    if (!preg_match_all('/<article[^>]*class="listing-snippet[^"]*"[^>]*data-uuid="([^"]*)"[^>]*>(.*?)<\/article>/s', $html_source, $matches, PREG_SET_ORDER)) {
+        return $listings;
+    }
+
+    foreach ($matches as $m) {
+        $uuid = $m[1];
+        $block = $m[2];
+        $listing = array('uuid' => $uuid, 'html' => $block);
+        $listings[] = $listing;
+    }
+
+    return $listings;
+}
+
+
+function parse_dotproperty_listing($item) {
+    $data = array(
+        'source_url' => '',
+        'source_listing_id' => '',
+        'title' => '',
+        'price_display' => '',
+        'price_idr' => null,
+        'price_usd' => null,
+        'price_label' => '',
+        'price_idr_per_sqm' => null,
+        'listing_type_key' => 'land',
+        'land_size_sqm' => null,
+        'building_size_sqm' => null,
+        'bedrooms' => null,
+        'bathrooms' => null,
+        'certificate_type_key' => null,
+        'district' => '',
+        'description' => '',
+        'short_description' => '',
+        'location_detail' => '',
+        'area_key' => 'praya',
+        'photos' => array(),
+        'agent_name' => '',
+        'agent_photo_url' => '',
+        'agent_type' => '',
+        'agent_phone' => '',
+        'agent_profile_url' => '',
+        'agent_source_id' => '',
+        'agent_verified' => false,
+    );
+
+    $uuid = $item['uuid'];
+    $html = $item['html'];
+    $data['source_listing_id'] = $uuid;
+
+    // ─── URL ─────────────────────────────────────────────
+    // First link in detail area: href="https://www.dotproperty.id/en/ads/..."
+    if (preg_match('/href="(https:\/\/www\.dotproperty\.id\/en\/ads\/[^"]+)"/', $html, $um)) {
+        $data['source_url'] = $um[1];
+    }
+
+    // ─── Title ───────────────────────────────────────────
+    // <div class="text-2xl font-semibold..." title="...">
+    if (preg_match('/class="[^"]*text-2xl font-semibold[^"]*"\s*title="([^"]+)"/', $html, $tm)) {
+        $data['title'] = html_entity_decode(trim($tm[1]), ENT_QUOTES, 'UTF-8');
+    }
+    if (!$data['title']) return null;
+
+    // ─── Price ───────────────────────────────────────────
+    // <div class="...text-secondary-base...font-bold text-3xl">  RP 4.69 billion  </div>
+    if (preg_match('/text-secondary-base[^"]*font-bold text-3xl"?>\s*([^<]+)/s', $html, $pm)) {
+        $price_text = trim($pm[1]);
+        $data['price_display'] = $price_text;
+        $data['price_idr'] = parse_dotproperty_price($price_text);
+    }
+    if ($data['price_idr']) {
+        $data['price_usd'] = idr_to_usd($data['price_idr']);
+    }
+
+    // Price per sqm
+    // (RP 39,083,333 / m<sup>2</sup>)
+    if (preg_match('/\(RP\s*([\d,]+)\s*\/\s*m/i', $html, $psm)) {
+        $data['price_idr_per_sqm'] = intval(str_replace(',', '', $psm[1]));
+    }
+
+    // ─── Bedrooms & Bathrooms ────────────────────────────
+    // bed icon (bed-f218f335.svg) followed by number
+    if (preg_match('/bed-[a-f0-9]+\.svg[^<]*<\/img>\s*<\/span>\s*(\d+)/s', $html, $bedm)) {
+        $data['bedrooms'] = intval($bedm[1]);
+    }
+    // bath icon (bathtub-3411ca68.svg) followed by number
+    if (preg_match('/bathtub-[a-f0-9]+\.svg[^<]*<\/img>\s*<\/span>\s*(\d+)/s', $html, $bathm)) {
+        $data['bathrooms'] = intval($bathm[1]);
+    }
+
+    // ─── Size ────────────────────────────────────────────
+    // resize icon followed by "120 m<sup>2</sup>" or "1,582 m<sup>2</sup>"
+    if (preg_match('/resize-[a-f0-9]+\.svg[^<]*<\/img>\s*<\/span>\s*([\d,]+)\s*m<sup>/s', $html, $szm)) {
+        $sqm = intval(str_replace(',', '', $szm[1]));
+        // If there are bedrooms, this is likely building size; otherwise land size
+        if ($data['bedrooms']) {
+            $data['building_size_sqm'] = $sqm;
+        } else {
+            $data['land_size_sqm'] = $sqm;
+        }
+    }
+
+    // ─── Property Type ───────────────────────────────────
+    // home icon followed by "House", "Villa", "Land", etc.
+    if (preg_match('/home-[a-f0-9]+\.svg[^<]*<\/img>\s*<\/span>\s*([A-Za-z]+)/s', $html, $ptm)) {
+        $ptype = strtolower(trim($ptm[1]));
+        $data['listing_type_key'] = detect_listing_type($data['title'], $ptype);
+    } else {
+        $data['listing_type_key'] = detect_listing_type($data['title'], '');
+    }
+
+    // If land type, the size from resize icon is land size
+    if ($data['listing_type_key'] === 'land' && !$data['land_size_sqm'] && $data['building_size_sqm']) {
+        $data['land_size_sqm'] = $data['building_size_sqm'];
+        $data['building_size_sqm'] = null;
+    }
+
+    // ─── Location ────────────────────────────────────────
+    // location icon followed by text: "Lombok Tengah, West Nusa Tenggara"
+    if (preg_match('/location-[a-f0-9]+\.svg[^<]*<\/img>\s*<\/span>\s*([^<]+)/s', $html, $lm)) {
+        $data['district'] = trim($lm[1]);
+    }
+
+    // ─── Description ─────────────────────────────────────
+    if (preg_match('/class="line-clamp[^"]*"[^>]*>\s*(.*?)<\/div>/s', $html, $dm)) {
+        $desc = strip_tags($dm[1]);
+        $desc = preg_replace('/\s+/', ' ', trim($desc));
+        $data['description'] = $desc;
+    }
+    $data['short_description'] = $data['description'] ? mb_substr($data['description'], 0, 200) : $data['title'];
+
+    // Certificate detection from description
+    $data['certificate_type_key'] = detect_certificate($data['description'] . ' ' . $data['title']);
+
+    // Location & area detection
+    $data['area_key'] = detect_area_key($data['district'], $data['title'], $data['description']);
+    $data['location_detail'] = detect_location_detail($data['district'], $data['title'], $data['description']);
+
+    // ─── Photos ──────────────────────────────────────────
+    // Extract image URLs from gallery slides
+    $photos = array();
+    if (preg_match_all('/glide__slide[^>]*>.*?<img[^>]+src="([^"]+)"/s', $html, $img_matches)) {
+        $seen = array();
+        foreach ($img_matches[1] as $img_url) {
+            if (in_array($img_url, $seen)) continue;
+            $seen[] = $img_url;
+            if (strpos($img_url, 'http') !== 0) {
+                $img_url = 'https:' . $img_url;
+            }
+            $photos[] = $img_url;
+            if (count($photos) >= 5) break;
+        }
+    }
+    $data['photos'] = $photos;
+
+    // ─── Agent / Seller Info ─────────────────────────────
+    // Agent name from: title="PT Alis Invest" or title="Keon Ody"
+    if (preg_match('/class="font-bold[^"]*text-neutral-2[^"]*"\s*title="([^"]+)"/', $html, $anm)) {
+        $data['agent_name'] = trim($anm[1]);
+    }
+
+    // Agent profile URL
+    if (preg_match('/href="(https:\/\/www\.dotproperty\.id\/en\/publisher\/[^"]+)"/', $html, $apm)) {
+        $data['agent_profile_url'] = $apm[1];
+        // Extract source ID from URL
+        if (preg_match('/publisher\/[^_]+_([a-f0-9-]+)/', $apm[1], $aim)) {
+            $data['agent_source_id'] = $aim[1];
+        }
+    }
+
+    // Verified seller check
+    if (strpos($html, 'Verified seller') !== false || strpos($html, 'verified-') !== false) {
+        $data['agent_verified'] = true;
+    }
+
+    // ─── Features ────────────────────────────────────────
+    // Extract feature tags like "Swimming pool", "Air conditioning", etc.
+    $features = array();
+    if (preg_match_all('/class="[^"]*bg-secondary-10[^"]*"[^>]*>\s*([^<]+)\s*<\/li>/s', $html, $feat_matches)) {
+        foreach ($feat_matches[1] as $feat) {
+            $features[] = trim($feat);
+        }
+    }
+    // Check for pool, beachfront, etc. in features
+    $feat_text = strtolower(implode(' ', $features));
+    if (strpos($feat_text, 'pool') !== false || strpos($feat_text, 'swimming') !== false) {
+        $data['has_pool'] = true;
+    }
+    if (strpos($feat_text, 'ocean') !== false || strpos($feat_text, 'sea view') !== false) {
+        $data['has_ocean_view'] = true;
+    }
+    if (strpos($feat_text, 'beach') !== false) {
+        $data['has_beachfront'] = true;
+    }
+
+    return $data;
+}
+
+
+function parse_dotproperty_price($price_text) {
+    $price_text = strtolower(trim($price_text));
+    // Remove "rp" prefix
+    $price_text = preg_replace('/^rp\s*/i', '', $price_text);
+    $price_text = trim($price_text);
+
+    // Handle "billion" format: "4.69 billion" => 4,690,000,000
+    if (preg_match('/([\d.,]+)\s*billion/', $price_text, $m)) {
+        $num = floatval(str_replace(',', '', $m[1]));
+        return intval($num * 1000000000);
+    }
+
+    // Handle "million" format: "150 million" => 150,000,000
+    if (preg_match('/([\d.,]+)\s*million/', $price_text, $m)) {
+        $num = floatval(str_replace(',', '', $m[1]));
+        return intval($num * 1000000);
+    }
+
+    // Handle "miliar" format: "4.69 miliar" => 4,690,000,000
+    if (preg_match('/([\d.,]+)\s*miliar/', $price_text, $m)) {
+        $num = floatval(str_replace(',', '', $m[1]));
+        return intval($num * 1000000000);
+    }
+
+    // Handle "juta" format: "275 juta" => 275,000,000
+    if (preg_match('/([\d.,]+)\s*juta/', $price_text, $m)) {
+        $num = floatval(str_replace(',', '', $m[1]));
+        return intval($num * 1000000);
+    }
+
+    // Handle plain number format: "150,000,000"
+    $clean = preg_replace('/[^\d]/', '', $price_text);
+    if ($clean && strlen($clean) >= 6) {
+        return intval($clean);
+    }
+
+    return null;
+}
+
+
 // ═══════════════════════════════════════════════════════════════════
 // UPSERT AGENT
 // ═══════════════════════════════════════════════════════════════════
@@ -839,6 +1089,268 @@ if (isset($_POST['action']) && $_POST['action'] === 'get_counts') {
 }
 
 
+
+// ═══════════════════════════════════════════════════════════════════
+// HANDLE DOTPROPERTY IMPORT REQUEST
+// ═══════════════════════════════════════════════════════════════════
+
+if (isset($_POST['action']) && $_POST['action'] === 'import_dotproperty') {
+    header('Content-Type: application/json');
+
+    $source = isset($_POST['html_source']) ? $_POST['html_source'] : '';
+    $max_listings = max(1, min(2000, intval(isset($_POST['max_listings']) ? $_POST['max_listings'] : 30)));
+    $search_type = isset($_POST['search_type']) ? $_POST['search_type'] : 'all';
+
+    if (strlen($source) < 100) {
+        echo json_encode(array('success' => false, 'error' => 'Pasted content is too short. Make sure you copy the full page source.'));
+        exit;
+    }
+
+    $raw_listings = extract_dotproperty_listings($source);
+
+    if (empty($raw_listings)) {
+        echo json_encode(array('success' => false, 'error' => 'Could not find any DotProperty listings in the pasted content. Make sure you right-click the DotProperty search results page and choose "View Page Source", then Select All and Copy everything.'));
+        exit;
+    }
+
+    $db = get_db();
+    $results = array();
+    $imported = 0;
+    $updated = 0;
+    $skipped = 0;
+    $errors = 0;
+
+    foreach ($raw_listings as $item) {
+        if ($imported + $updated >= $max_listings) break;
+
+        $data = parse_dotproperty_listing($item);
+        if (!$data) {
+            $skipped++;
+            continue;
+        }
+
+        // Filter by search type
+        if ($search_type === 'land' && !in_array($data['listing_type_key'], array('land'))) {
+            $skipped++;
+            $results[] = array('status' => 'skip_type', 'title' => $data['title'], 'msg' => 'Not land \xe2\x80\x94 skipped');
+            continue;
+        }
+        if ($search_type === 'houses' && !in_array($data['listing_type_key'], array('house', 'villa', 'apartment'))) {
+            $skipped++;
+            $results[] = array('status' => 'skip_type', 'title' => $data['title'], 'msg' => 'Not house/villa \xe2\x80\x94 skipped');
+            continue;
+        }
+
+        $source_id = $data['source_listing_id'];
+
+        // Check for existing listing
+        $existing = null;
+        if ($source_id) {
+            $stmt = $db->prepare("SELECT id, price_idr FROM listings WHERE source_site = 'dotproperty' AND source_listing_id = ?");
+            $stmt->execute(array($source_id));
+            $existing = $stmt->fetch();
+        }
+
+        if ($existing) {
+            $new_price = $data['price_idr'];
+            $old_price = intval($existing['price_idr']);
+            if ($new_price && $old_price && $new_price < $old_price) {
+                $upd = $db->prepare("UPDATE listings SET price_idr = ?, price_usd = ?, price_idr_per_sqm = ?, updated_at = NOW() WHERE id = ?");
+                $upd->execute(array($new_price, idr_to_usd($new_price), $data['price_idr_per_sqm'], $existing['id']));
+                $updated++;
+                $results[] = array('status' => 'updated', 'title' => $data['title'], 'msg' => 'Price updated (lower)');
+            } else {
+                $skipped++;
+                $results[] = array('status' => 'exists', 'title' => $data['title'], 'msg' => 'Already in database');
+            }
+            continue;
+        }
+
+        // Handle agent
+        $agent_id = null;
+        if (!empty($data['agent_name'])) {
+            // Override source_site for dotproperty agents
+            $agent_id = upsert_dotproperty_agent($db, $data);
+        }
+
+        // Insert listing
+        $result = insert_dotproperty_listing($db, $data, $agent_id);
+        if ($result === 'inserted') {
+            $imported++;
+            $results[] = array(
+                'status' => 'imported',
+                'title' => $data['title'],
+                'price' => $data['price_display'],
+                'location' => $data['location_detail'],
+                'size' => $data['land_size_sqm'] ? number_format($data['land_size_sqm']) . ' m\xc2\xb2' : '-',
+                'type' => $data['listing_type_key'],
+                'agent' => $data['agent_name'] ? $data['agent_name'] : '-',
+                'photos' => count($data['photos']),
+                'msg' => 'Imported'
+            );
+        } elseif ($result === 'duplicate') {
+            $skipped++;
+            $results[] = array('status' => 'exists', 'title' => $data['title'], 'msg' => 'Duplicate');
+        } else {
+            $errors++;
+            $results[] = array('status' => 'error', 'title' => $data['title'], 'msg' => $result);
+        }
+    }
+
+    echo json_encode(array(
+        'success' => true,
+        'imported' => $imported,
+        'updated' => $updated,
+        'skipped' => $skipped,
+        'errors' => $errors,
+        'total_in_page' => count($raw_listings),
+        'results' => $results
+    ));
+    exit;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// DOTPROPERTY: UPSERT AGENT
+// ═══════════════════════════════════════════════════════════════════
+
+function upsert_dotproperty_agent($db, $data) {
+    $source_id = $data['agent_source_id'];
+    if (!$source_id && $data['agent_name']) {
+        $source_id = 'name_' . md5(strtolower($data['agent_name']));
+    }
+    if (!$source_id) return null;
+
+    $stmt = $db->prepare("SELECT id FROM agents WHERE source_site = 'dotproperty' AND source_agent_id = ?");
+    $stmt->execute(array($source_id));
+    $existing = $stmt->fetch();
+
+    if ($existing) {
+        return intval($existing['id']);
+    }
+
+    $slug = make_slug($data['agent_name']);
+    $slug_check = $db->prepare("SELECT COUNT(*) FROM agents WHERE slug = ?");
+    $slug_check->execute(array($slug));
+    if ($slug_check->fetchColumn() > 0) {
+        $slug = $slug . '-' . substr(md5($source_id), 0, 6);
+    }
+
+    $ins = $db->prepare(
+        "INSERT INTO agents (user_id, slug, display_name, agency_name, bio, profile_photo_url, phone, whatsapp_number, email, website_url,
+                             areas_served, languages, is_verified, is_active, source_site, source_agent_id, source_profile_url, is_trusted, agent_type)
+         VALUES (NULL, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'lombok_tengah', 'Bahasa, English', ?, 1, 'dotproperty', ?, ?, ?, NULL)"
+    );
+    $ins->execute(array(
+        $slug,
+        $data['agent_name'],
+        $data['agent_verified'] ? 1 : 0,
+        $source_id,
+        $data['agent_profile_url'] ? $data['agent_profile_url'] : null,
+        $data['agent_verified'] ? 1 : 0,
+    ));
+
+    return intval($db->lastInsertId());
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// DOTPROPERTY: INSERT LISTING
+// ═══════════════════════════════════════════════════════════════════
+
+function insert_dotproperty_listing($db, $data, $agent_id) {
+    $slug = make_slug($data['title']);
+
+    $slug_check = $db->prepare("SELECT COUNT(*) FROM listings WHERE slug = ?");
+    $slug_check->execute(array($slug));
+    if ($slug_check->fetchColumn() > 0) {
+        $slug = $slug . '-' . substr(md5($data['source_listing_id'] . time()), 0, 6);
+    }
+
+    $photo_urls_json = !empty($data['photos']) ? json_encode(array_values($data['photos'])) : null;
+
+    try {
+        $ins = $db->prepare(
+            "INSERT INTO listings (slug, agent_id, listing_type_key, status, title, short_description, description,
+                                   area_key, location_detail, price_idr, price_usd, price_label, price_idr_per_sqm,
+                                   land_size_sqm, land_size_are, certificate_type_key,
+                                   building_size_sqm, bedrooms, bathrooms,
+                                   is_featured, is_approved, source_site, source_url, source_listing_id, source_scraped_at,
+                                   photo_urls)
+             VALUES (?, ?, ?, 'active', ?, ?, ?,
+                     ?, ?, ?, ?, ?, ?,
+                     ?, ?, ?,
+                     ?, ?, ?,
+                     0, 1, 'dotproperty', ?, ?, NOW(),
+                     ?)"
+        );
+
+        $land_size_are = $data['land_size_sqm'] ? round($data['land_size_sqm'] / 100, 2) : null;
+
+        $params = array(
+            $slug,
+            $agent_id,
+            $data['listing_type_key'],
+            $data['title'],
+            $data['short_description'],
+            $data['description'],
+            $data['area_key'],
+            $data['location_detail'],
+            $data['price_idr'],
+            $data['price_usd'],
+            $data['price_label'] ? $data['price_label'] : null,
+            $data['price_idr_per_sqm'],
+            $data['land_size_sqm'],
+            $land_size_are,
+            $data['certificate_type_key'],
+            $data['building_size_sqm'],
+            $data['bedrooms'],
+            $data['bathrooms'],
+            $data['source_url'],
+            $data['source_listing_id'],
+            $photo_urls_json,
+        );
+
+        $ins->execute($params);
+        return 'inserted';
+    } catch (PDOException $e) {
+        if (strpos($e->getMessage(), 'Duplicate') !== false) {
+            return 'duplicate';
+        }
+        return 'error: ' . $e->getMessage();
+    }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// HANDLE CLEAR DOTPROPERTY DATA REQUEST
+// ═══════════════════════════════════════════════════════════════════
+
+if (isset($_POST['action']) && $_POST['action'] === 'clear_dotproperty') {
+    header('Content-Type: application/json');
+    $db = get_db();
+    $stmt = $db->prepare("DELETE FROM listings WHERE source_site = 'dotproperty'");
+    $stmt->execute();
+    $deleted = $stmt->rowCount();
+    echo json_encode(array('success' => true, 'deleted' => $deleted));
+    exit;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// HANDLE DOTPROPERTY COUNT REQUEST
+// ═══════════════════════════════════════════════════════════════════
+
+if (isset($_POST['action']) && $_POST['action'] === 'get_dotproperty_counts') {
+    header('Content-Type: application/json');
+    $db = get_db();
+    $stmt = $db->query("SELECT COUNT(*) as cnt FROM listings WHERE source_site = 'dotproperty'");
+    $row = $stmt->fetch();
+    echo json_encode(array('success' => true, 'count' => intval($row['cnt'])));
+    exit;
+}
+
+
 // ═══════════════════════════════════════════════════════════════════
 // HTML PAGE
 // ═══════════════════════════════════════════════════════════════════
@@ -965,7 +1477,7 @@ textarea.paste-area.drag-over{border-color:#22d3ee;background:#0c1825}
 <div class="container">
 
     <!-- Current DB count -->
-    <div class="db-count">Rumah123 listings in database: <strong id="dbCount">...</strong></div>
+    <div class="db-count">Rumah123 listings: <strong id="dbCount">...</strong> &nbsp;|&nbsp; DotProperty listings: <strong id="dbCountDP">...</strong></div>
 
     <!-- ═══ Rumah123 ═══ -->
     <div class="card">
@@ -1053,7 +1565,87 @@ textarea.paste-area.drag-over{border-color:#22d3ee;background:#0c1825}
         </div>
     </div>
 
-    <!-- ═══ Future sites ═══ -->
+    <!-- ═══ DotProperty ═══ -->
+    <div class="card">
+        <h2><span class="icon" style="background:#16a34a;">DP</span> DotProperty.id</h2>
+
+        <div class="site-card">
+            <div class="site-logo" style="background:#16a34a;">DP</div>
+            <div class="site-info">
+                <h3>Paste & Import from DotProperty</h3>
+                <p>Copy page source from DotProperty.id search results and paste below to import listings.</p>
+            </div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="steps">
+            <div class="step">
+                <div class="step-num">1</div>
+                <div class="step-text">Open one of these search pages in your browser:
+                    <div class="url-links">
+                        <a href="https://www.dotproperty.id/en/properties-for-sale/west-nusa-tenggara/lombok-tengah" target="_blank" class="url-link">&#127965; Lombok Tengah</a>
+                        <a href="https://www.dotproperty.id/en/properties-for-sale/west-nusa-tenggara/lombok-barat" target="_blank" class="url-link">&#127965; Lombok Barat</a>
+                        <a href="https://www.dotproperty.id/en/properties-for-sale/west-nusa-tenggara/lombok-utara" target="_blank" class="url-link">&#127965; Lombok Utara</a>
+                        <a href="https://www.dotproperty.id/en/properties-for-sale/west-nusa-tenggara/lombok-timur" target="_blank" class="url-link">&#127965; Lombok Timur</a>
+                        <a href="https://www.dotproperty.id/en/properties-for-sale/west-nusa-tenggara/lombok-tengah?page=2" target="_blank" class="url-link">&#128196; Page 2</a>
+                        <a href="https://www.dotproperty.id/en/properties-for-sale/west-nusa-tenggara/lombok-tengah?page=3" target="_blank" class="url-link">&#128196; Page 3</a>
+                    </div>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <div class="step-text"><strong>Right-click</strong> anywhere on the page and select <strong>"View Page Source"</strong> (or press <code>Ctrl+U</code> / <code>Cmd+Option+U</code>).</div>
+            </div>
+            <div class="step">
+                <div class="step-num">3</div>
+                <div class="step-text">Press <code>Ctrl+A</code> to <strong>Select All</strong>, then <code>Ctrl+C</code> to <strong>Copy</strong>.</div>
+            </div>
+            <div class="step">
+                <div class="step-num">4</div>
+                <div class="step-text"><strong>Paste</strong> into the box below and click <strong>Import</strong>. Repeat for additional pages.</div>
+            </div>
+        </div>
+
+        <!-- Settings & paste area -->
+        <div class="form-row">
+            <div class="form-group">
+                <label>Search Type Filter</label>
+                <select id="dpSearchType">
+                    <option value="all">All Types</option>
+                    <option value="land">Land Only</option>
+                    <option value="houses">Houses/Villas Only</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Max Listings Per Paste</label>
+                <input type="number" id="dpMaxListings" value="30" min="1" max="200">
+            </div>
+        </div>
+
+        <textarea class="paste-area" id="dpPasteArea" placeholder="Paste the full DotProperty page source here...&#10;&#10;Right-click the DotProperty search results page &#8594; View Page Source &#8594; Select All &#8594; Copy &#8594; Paste here"></textarea>
+
+        <div class="form-row" style="margin-top:12px;">
+            <button class="btn btn-primary" id="dpImportBtn" onclick="doDPImport()">&#128229; Import DotProperty Listings</button>
+            <button class="btn btn-danger btn-sm" id="dpClearBtn" onclick="doDPClear()" style="margin-left:auto;">&#128465; Clear All DotProperty Data</button>
+        </div>
+
+        <!-- Results area -->
+        <div class="import-status" id="dpImportStatus">
+            <div class="progress-bar"><div class="fill" id="dpProgressFill"></div></div>
+            <div id="dpStatusText" style="font-size:.8rem;color:#94a3b8;margin:8px 0;"></div>
+
+            <div class="stats-bar" id="dpStatsBar" style="display:none;">
+                <div class="stat imported"><div class="num" id="dpStatImported">0</div><div class="label">Imported</div></div>
+                <div class="stat updated"><div class="num" id="dpStatUpdated">0</div><div class="label">Updated</div></div>
+                <div class="stat skipped"><div class="num" id="dpStatSkipped">0</div><div class="label">Skipped</div></div>
+                <div class="stat errors"><div class="num" id="dpStatErrors">0</div><div class="label">Errors</div></div>
+            </div>
+
+            <div class="result-list" id="dpResultList"></div>
+        </div>
+    </div>
+
+        <!-- ═══ Future sites ═══ -->
     <div class="card">
         <h2><span class="icon" style="background:#334155;">🌐</span> Other Sources</h2>
 
@@ -1258,6 +1850,159 @@ function doClear() {
     };
     xhr.send('action=clear_rumah123');
 }
+
+/* Load DotProperty DB count on page load */
+function loadDPCount() {
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', 'scrape_listings.php', true);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhr.onload = function() {
+        try {
+            var res = JSON.parse(xhr.responseText);
+            if (res.success) {
+                $('dbCountDP').textContent = res.count;
+            }
+        } catch(e) {}
+    };
+    xhr.send('action=get_dotproperty_counts');
+}
+loadDPCount();
+
+/* DotProperty Import */
+function doDPImport() {
+    if (importRunning) return;
+
+    var source = $('dpPasteArea').value.trim();
+    if (!source) {
+        showToast('Please paste the DotProperty page source first.', true);
+        return;
+    }
+    if (source.length < 500) {
+        showToast('Content seems too short. Copy the FULL page source.', true);
+        return;
+    }
+
+    importRunning = true;
+    $('dpImportBtn').disabled = true;
+    $('dpImportBtn').innerHTML = '<span class="spinner"></span> Importing...';
+
+    var statusEl = $('dpImportStatus');
+    statusEl.className = 'import-status active';
+    $('dpStatusText').textContent = 'Parsing DotProperty page source and extracting listings...';
+    $('dpProgressFill').style.width = '30%';
+    $('dpStatsBar').style.display = 'none';
+    $('dpResultList').innerHTML = '';
+
+    var formData = new FormData();
+    formData.append('action', 'import_dotproperty');
+    formData.append('html_source', source);
+    formData.append('max_listings', $('dpMaxListings').value);
+    formData.append('search_type', $('dpSearchType').value);
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', 'scrape_listings.php', true);
+    xhr.onload = function() {
+        importRunning = false;
+        $('dpImportBtn').disabled = false;
+        $('dpImportBtn').innerHTML = '&#128229; Import DotProperty Listings';
+        $('dpProgressFill').style.width = '100%';
+
+        try {
+            var res = JSON.parse(xhr.responseText);
+
+            if (!res.success) {
+                $('dpStatusText').innerHTML = '<span style="color:#ef4444;">Error: ' + res.error + '</span>';
+                showToast('DotProperty import failed', true);
+                return;
+            }
+
+            $('dpStatsBar').style.display = 'flex';
+            $('dpStatImported').textContent = res.imported;
+            $('dpStatUpdated').textContent = res.updated;
+            $('dpStatSkipped').textContent = res.skipped;
+            $('dpStatErrors').textContent = res.errors;
+
+            $('dpStatusText').innerHTML = 'Done! Found <strong>' + res.total_in_page + '</strong> listings in this page.';
+
+            var html = '';
+            for (var i = 0; i < res.results.length; i++) {
+                var r = res.results[i];
+                var meta = '';
+                if (r.price) meta += r.price;
+                if (r.size && r.size !== '-') meta += ' \u00b7 ' + r.size;
+                if (r.location) meta += ' \u00b7 ' + r.location;
+
+                html += '<div class="result-item">'
+                    + '<span class="badge ' + badgeClass(r.status) + '">' + badgeLabel(r.status) + '</span>'
+                    + '<span class="r-title">' + (r.title || '').replace(/</g, '&lt;') + '</span>'
+                    + (meta ? '<span class="r-meta">' + meta.replace(/</g, '&lt;') + '</span>' : '')
+                    + '</div>';
+            }
+            $('dpResultList').innerHTML = html;
+
+            if (res.imported > 0) {
+                showToast(res.imported + ' DotProperty listing(s) imported!', false);
+            } else {
+                showToast('No new DotProperty listings to import.', false);
+            }
+
+            loadDPCount();
+            $('dpPasteArea').value = '';
+
+        } catch(e) {
+            $('dpStatusText').innerHTML = '<span style="color:#ef4444;">Error parsing response: ' + e.message + '</span>';
+            showToast('DotProperty import failed', true);
+        }
+    };
+    xhr.onerror = function() {
+        importRunning = false;
+        $('dpImportBtn').disabled = false;
+        $('dpImportBtn').innerHTML = '&#128229; Import DotProperty Listings';
+        $('dpStatusText').innerHTML = '<span style="color:#ef4444;">Network error. Please try again.</span>';
+        showToast('Network error', true);
+    };
+    xhr.send(formData);
+}
+
+/* Clear all DotProperty data */
+function doDPClear() {
+    if (!confirm('Are you sure you want to DELETE ALL DotProperty listings from the database? This cannot be undone.')) return;
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', 'scrape_listings.php', true);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhr.onload = function() {
+        try {
+            var res = JSON.parse(xhr.responseText);
+            if (res.success) {
+                showToast(res.deleted + ' DotProperty listing(s) deleted.', false);
+                loadDPCount();
+            }
+        } catch(e) {
+            showToast('Error deleting DotProperty data.', true);
+        }
+    };
+    xhr.send('action=clear_dotproperty');
+}
+
+/* Drag-drop support for DotProperty textarea */
+var dppa = $('dpPasteArea');
+dppa.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    dppa.className = 'paste-area drag-over';
+});
+dppa.addEventListener('dragleave', function() {
+    dppa.className = 'paste-area';
+});
+dppa.addEventListener('drop', function(e) {
+    e.preventDefault();
+    dppa.className = 'paste-area';
+    var text = e.dataTransfer.getData('text');
+    if (text) {
+        dppa.value = text;
+    }
+});
+
 
 /* Drag-drop support for the textarea */
 var pa = $('pasteArea');

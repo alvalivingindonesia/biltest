@@ -401,6 +401,8 @@
   color: var(--color-primary);
   background: transparent;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .login-btn.login-btn:hover {
   background: var(--color-primary);
@@ -2037,14 +2039,16 @@
   line-height: 1.1;
   margin-bottom: var(--space-3);
   font-weight: 400;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.4);
 }
 
 .dir-hero-desc {
   font-size: clamp(1rem, 0.85rem + 0.4vw, 1.2rem);
-  color: rgba(250, 248, 244, 0.65);
+  color: rgba(250, 248, 244, 0.92);
   max-width: 52ch;
   font-style: italic;
   font-family: var(--font-display);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
 }
 
 /* =====================================================
