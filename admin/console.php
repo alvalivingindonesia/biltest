@@ -373,6 +373,135 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $uid = (int)$_POST['user_id'];
             $db->prepare("UPDATE users SET is_active = NOT is_active WHERE id=?")->execute([$uid]);
             $msg = 'User status updated.';
+            $redir = isset($_POST['return_edit']) ? 'console.php?s=users&edit=' . $uid . '&msg=' : 'console.php?s=users&msg=';
+            header('Location: ' . $redir . urlencode($msg)); exit;
+        }
+        // --- USERS: toggle verified ---
+        elseif ($section === 'users' && $action === 'toggle_verified') {
+            $uid = (int)$_POST['user_id'];
+            $db->prepare("UPDATE users SET is_verified = NOT is_verified WHERE id=?")->execute([$uid]);
+            $msg = 'User verification status updated.';
+            header("Location: console.php?s=users&edit=" . $uid . '&msg=' . urlencode($msg)); exit;
+        }
+        // --- USERS: change role ---
+        elseif ($section === 'users' && $action === 'change_role') {
+            $uid = (int)$_POST['user_id'];
+            $new_role = $_POST['role'] ?? 'user';
+            if (!in_array($new_role, array('user', 'provider_owner', 'admin'))) $new_role = 'user';
+            $db->prepare("UPDATE users SET role=? WHERE id=?")->execute(array($new_role, $uid));
+            $msg = 'User role updated to ' . $new_role . '.';
+            header("Location: console.php?s=users&edit=" . $uid . '&msg=' . urlencode($msg)); exit;
+        }
+        // --- USERS: change subscription tier ---
+        elseif ($section === 'users' && $action === 'change_tier') {
+            $uid = (int)$_POST['user_id'];
+            $tier = $_POST['subscription_tier'] ?? 'free';
+            $period = $_POST['subscription_period'] ?: null;
+            $expires = $_POST['subscription_expires_at'] ?: null;
+            if (!in_array($tier, array('free', 'basic', 'premium'))) $tier = 'free';
+            if ($period && !in_array($period, array('monthly', 'annual', 'lifetime'))) $period = null;
+            $started = ($tier !== 'free') ? date('Y-m-d H:i:s') : null;
+            $db->prepare("UPDATE users SET subscription_tier=?, subscription_period=?, subscription_started_at=COALESCE(subscription_started_at, ?), subscription_expires_at=?, subscription_auto_renew=0 WHERE id=?")
+               ->execute(array($tier, $period, $started, $expires, $uid));
+            $msg = 'Subscription updated to ' . $tier . '.';
+            header("Location: console.php?s=users&edit=" . $uid . '&msg=' . urlencode($msg)); exit;
+        }
+        // --- USERS: send password reset email ---
+        elseif ($section === 'users' && $action === 'send_reset') {
+            require_once($_SERVER['DOCUMENT_ROOT'] . '/api/smtp_mailer.php');
+            $uid = (int)$_POST['user_id'];
+            $user = $db->prepare("SELECT id, email, display_name FROM users WHERE id=?");
+            $user->execute(array($uid));
+            $user = $user->fetch();
+            if ($user) {
+                $token = bin2hex(random_bytes(32));
+                $expires = date('Y-m-d H:i:s', strtotime('+1 hour'));
+                $db->prepare("UPDATE users SET reset_token=?, reset_expires=? WHERE id=?")->execute(array($token, $expires, $uid));
+                $site_url = 'https://biltest.roving-i.com.au';
+                $reset_url = $site_url . '/#reset-password?token=' . urlencode($token);
+                $html = '<html><body style="font-family:Arial,sans-serif;background:#f7f5f0;margin:0;padding:0;">'
+                      . '<table width="100%" cellpadding="0" cellspacing="0" style="background:#f7f5f0;padding:40px 0;">'
+                      . '<tr><td align="center">'
+                      . '<table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;">'
+                      . '<tr><td style="background:#0c7c84;padding:30px 40px;text-align:center;"><h1 style="color:#fff;margin:0;font-size:24px;">Build in Lombok</h1></td></tr>'
+                      . '<tr><td style="padding:40px;">'
+                      . '<p style="color:#333;font-size:16px;">Hi ' . htmlspecialchars($user['display_name']) . ',</p>'
+                      . '<p style="color:#333;font-size:16px;">An administrator has requested a password reset for your account. Click below to set a new password:</p>'
+                      . '<p style="text-align:center;margin:30px 0;"><a href="' . $reset_url . '" style="background:#d4604a;color:#fff;text-decoration:none;padding:14px 32px;border-radius:6px;font-size:16px;font-weight:bold;display:inline-block;">Reset Password</a></p>'
+                      . '<p style="color:#666;font-size:14px;">This link expires in 1 hour.</p>'
+                      . '</td></tr></table></td></tr></table></body></html>';
+                $text = 'Hi ' . $user['display_name'] . ", an admin has requested a password reset. Visit: " . $reset_url;
+                $result = smtp_send_mail($user['email'], 'Reset your Build in Lombok password', $html, $text);
+                $msg = ($result === true) ? 'Password reset email sent to ' . $user['email'] . '.' : 'Email failed: ' . $result;
+            } else {
+                $msg = 'User not found.';
+            }
+            header("Location: console.php?s=users&edit=" . $uid . '&msg=' . urlencode($msg)); exit;
+        }
+        // --- USERS: set password manually ---
+        elseif ($section === 'users' && $action === 'set_password') {
+            $uid = (int)$_POST['user_id'];
+            $new_pass = $_POST['new_password'] ?? '';
+            if (strlen($new_pass) < 8) {
+                $msg = 'Password must be at least 8 characters.';
+            } else {
+                $hash = password_hash($new_pass, PASSWORD_DEFAULT);
+                $db->prepare("UPDATE users SET password_hash=?, reset_token=NULL, reset_expires=NULL WHERE id=?")->execute(array($hash, $uid));
+                $msg = 'Password updated manually.';
+            }
+            header("Location: console.php?s=users&edit=" . $uid . '&msg=' . urlencode($msg)); exit;
+        }
+        // --- USERS: update admin notes ---
+        elseif ($section === 'users' && $action === 'update_notes') {
+            $uid = (int)$_POST['user_id'];
+            $notes = trim($_POST['admin_notes'] ?? '');
+            $db->prepare("UPDATE users SET admin_notes=? WHERE id=?")->execute(array($notes ?: null, $uid));
+            $msg = 'Admin notes saved.';
+            header("Location: console.php?s=users&edit=" . $uid . '&msg=' . urlencode($msg)); exit;
+        }
+        // --- USERS: resend verification email ---
+        elseif ($section === 'users' && $action === 'resend_verify') {
+            require_once($_SERVER['DOCUMENT_ROOT'] . '/api/smtp_mailer.php');
+            $uid = (int)$_POST['user_id'];
+            $user = $db->prepare("SELECT id, email, display_name, is_verified FROM users WHERE id=?");
+            $user->execute(array($uid));
+            $user = $user->fetch();
+            if ($user && !$user['is_verified']) {
+                $token = bin2hex(random_bytes(32));
+                $expires = date('Y-m-d H:i:s', strtotime('+24 hours'));
+                $db->prepare("UPDATE users SET verify_token=?, verify_expires=? WHERE id=?")->execute(array($token, $expires, $uid));
+                $site_url = 'https://biltest.roving-i.com.au';
+                $verify_url = $site_url . '/api/user.php?action=verify&token=' . urlencode($token);
+                $html = '<html><body style="font-family:Arial,sans-serif;background:#f7f5f0;margin:0;padding:0;">'
+                      . '<table width="100%" cellpadding="0" cellspacing="0" style="background:#f7f5f0;padding:40px 0;">'
+                      . '<tr><td align="center">'
+                      . '<table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;">'
+                      . '<tr><td style="background:#0c7c84;padding:30px 40px;text-align:center;"><h1 style="color:#fff;margin:0;font-size:24px;">Build in Lombok</h1></td></tr>'
+                      . '<tr><td style="padding:40px;">'
+                      . '<p style="color:#333;font-size:16px;">Hi ' . htmlspecialchars($user['display_name']) . ',</p>'
+                      . '<p style="color:#333;font-size:16px;">Please verify your email by clicking below:</p>'
+                      . '<p style="text-align:center;margin:30px 0;"><a href="' . $verify_url . '" style="background:#0c7c84;color:#fff;text-decoration:none;padding:14px 32px;border-radius:6px;font-size:16px;font-weight:bold;display:inline-block;">Verify Email</a></p>'
+                      . '<p style="color:#666;font-size:14px;">This link expires in 24 hours.</p>'
+                      . '</td></tr></table></td></tr></table></body></html>';
+                $text = 'Hi ' . $user['display_name'] . ", verify your email: " . $verify_url;
+                $result = smtp_send_mail($user['email'], 'Verify your Build in Lombok account', $html, $text);
+                $msg = ($result === true) ? 'Verification email sent to ' . $user['email'] . '.' : 'Email failed: ' . $result;
+            } else {
+                $msg = $user ? 'User is already verified.' : 'User not found.';
+            }
+            header("Location: console.php?s=users&edit=" . $uid . '&msg=' . urlencode($msg)); exit;
+        }
+        // --- USERS: delete user ---
+        elseif ($section === 'users' && $action === 'delete_user') {
+            $uid = (int)$_POST['user_id'];
+            $confirm = $_POST['confirm_delete'] ?? '';
+            if ($confirm !== 'DELETE') {
+                $msg = 'You must type DELETE to confirm.';
+            } else {
+                // Cascading FKs handle favorites, claims, submissions, provider_owners
+                $db->prepare("DELETE FROM users WHERE id=?")->execute(array($uid));
+                $msg = 'User deleted permanently.';
+            }
             header("Location: console.php?s=users&msg=" . urlencode($msg)); exit;
         }
         // --- AGENTS: toggle verified ---
@@ -1507,21 +1636,181 @@ elseif ($section === 'lookups'):
 
 <?php
 // ═══════════════════════════════════════════════════════════════
-// USERS LIST
+// USERS LIST + DETAIL EDIT
 // ═══════════════════════════════════════════════════════════════
 elseif ($section === 'users'):
+    $edit_uid = isset($_GET['edit']) ? (int)$_GET['edit'] : 0;
+
+    // ─── SINGLE USER EDIT VIEW ───
+    if ($edit_uid > 0):
+        $eu = $db->prepare("SELECT * FROM users WHERE id=?");
+        $eu->execute(array($edit_uid));
+        $eu = $eu->fetch();
+        if (!$eu) { echo '<p>User not found.</p>'; return; }
+        // Count related data
+        $fav_count = $db->prepare("SELECT COUNT(*) FROM user_favorites WHERE user_id=?"); $fav_count->execute(array($edit_uid)); $fav_count = $fav_count->fetchColumn();
+        $claim_count_u = $db->prepare("SELECT COUNT(*) FROM claim_requests WHERE user_id=?"); $claim_count_u->execute(array($edit_uid)); $claim_count_u = $claim_count_u->fetchColumn();
+        $owned_count = $db->prepare("SELECT COUNT(*) FROM provider_owners WHERE user_id=?"); $owned_count->execute(array($edit_uid)); $owned_count = $owned_count->fetchColumn();
+?>
+<p><a href="?s=users" style="color:#0c7c84">&larr; Back to Users</a></p>
+<h1>Manage User: <?= htmlspecialchars($eu['display_name']) ?></h1>
+
+<!-- User Info Card -->
+<div class="card" style="margin-bottom:20px">
+  <table>
+    <tr><td style="width:160px;font-weight:600;color:#666">ID</td><td><?= $eu['id'] ?></td></tr>
+    <tr><td style="font-weight:600;color:#666">Email</td><td><?= htmlspecialchars($eu['email']) ?></td></tr>
+    <tr><td style="font-weight:600;color:#666">Display Name</td><td><?= htmlspecialchars($eu['display_name']) ?></td></tr>
+    <tr><td style="font-weight:600;color:#666">Phone</td><td><?= htmlspecialchars($eu['phone'] ?: '—') ?></td></tr>
+    <tr><td style="font-weight:600;color:#666">WhatsApp</td><td><?= htmlspecialchars($eu['whatsapp_number'] ?: '—') ?></td></tr>
+    <tr><td style="font-weight:600;color:#666">Verified</td><td><?= $eu['is_verified'] ? '<span class="badge b-green">Yes</span>' : '<span class="badge b-yellow">No</span>' ?></td></tr>
+    <tr><td style="font-weight:600;color:#666">Status</td><td><?= $eu['is_active'] ? '<span class="badge b-green">Active</span>' : '<span class="badge b-red">Inactive</span>' ?></td></tr>
+    <tr><td style="font-weight:600;color:#666">Role</td><td><span class="badge <?= $eu['role']==='admin'?'b-red':($eu['role']==='provider_owner'?'b-blue':'b-green') ?>"><?= $eu['role'] ?></span></td></tr>
+    <tr><td style="font-weight:600;color:#666">Subscription</td><td><span class="badge <?= $eu['subscription_tier']==='premium'?'b-blue':($eu['subscription_tier']==='basic'?'b-green':'') ?>"><?= $eu['subscription_tier'] ?: 'free' ?></span>
+      <?php if (isset($eu['subscription_expires_at']) && $eu['subscription_expires_at']): ?>
+        <span style="color:#888;font-size:12px"> expires <?= $eu['subscription_expires_at'] ?></span>
+      <?php endif; ?>
+    </td></tr>
+    <tr><td style="font-weight:600;color:#666">Joined</td><td><?= $eu['created_at'] ?></td></tr>
+    <tr><td style="font-weight:600;color:#666">Last Login</td><td><?= $eu['last_login_at'] ?: 'Never' ?></td></tr>
+    <tr><td style="font-weight:600;color:#666">Favorites</td><td><?= $fav_count ?></td></tr>
+    <tr><td style="font-weight:600;color:#666">Claim Requests</td><td><?= $claim_count_u ?></td></tr>
+    <tr><td style="font-weight:600;color:#666">Owned Providers</td><td><?= $owned_count ?></td></tr>
+  </table>
+</div>
+
+<!-- Actions Grid -->
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-bottom:20px">
+
+  <!-- Toggle Verified -->
+  <div class="card" style="padding:16px">
+    <h3 style="margin:0 0 10px;font-size:14px;color:#666">Email Verification</h3>
+    <div style="display:flex;gap:8px;align-items:center">
+      <form method="POST" action="?s=users&a=toggle_verified">
+        <input type="hidden" name="user_id" value="<?= $eu['id'] ?>">
+        <button class="btn btn-sm <?= $eu['is_verified'] ? 'btn-o' : 'btn-p' ?>"><?= $eu['is_verified'] ? 'Mark Unverified' : 'Mark Verified' ?></button>
+      </form>
+      <?php if (!$eu['is_verified']): ?>
+      <form method="POST" action="?s=users&a=resend_verify">
+        <input type="hidden" name="user_id" value="<?= $eu['id'] ?>">
+        <button class="btn btn-sm btn-o" title="Sends verification email">Resend Verification Email</button>
+      </form>
+      <?php endif; ?>
+    </div>
+  </div>
+
+  <!-- Toggle Active -->
+  <div class="card" style="padding:16px">
+    <h3 style="margin:0 0 10px;font-size:14px;color:#666">Account Status</h3>
+    <form method="POST" action="?s=users&a=toggle_user">
+      <input type="hidden" name="user_id" value="<?= $eu['id'] ?>">
+      <input type="hidden" name="return_edit" value="1">
+      <button class="btn btn-sm <?= $eu['is_active'] ? 'btn-o' : 'btn-p' ?>"><?= $eu['is_active'] ? 'Deactivate Account' : 'Activate Account' ?></button>
+    </form>
+    <p style="margin:8px 0 0;font-size:12px;color:#999"><?= $eu['is_active'] ? 'User can log in and use the site.' : 'User is blocked from logging in.' ?></p>
+  </div>
+
+  <!-- Change Role -->
+  <div class="card" style="padding:16px">
+    <h3 style="margin:0 0 10px;font-size:14px;color:#666">User Role</h3>
+    <form method="POST" action="?s=users&a=change_role" style="display:flex;gap:8px;align-items:center">
+      <input type="hidden" name="user_id" value="<?= $eu['id'] ?>">
+      <select name="role" style="flex:1">
+        <option value="user" <?= $eu['role']==='user'?'selected':'' ?>>user</option>
+        <option value="provider_owner" <?= $eu['role']==='provider_owner'?'selected':'' ?>>provider_owner</option>
+        <option value="admin" <?= $eu['role']==='admin'?'selected':'' ?>>admin</option>
+      </select>
+      <button class="btn btn-sm btn-p">Update Role</button>
+    </form>
+  </div>
+
+  <!-- Change Subscription Tier -->
+  <div class="card" style="padding:16px">
+    <h3 style="margin:0 0 10px;font-size:14px;color:#666">Subscription Tier</h3>
+    <form method="POST" action="?s=users&a=change_tier">
+      <input type="hidden" name="user_id" value="<?= $eu['id'] ?>">
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <select name="subscription_tier" style="flex:1">
+          <option value="free" <?= ($eu['subscription_tier'] ?: 'free')==='free'?'selected':'' ?>>Free</option>
+          <option value="basic" <?= $eu['subscription_tier']==='basic'?'selected':'' ?>>Basic</option>
+          <option value="premium" <?= $eu['subscription_tier']==='premium'?'selected':'' ?>>Premium</option>
+        </select>
+        <select name="subscription_period" style="flex:1">
+          <option value="">No period</option>
+          <option value="monthly" <?= ($eu['subscription_period'] ?? '')==='monthly'?'selected':'' ?>>Monthly</option>
+          <option value="annual" <?= ($eu['subscription_period'] ?? '')==='annual'?'selected':'' ?>>Annual</option>
+          <option value="lifetime" <?= ($eu['subscription_period'] ?? '')==='lifetime'?'selected':'' ?>>Lifetime</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <label style="font-size:12px;color:#666;white-space:nowrap">Expires</label>
+        <input type="datetime-local" name="subscription_expires_at" value="<?= $eu['subscription_expires_at'] ? date('Y-m-d\TH:i', strtotime($eu['subscription_expires_at'])) : '' ?>" style="flex:1">
+        <button class="btn btn-sm btn-p">Update Tier</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Send Password Reset Email -->
+  <div class="card" style="padding:16px">
+    <h3 style="margin:0 0 10px;font-size:14px;color:#666">Password Reset (Send Email)</h3>
+    <form method="POST" action="?s=users&a=send_reset" onsubmit="return confirm('Send a password reset email to <?= htmlspecialchars($eu['email']) ?>?')">
+      <input type="hidden" name="user_id" value="<?= $eu['id'] ?>">
+      <button class="btn btn-sm btn-o">Send Reset Email</button>
+    </form>
+    <p style="margin:8px 0 0;font-size:12px;color:#999">Sends a link to their email. They click it and set a new password. Link expires in 1 hour.</p>
+  </div>
+
+  <!-- Set Password Manually -->
+  <div class="card" style="padding:16px">
+    <h3 style="margin:0 0 10px;font-size:14px;color:#666">Set Password Manually</h3>
+    <form method="POST" action="?s=users&a=set_password" onsubmit="return confirm('Overwrite this user\'s password?')" style="display:flex;gap:8px;align-items:center">
+      <input type="hidden" name="user_id" value="<?= $eu['id'] ?>">
+      <input type="text" name="new_password" placeholder="New password (min 8 chars)" required minlength="8" style="flex:1">
+      <button class="btn btn-sm btn-p">Set Password</button>
+    </form>
+    <p style="margin:8px 0 0;font-size:12px;color:#999">Directly sets the password. No email is sent.</p>
+  </div>
+
+</div>
+
+<!-- Admin Notes -->
+<div class="card" style="margin-bottom:20px;padding:16px">
+  <h3 style="margin:0 0 10px;font-size:14px;color:#666">Admin Notes</h3>
+  <form method="POST" action="?s=users&a=update_notes">
+    <input type="hidden" name="user_id" value="<?= $eu['id'] ?>">
+    <textarea name="admin_notes" rows="3" style="width:100%;margin-bottom:8px" placeholder="Internal notes about this user (not visible to them)..."><?= htmlspecialchars($eu['admin_notes'] ?? '') ?></textarea>
+    <button class="btn btn-sm btn-p">Save Notes</button>
+  </form>
+</div>
+
+<!-- Danger Zone -->
+<div class="card" style="border:2px solid #e74c3c;padding:16px">
+  <h3 style="margin:0 0 10px;font-size:14px;color:#e74c3c">Danger Zone</h3>
+  <form method="POST" action="?s=users&a=delete_user" onsubmit="return confirm('PERMANENTLY delete this user and all their data? This cannot be undone.')" style="display:flex;gap:8px;align-items:center">
+    <input type="hidden" name="user_id" value="<?= $eu['id'] ?>">
+    <input type="text" name="confirm_delete" placeholder="Type DELETE to confirm" style="flex:1;max-width:200px" required>
+    <button class="btn btn-sm" style="background:#e74c3c;color:#fff;border:none">Delete User Permanently</button>
+  </form>
+  <p style="margin:8px 0 0;font-size:12px;color:#e74c3c">Removes user and all their favorites, claims, submissions, and provider ownership records.</p>
+</div>
+
+<?php
+    // ─── USERS LIST VIEW ───
+    else:
     $f_status = $_GET['fs'] ?? '';
+    $f_tier = $_GET['ft'] ?? '';
     $q = $_GET['q'] ?? '';
-    $where = '1=1'; $params = [];
+    $where = '1=1'; $params = array();
     if ($q) { $where .= " AND (email LIKE ? OR display_name LIKE ?)"; $params[] = "%{$q}%"; $params[] = "%{$q}%"; }
     if ($f_status === 'active') { $where .= " AND is_active=1"; }
     elseif ($f_status === 'inactive') { $where .= " AND is_active=0"; }
     elseif ($f_status === 'unverified') { $where .= " AND is_verified=0"; }
+    if ($f_tier && in_array($f_tier, array('free','basic','premium'))) { $where .= " AND subscription_tier=?"; $params[] = $f_tier; }
     try {
         $stmt = $db->prepare("SELECT * FROM users WHERE {$where} ORDER BY created_at DESC LIMIT 200");
         $stmt->execute($params);
         $users = $stmt->fetchAll();
-    } catch (Exception $e) { $users = []; }
+    } catch (Exception $e) { $users = array(); }
 ?>
 <h1>Users (<?= count($users) ?>)</h1>
 <div class="search-bar">
@@ -1529,26 +1818,35 @@ elseif ($section === 'users'):
         <input type="hidden" name="s" value="users">
         <input type="text" name="q" placeholder="Search email or name..." value="<?= htmlspecialchars($q) ?>" style="flex:1;min-width:140px">
         <select name="fs">
-            <option value="">All users</option>
+            <option value="">All statuses</option>
             <option value="active" <?= $f_status==='active'?'selected':'' ?>>Active</option>
             <option value="inactive" <?= $f_status==='inactive'?'selected':'' ?>>Inactive</option>
             <option value="unverified" <?= $f_status==='unverified'?'selected':'' ?>>Unverified</option>
+        </select>
+        <select name="ft">
+            <option value="">All tiers</option>
+            <option value="free" <?= $f_tier==='free'?'selected':'' ?>>Free</option>
+            <option value="basic" <?= $f_tier==='basic'?'selected':'' ?>>Basic</option>
+            <option value="premium" <?= $f_tier==='premium'?'selected':'' ?>>Premium</option>
         </select>
         <button class="btn btn-p">Filter</button>
     </form>
 </div>
 <div class="card">
 <table>
-    <tr><th>Email</th><th>Name</th><th>Role</th><th>Verified</th><th>Status</th><th>Joined</th><th>Actions</th></tr>
+    <tr><th>Email</th><th>Name</th><th>Role</th><th>Tier</th><th>Verified</th><th>Status</th><th>Last Login</th><th>Joined</th><th>Actions</th></tr>
     <?php foreach ($users as $u): ?>
     <tr>
         <td><?= htmlspecialchars($u['email']) ?></td>
         <td><?= htmlspecialchars($u['display_name']) ?></td>
         <td><span class="badge <?= $u['role']==='admin'?'b-red':($u['role']==='provider_owner'?'b-blue':'b-green') ?>"><?= $u['role'] ?></span></td>
+        <td><span class="badge <?= ($u['subscription_tier'] ?? 'free')==='premium'?'b-blue':(($u['subscription_tier'] ?? 'free')==='basic'?'b-green':'') ?>"><?= $u['subscription_tier'] ?: 'free' ?></span></td>
         <td><?= $u['is_verified'] ? '<span class="badge b-green">Yes</span>' : '<span class="badge b-yellow">No</span>' ?></td>
         <td><?= $u['is_active'] ? '<span class="badge b-green">Active</span>' : '<span class="badge b-red">Inactive</span>' ?></td>
+        <td style="color:#888;font-size:12px"><?= $u['last_login_at'] ?: 'Never' ?></td>
         <td style="color:#888;font-size:12px"><?= $u['created_at'] ?></td>
-        <td>
+        <td style="white-space:nowrap">
+            <a href="?s=users&edit=<?= $u['id'] ?>" class="btn btn-p btn-sm">Manage</a>
             <form method="POST" action="?s=users&a=toggle_user" style="display:inline">
                 <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
                 <button class="btn btn-o btn-sm"><?= $u['is_active'] ? 'Deactivate' : 'Activate' ?></button>
@@ -1558,6 +1856,7 @@ elseif ($section === 'users'):
     <?php endforeach; ?>
 </table>
 </div>
+<?php endif; ?>
 
 <?php
 // ═══════════════════════════════════════════════════════════════
