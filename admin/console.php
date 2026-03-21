@@ -631,6 +631,9 @@ function toggleSidebarSub(e,id){
             <a href="?s=lookups#lookup-project_statuses" style="padding-left:32px;font-size:12px;">Project Statuses</a>
         </div>
     </div>
+    <h2>RAB Module</h2>
+    <a href="rab_tool.php">RAB Projects & Calculator</a>
+    <a href="rab.php">RAB Admin (Materials etc.)</a>
     <h2>Tools</h2>
     <a href="import.php">Google Maps Importer</a>
     <a href="scrape_listings.php">Property Listing Scraper</a>
