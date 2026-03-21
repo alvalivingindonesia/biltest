@@ -4146,7 +4146,7 @@
 }
 
 .rab-tab.active {
-  color: var(--color-heading);
+  color: #1a1814;
   background: #faf8f4;
   border-color: #faf8f4;
 }

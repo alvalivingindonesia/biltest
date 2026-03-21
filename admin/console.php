@@ -427,6 +427,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $msg = 'Listing deleted.';
             header("Location: console.php?s=listings&msg=" . urlencode($msg)); exit;
         }
+        // --- LISTINGS: edit ---
+        elseif ($section === 'listings' && $action === 'edit_listing') {
+            $lid = (int)$_POST['listing_id'];
+            $fields = array();
+            $vals = array();
+            $allowed = array('title','listing_type','area_key','price_usd','price_idr','land_size_sqm','land_size_are','building_size_sqm','bedrooms','bathrooms','short_description','source_url','contact_whatsapp','agent_id','admin_notes');
+            foreach ($allowed as $f) {
+                if (isset($_POST[$f])) {
+                    $fields[] = "`" . $f . "`=?";
+                    $v = trim($_POST[$f]);
+                    $vals[] = ($v === '') ? null : $v;
+                }
+            }
+            if (count($fields) > 0) {
+                $vals[] = $lid;
+                $db->prepare("UPDATE listings SET " . implode(',', $fields) . " WHERE id=?")->execute($vals);
+            }
+            $msg = 'Listing updated.';
+            header("Location: console.php?s=listings&msg=" . urlencode($msg)); exit;
+        }
         // --- SUBSCRIPTIONS: update user tier ---
         elseif ($section === 'subscriptions' && $action === 'update_tier') {
             $uid = (int)$_POST['user_id'];
@@ -1789,14 +1809,17 @@ elseif ($section === 'listings'):
         $stmt->execute($params);
         $listings = $stmt->fetchAll();
     } catch (Exception $e) { $listings = []; }
+    // Agents list for edit dropdown
+    $all_agents = array();
+    try { $all_agents = $db->query("SELECT id, display_name FROM agents ORDER BY display_name ASC")->fetchAll(); } catch (Exception $e) {}
     // Status badge colour helper
-    $status_badge = [
+    $status_badge = array(
         'draft'      => 'b-yellow',
         'active'     => 'b-green',
         'under_offer'=> 'b-blue',
         'sold'       => 'b-red',
         'expired'    => 'b-red',
-    ];
+    );
 ?>
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
     <h1 style="margin:0">Listings (<?= count($listings) ?>)</h1>
@@ -1825,63 +1848,115 @@ elseif ($section === 'listings'):
     <?php if ($q || $f_status || $f_approved !== '' || $f_area): ?><a href="?s=listings" class="btn btn-o">Clear</a><?php endif; ?>
 </form>
 <div class="card" style="padding:0;overflow-x:auto">
-<table>
-    <tr><th style="width:40px"></th><th>ID</th><th>Title</th><th>Type</th><th>Area</th><th>Agent</th><th>Price (USD)</th><th>Status</th><th>Approved</th><th>Featured</th><th>Created</th><th>Actions</th></tr>
+<table class="tbl" style="font-size:13px">
+<thead>
+    <tr><th style="width:36px"></th><th>Title / Source</th><th>Area</th><th>Agent</th><th>Land</th><th>Price</th><th>Status</th><th style="width:60px;text-align:center">Appr</th><th style="width:50px;text-align:center">Feat</th><th style="text-align:right">Actions</th></tr>
+</thead>
+<tbody>
     <?php foreach ($listings as $lst): ?>
-    <tr>
+    <tr id="lst-row-<?= $lst['id'] ?>">
         <td>
             <?php if (!empty($lst['primary_image'])): ?>
-            <img src="<?= htmlspecialchars($lst['primary_image']) ?>" alt="" style="width:40px;height:32px;object-fit:cover;border-radius:3px;display:block">
+            <img src="<?= htmlspecialchars($lst['primary_image']) ?>" alt="" style="width:36px;height:28px;object-fit:cover;border-radius:3px;display:block">
             <?php else: ?>
-            <div style="width:40px;height:32px;background:#e5e7eb;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#9ca3af">—</div>
+            <div style="width:36px;height:28px;background:#e5e7eb;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#9ca3af">—</div>
             <?php endif; ?>
         </td>
-        <td style="color:#888;font-size:12px"><?= $lst['id'] ?></td>
-        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="<?= htmlspecialchars($lst['title'] ?? '') ?>"><?= htmlspecialchars($lst['title'] ?? '-') ?></td>
-        <td><span class="badge b-blue"><?= htmlspecialchars($lst['listing_type'] ?? '-') ?></span></td>
-        <td><?= htmlspecialchars($lst['area_label'] ?? '-') ?></td>
-        <td><?= htmlspecialchars($lst['agent_name'] ?? '-') ?></td>
-        <td><?= $lst['price_usd'] ? '$'.number_format((float)$lst['price_usd']) : '-' ?></td>
-        <td><span class="badge <?= $status_badge[$lst['status']] ?? 'b-yellow' ?>"><?= htmlspecialchars($lst['status'] ?? '-') ?></span></td>
-        <td><?= $lst['is_approved'] ? '<span class="badge b-green">Y</span>' : '<span class="badge b-red">N</span>' ?></td>
-        <td><?= !empty($lst['is_featured']) ? '<span class="badge b-blue">Y</span>' : '<span class="badge b-yellow">N</span>' ?></td>
-        <td style="color:#888;font-size:12px;white-space:nowrap"><?= isset($lst['created_at']) ? substr($lst['created_at'],0,10) : '-' ?></td>
-        <td class="actions" style="white-space:nowrap">
-            <?php if (!$lst['is_approved'] && $lst['status'] !== 'draft'): ?>
-            <form method="POST" action="?s=listings&a=approve_listing" style="display:inline">
-                <input type="hidden" name="listing_id" value="<?= $lst['id'] ?>">
-                <button class="btn btn-g btn-sm">Approve</button>
-            </form>
-            <?php elseif ($lst['is_approved']): ?>
-            <form method="POST" action="?s=listings&a=reject_listing" style="display:inline" onsubmit="return confirm('Reject this listing?')">
-                <input type="hidden" name="listing_id" value="<?= $lst['id'] ?>">
-                <button class="btn btn-o btn-sm">Reject</button>
-            </form>
+        <td>
+            <?php if (!empty($lst['source_url'])): ?>
+            <a href="<?= htmlspecialchars($lst['source_url']) ?>" target="_blank" rel="noopener" title="Open on <?= htmlspecialchars($lst['source_site'] ?? 'source') ?>" style="color:#0c7c84;text-decoration:none;font-weight:500"><?= htmlspecialchars(mb_strimwidth($lst['title'] ?? '-', 0, 50, '...')) ?></a>
+            <?php else: ?>
+            <span style="font-weight:500"><?= htmlspecialchars(mb_strimwidth($lst['title'] ?? '-', 0, 50, '...')) ?></span>
             <?php endif; ?>
-            <form method="POST" action="?s=listings&a=toggle_featured" style="display:inline">
-                <input type="hidden" name="listing_id" value="<?= $lst['id'] ?>">
-                <button class="btn btn-o btn-sm"><?= !empty($lst['is_featured']) ? 'Unfeature' : 'Feature' ?></button>
-            </form>
+            <div style="font-size:11px;color:#94a3b8;margin-top:1px">#<?= $lst['id'] ?> · <?= htmlspecialchars($lst['listing_type'] ?? $lst['listing_type_key'] ?? '-') ?> · <?= isset($lst['created_at']) ? substr($lst['created_at'],0,10) : '' ?></div>
+        </td>
+        <td style="font-size:12px"><?= htmlspecialchars($lst['area_label'] ?? '-') ?></td>
+        <td style="font-size:12px"><?= htmlspecialchars($lst['agent_name'] ?? 'Private Seller') ?></td>
+        <td style="font-size:12px;white-space:nowrap"><?= $lst['land_size_are'] ? number_format((float)$lst['land_size_are'],0) . ' are' : ($lst['land_size_sqm'] ? number_format((float)$lst['land_size_sqm']) . ' m²' : '-') ?></td>
+        <td style="font-size:12px;white-space:nowrap"><?= $lst['price_usd'] ? '$' . number_format((float)$lst['price_usd']) : ($lst['price_idr'] ? 'Rp ' . number_format((float)$lst['price_idr'],0,',','.') : '-') ?></td>
+        <td>
             <form method="POST" action="?s=listings&a=change_status" style="display:inline">
                 <input type="hidden" name="listing_id" value="<?= $lst['id'] ?>">
-                <select name="new_status" onchange="this.form.submit()" style="padding:3px 6px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px;cursor:pointer">
-                    <option value="">— set status —</option>
-                    <option value="draft">draft</option>
-                    <option value="active">active</option>
-                    <option value="under_offer">under_offer</option>
-                    <option value="sold">sold</option>
-                    <option value="expired">expired</option>
+                <select name="new_status" onchange="this.form.submit()" style="padding:2px 4px;font-size:11px;border:1px solid #d0d0d0;border-radius:4px;cursor:pointer;background:<?= $lst['status']==='active'?'#dcfce7':($lst['status']==='sold'||$lst['status']==='expired'?'#fee2e2':'#fef9c3') ?>">
+                    <option value="draft" <?= $lst['status']==='draft'?'selected':'' ?>>draft</option>
+                    <option value="active" <?= $lst['status']==='active'?'selected':'' ?>>active</option>
+                    <option value="under_offer" <?= $lst['status']==='under_offer'?'selected':'' ?>>under_offer</option>
+                    <option value="sold" <?= $lst['status']==='sold'?'selected':'' ?>>sold</option>
+                    <option value="expired" <?= $lst['status']==='expired'?'selected':'' ?>>expired</option>
                 </select>
             </form>
-            <form method="POST" action="?s=listings&a=delete_listing" style="display:inline" onsubmit="return confirm('Delete listing permanently?')">
+        </td>
+        <td style="text-align:center">
+            <form method="POST" action="?s=listings&a=<?= $lst['is_approved'] ? 'reject_listing' : 'approve_listing' ?>" style="display:inline"<?= $lst['is_approved'] ? ' onsubmit="return confirm(\'Reject this listing?\')"' : '' ?>>
                 <input type="hidden" name="listing_id" value="<?= $lst['id'] ?>">
-                <button class="btn btn-r btn-sm">Del</button>
+                <button type="submit" style="background:none;border:none;cursor:pointer;font-size:16px" title="<?= $lst['is_approved'] ? 'Click to reject' : 'Click to approve' ?>"><?= $lst['is_approved'] ? '✅' : '❌' ?></button>
+            </form>
+        </td>
+        <td style="text-align:center">
+            <form method="POST" action="?s=listings&a=toggle_featured" style="display:inline">
+                <input type="hidden" name="listing_id" value="<?= $lst['id'] ?>">
+                <button type="submit" style="background:none;border:none;cursor:pointer;font-size:16px" title="<?= !empty($lst['is_featured']) ? 'Unfeature' : 'Feature' ?>"><?= !empty($lst['is_featured']) ? '⭐' : '☆' ?></button>
+            </form>
+        </td>
+        <td style="text-align:right;white-space:nowrap">
+            <button type="button" class="btn btn-o btn-sm" onclick="toggleListingEdit(<?= $lst['id'] ?>)" style="font-size:11px;padding:3px 10px">Edit</button>
+            <form method="POST" action="?s=listings&a=delete_listing" style="display:inline" onsubmit="return confirm('Delete listing #<?= $lst['id'] ?> permanently?')">
+                <input type="hidden" name="listing_id" value="<?= $lst['id'] ?>">
+                <button class="btn btn-r btn-sm" style="font-size:11px;padding:3px 8px">Del</button>
+            </form>
+        </td>
+    </tr>
+    <!-- Edit row -->
+    <tr id="lst-edit-<?= $lst['id'] ?>" style="display:none;background:rgba(12,124,132,.04)">
+        <td colspan="10">
+            <form method="POST" action="?s=listings&a=edit_listing" style="padding:12px 4px">
+                <input type="hidden" name="listing_id" value="<?= $lst['id'] ?>">
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 16px;margin-bottom:10px">
+                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Title</label><input type="text" name="title" value="<?= htmlspecialchars($lst['title'] ?? '') ?>" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
+                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Type</label><input type="text" name="listing_type" value="<?= htmlspecialchars($lst['listing_type'] ?? $lst['listing_type_key'] ?? '') ?>" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
+                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Area</label>
+                        <select name="area_key" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px">
+                            <option value="">—</option>
+                            <?php foreach ($areas_list as $a): ?><option value="<?= $a['key'] ?>" <?= ($lst['area_key'] ?? '')===$a['key']?'selected':'' ?>><?= htmlspecialchars($a['label']) ?></option><?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Agent</label>
+                        <select name="agent_id" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px">
+                            <option value="">— No Agent —</option>
+                            <?php foreach ($all_agents as $ag): ?><option value="<?= $ag['id'] ?>" <?= ((int)($lst['agent_id'] ?? 0))===(int)$ag['id']?'selected':'' ?>><?= htmlspecialchars($ag['display_name']) ?> (#<?= $ag['id'] ?>)</option><?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Price USD</label><input type="number" name="price_usd" value="<?= htmlspecialchars($lst['price_usd'] ?? '') ?>" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
+                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Price IDR</label><input type="number" name="price_idr" value="<?= htmlspecialchars($lst['price_idr'] ?? '') ?>" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
+                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Land (m²)</label><input type="number" name="land_size_sqm" value="<?= htmlspecialchars($lst['land_size_sqm'] ?? '') ?>" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
+                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Land (are)</label><input type="number" name="land_size_are" value="<?= htmlspecialchars($lst['land_size_are'] ?? '') ?>" step="0.01" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
+                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Building (m²)</label><input type="number" name="building_size_sqm" value="<?= htmlspecialchars($lst['building_size_sqm'] ?? '') ?>" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
+                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Bedrooms</label><input type="number" name="bedrooms" value="<?= htmlspecialchars($lst['bedrooms'] ?? '') ?>" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
+                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Bathrooms</label><input type="number" name="bathrooms" value="<?= htmlspecialchars($lst['bathrooms'] ?? '') ?>" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
+                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">WhatsApp</label><input type="text" name="contact_whatsapp" value="<?= htmlspecialchars($lst['contact_whatsapp'] ?? '') ?>" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin-bottom:10px">
+                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Source URL</label><input type="url" name="source_url" value="<?= htmlspecialchars($lst['source_url'] ?? '') ?>" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
+                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Short Description</label><input type="text" name="short_description" value="<?= htmlspecialchars($lst['short_description'] ?? '') ?>" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
+                </div>
+                <div style="margin-bottom:10px"><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Admin Notes</label><textarea name="admin_notes" rows="2" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px;resize:vertical"><?= htmlspecialchars($lst['admin_notes'] ?? '') ?></textarea></div>
+                <div style="display:flex;gap:8px">
+                    <button type="submit" class="btn btn-p" style="font-size:12px;padding:5px 16px">Save Changes</button>
+                    <button type="button" class="btn btn-o" onclick="toggleListingEdit(<?= $lst['id'] ?>)" style="font-size:12px;padding:5px 12px">Cancel</button>
+                </div>
             </form>
         </td>
     </tr>
     <?php endforeach; ?>
+</tbody>
 </table>
 </div>
+<script>
+var toggleListingEdit = function(id) {
+    var row = document.getElementById('lst-edit-' + id);
+    if (row) row.style.display = row.style.display === 'none' ? '' : 'none';
+};
+</script>
 <?php if (empty($listings)): ?>
 <div class="card" style="text-align:center;color:#888">No listings found.</div>
 <?php endif; ?>
