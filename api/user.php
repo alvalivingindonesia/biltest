@@ -299,7 +299,7 @@ function handle_me(): void {
     if (!$uid) json_out(['user' => null]);
 
     $db = get_db();
-    $stmt = $db->prepare("SELECT id, email, display_name, phone, whatsapp_number, role, created_at FROM users WHERE id = ? AND is_active = 1");
+    $stmt = $db->prepare("SELECT id, email, display_name, phone, whatsapp_number, role, subscription_tier, subscription_period, subscription_expires_at, created_at FROM users WHERE id = ? AND is_active = 1");
     $stmt->execute([$uid]);
     $user = $stmt->fetch();
 
@@ -307,6 +307,15 @@ function handle_me(): void {
         session_destroy();
         json_out(['user' => null]);
     }
+
+    // Check if subscription expired
+    $tier = $user['subscription_tier'] ? $user['subscription_tier'] : 'free';
+    if ($tier !== 'free' && $user['subscription_expires_at']) {
+        if (strtotime($user['subscription_expires_at']) < time()) {
+            $tier = 'free'; // expired
+        }
+    }
+    $user['effective_tier'] = $tier;
 
     // Check if user owns any providers
     $owns = $db->prepare("SELECT provider_id FROM provider_owners WHERE user_id = ?");

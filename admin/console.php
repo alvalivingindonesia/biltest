@@ -427,6 +427,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $msg = 'Listing deleted.';
             header("Location: console.php?s=listings&msg=" . urlencode($msg)); exit;
         }
+        // --- SUBSCRIPTIONS: update user tier ---
+        elseif ($section === 'subscriptions' && $action === 'update_tier') {
+            $uid = (int)$_POST['user_id'];
+            $tier = $_POST['subscription_tier'];
+            $period = $_POST['subscription_period'] ?: null;
+            $expires = $_POST['subscription_expires_at'] ?: null;
+            $auto_renew = isset($_POST['subscription_auto_renew']) ? 1 : 0;
+            if (!in_array($tier, ['free','basic','premium'])) $tier = 'free';
+            if ($period && !in_array($period, ['monthly','annual','lifetime'])) $period = null;
+            $started = ($tier !== 'free') ? date('Y-m-d H:i:s') : null;
+            $db->prepare("UPDATE users SET subscription_tier=?, subscription_period=?, subscription_started_at=COALESCE(subscription_started_at, ?), subscription_expires_at=?, subscription_auto_renew=? WHERE id=?")
+               ->execute([$tier, $period, $started, $expires, $auto_renew, $uid]);
+            $msg = 'User subscription updated.';
+            header("Location: console.php?s=subscriptions&msg=" . urlencode($msg)); exit;
+        }
+        // --- FEATURE ACCESS: update ---
+        elseif ($section === 'feature_access' && $action === 'update_feature') {
+            $fid = (int)$_POST['feature_id'];
+            $tier_free = isset($_POST['tier_free']) ? 1 : 0;
+            $tier_basic = isset($_POST['tier_basic']) ? 1 : 0;
+            $tier_premium = isset($_POST['tier_premium']) ? 1 : 0;
+            $require_login = isset($_POST['require_login']) ? 1 : 0;
+            $is_active = isset($_POST['is_active']) ? 1 : 0;
+            $db->prepare("UPDATE feature_access SET tier_free=?, tier_basic=?, tier_premium=?, require_login=?, is_active=? WHERE id=?")
+               ->execute([$tier_free, $tier_basic, $tier_premium, $require_login, $is_active, $fid]);
+            $msg = 'Feature access updated.';
+            header("Location: console.php?s=feature_access&msg=" . urlencode($msg)); exit;
+        }
+        // --- FEATURE ACCESS: add new feature ---
+        elseif ($section === 'feature_access' && $action === 'add_feature') {
+            $key = trim($_POST['feature_key']);
+            $label = trim($_POST['feature_label']);
+            $desc = trim($_POST['description'] ?? '');
+            $tier_free = isset($_POST['tier_free']) ? 1 : 0;
+            $tier_basic = isset($_POST['tier_basic']) ? 1 : 0;
+            $tier_premium = isset($_POST['tier_premium']) ? 1 : 0;
+            $require_login = isset($_POST['require_login']) ? 1 : 0;
+            if (!$key || !$label) { $msg = 'Error: Key and label required.'; }
+            else {
+                $db->prepare("INSERT INTO feature_access (feature_key, feature_label, description, tier_free, tier_basic, tier_premium, require_login, sort_order) VALUES (?,?,?,?,?,?,?, (SELECT COALESCE(MAX(s.sort_order),0)+1 FROM (SELECT sort_order FROM feature_access) s))")
+                   ->execute([$key, $label, $desc, $tier_free, $tier_basic, $tier_premium, $require_login]);
+                $msg = 'Feature added.';
+                header("Location: console.php?s=feature_access&msg=" . urlencode($msg)); exit;
+            }
+        }
+        // --- FEATURE ACCESS: delete ---
+        elseif ($section === 'feature_access' && $action === 'delete_feature') {
+            $fid = (int)$_POST['feature_id'];
+            $db->prepare("DELETE FROM feature_access WHERE id=?")->execute([$fid]);
+            $msg = 'Feature removed.';
+            header("Location: console.php?s=feature_access&msg=" . urlencode($msg)); exit;
+        }
     } catch (Exception $e) {
         $msg = 'Error: ' . $e->getMessage();
     }
@@ -634,6 +686,9 @@ function toggleSidebarSub(e,id){
     <h2>RAB Module</h2>
     <a href="rab_tool.php">RAB Projects & Calculator</a>
     <a href="rab.php">RAB Admin (Materials etc.)</a>
+    <h2>Subscriptions</h2>
+    <a href="?s=subscriptions" class="<?= $section==='subscriptions'?'active':'' ?>">User Subscriptions</a>
+    <a href="?s=feature_access" class="<?= $section==='feature_access'?'active':'' ?>">Feature Access</a>
     <h2>Tools</h2>
     <a href="import.php">Google Maps Importer</a>
     <a href="scrape_listings.php">Property Listing Scraper</a>
@@ -2094,6 +2149,136 @@ function triggerReviewCheck(btn) {
         });
 }
 </script>
+
+<?php
+// ═══════════════════════════════════════════════════════════════
+// SUBSCRIPTIONS MANAGEMENT (INLINE)
+// ═══════════════════════════════════════════════════════════════
+elseif ($section === 'subscriptions'):
+    $sub_users_inline = [];
+    try {
+        $sub_users_inline = $db->query("SELECT id, email, display_name, role, subscription_tier, subscription_period, subscription_started_at, subscription_expires_at, subscription_auto_renew, is_active, created_at FROM users ORDER BY subscription_tier DESC, display_name ASC")->fetchAll();
+    } catch (Exception $e) { $sub_users_inline = []; }
+?>
+<h1>User Subscriptions</h1>
+<p style="color:#64748b;margin-bottom:16px">Manage user subscription tiers, periods, and expiration dates.</p>
+<table class="tbl">
+<thead><tr><th>ID</th><th>User</th><th>Email</th><th>Role</th><th>Tier</th><th>Period</th><th>Expires</th><th>Auto-Renew</th><th>Actions</th></tr></thead>
+<tbody>
+<?php foreach ($sub_users_inline as $su): ?>
+<tr>
+    <td><?= $su['id'] ?></td>
+    <td><?= htmlspecialchars($su['display_name']) ?></td>
+    <td style="font-size:12px"><?= htmlspecialchars($su['email']) ?></td>
+    <td><span style="background:<?= $su['role']==='admin'?'#dc2626':($su['role']==='provider_owner'?'#2563eb':'#64748b') ?>;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px"><?= $su['role'] ?></span></td>
+    <td><span style="background:<?= $su['subscription_tier']==='premium'?'#0c7c84':($su['subscription_tier']==='basic'?'#2563eb':'#94a3b8') ?>;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px"><?= strtoupper($su['subscription_tier'] ?: 'free') ?></span></td>
+    <td><?= $su['subscription_period'] ?: '—' ?></td>
+    <td style="font-size:12px"><?= $su['subscription_expires_at'] ? date('d M Y', strtotime($su['subscription_expires_at'])) : '—' ?></td>
+    <td><?= $su['subscription_auto_renew'] ? '✓' : '—' ?></td>
+    <td><button class="btn btn-sm btn-o" onclick="var r=document.getElementById('erow-<?= $su['id'] ?>');r.style.display=r.style.display==='none'?'':'none'" type="button" style="font-size:11px;padding:3px 10px">Edit</button></td>
+</tr>
+<tr id="erow-<?= $su['id'] ?>" style="display:none;background:rgba(12,124,132,.04)">
+    <td colspan="9">
+        <form method="POST" style="display:flex;flex-wrap:wrap;gap:12px;align-items:end;padding:8px 0">
+            <input type="hidden" name="action" value="update_tier">
+            <input type="hidden" name="user_id" value="<?= $su['id'] ?>">
+            <div><label style="font-size:11px;display:block;margin-bottom:2px">Tier</label>
+                <select name="subscription_tier" style="padding:6px 10px;border-radius:4px;border:1px solid #d0d0d0;font-size:13px">
+                    <option value="free" <?= $su['subscription_tier']==='free'?'selected':'' ?>>Free</option>
+                    <option value="basic" <?= $su['subscription_tier']==='basic'?'selected':'' ?>>Basic</option>
+                    <option value="premium" <?= $su['subscription_tier']==='premium'?'selected':'' ?>>Premium</option>
+                </select>
+            </div>
+            <div><label style="font-size:11px;display:block;margin-bottom:2px">Period</label>
+                <select name="subscription_period" style="padding:6px 10px;border-radius:4px;border:1px solid #d0d0d0;font-size:13px">
+                    <option value="">None</option>
+                    <option value="monthly" <?= $su['subscription_period']==='monthly'?'selected':'' ?>>Monthly</option>
+                    <option value="annual" <?= $su['subscription_period']==='annual'?'selected':'' ?>>Annual</option>
+                    <option value="lifetime" <?= $su['subscription_period']==='lifetime'?'selected':'' ?>>Lifetime</option>
+                </select>
+            </div>
+            <div><label style="font-size:11px;display:block;margin-bottom:2px">Expires At</label>
+                <input type="datetime-local" name="subscription_expires_at" value="<?= $su['subscription_expires_at'] ? date('Y-m-d\TH:i', strtotime($su['subscription_expires_at'])) : '' ?>" style="padding:6px 10px;border-radius:4px;border:1px solid #d0d0d0;font-size:13px">
+            </div>
+            <div><label style="font-size:11px;display:block;margin-bottom:2px">&nbsp;</label>
+                <label style="font-size:12px;cursor:pointer"><input type="checkbox" name="subscription_auto_renew" <?= $su['subscription_auto_renew']?'checked':'' ?>> Auto-Renew</label>
+            </div>
+            <button type="submit" class="btn btn-p" style="font-size:12px;padding:6px 16px">Save</button>
+            <button type="button" class="btn btn-o" onclick="document.getElementById('erow-<?= $su['id'] ?>').style.display='none'" style="font-size:12px;padding:6px 12px">Cancel</button>
+        </form>
+    </td>
+</tr>
+<?php endforeach; ?>
+</tbody>
+</table>
+
+<?php
+// ═══════════════════════════════════════════════════════════════
+// FEATURE ACCESS MANAGEMENT (INLINE)
+// ═══════════════════════════════════════════════════════════════
+elseif ($section === 'feature_access'):
+    $fa_features = [];
+    try {
+        $fa_features = $db->query("SELECT * FROM feature_access ORDER BY sort_order ASC")->fetchAll();
+    } catch (Exception $e) { $fa_features = []; }
+?>
+<h1>Feature Access Controls</h1>
+<p style="color:#64748b;margin-bottom:16px">Control which subscription tiers can access each feature. Click the icons to toggle access for each tier.</p>
+<table class="tbl" style="font-size:13px">
+<thead><tr><th>Key</th><th>Label</th><th style="text-align:center">Free</th><th style="text-align:center">Basic</th><th style="text-align:center">Premium</th><th style="text-align:center">Login</th><th style="text-align:center">Active</th><th>Delete</th></tr></thead>
+<tbody>
+<?php foreach ($fa_features as $f): ?>
+<tr>
+    <td style="font-family:monospace;font-size:12px"><?= htmlspecialchars($f['feature_key']) ?></td>
+    <td><?= htmlspecialchars($f['feature_label']) ?></td>
+    <?php
+    $tiers = array('tier_free','tier_basic','tier_premium');
+    foreach ($tiers as $tc) {
+        echo '<td style="text-align:center"><form method="POST" style="display:inline"><input type="hidden" name="action" value="update_feature"><input type="hidden" name="feature_id" value="' . $f['id'] . '">';
+        foreach (array('tier_free','tier_basic','tier_premium','require_login','is_active') as $fld) {
+            if ($fld === $tc) {
+                echo '<input type="hidden" name="' . $tc . '" value="' . ($f[$tc] ? 0 : 1) . '">';
+            } else {
+                echo '<input type="hidden" name="' . $fld . '" value="' . $f[$fld] . '">';
+            }
+        }
+        echo '<button type="submit" style="background:none;border:none;cursor:pointer;font-size:16px">' . ($f[$tc] ? '✅' : '❌') . '</button></form></td>';
+    }
+    ?>
+    <td style="text-align:center">
+        <form method="POST" style="display:inline"><input type="hidden" name="action" value="update_feature"><input type="hidden" name="feature_id" value="<?= $f['id'] ?>">
+        <input type="hidden" name="tier_free" value="<?= $f['tier_free'] ?>"><input type="hidden" name="tier_basic" value="<?= $f['tier_basic'] ?>"><input type="hidden" name="tier_premium" value="<?= $f['tier_premium'] ?>"><input type="hidden" name="require_login" value="<?= $f['require_login'] ? 0 : 1 ?>"><input type="hidden" name="is_active" value="<?= $f['is_active'] ?>">
+        <button type="submit" style="background:none;border:none;cursor:pointer;font-size:16px"><?= $f['require_login'] ? '🔒' : '🔓' ?></button></form>
+    </td>
+    <td style="text-align:center">
+        <form method="POST" style="display:inline"><input type="hidden" name="action" value="update_feature"><input type="hidden" name="feature_id" value="<?= $f['id'] ?>">
+        <input type="hidden" name="tier_free" value="<?= $f['tier_free'] ?>"><input type="hidden" name="tier_basic" value="<?= $f['tier_basic'] ?>"><input type="hidden" name="tier_premium" value="<?= $f['tier_premium'] ?>"><input type="hidden" name="require_login" value="<?= $f['require_login'] ?>"><input type="hidden" name="is_active" value="<?= $f['is_active'] ? 0 : 1 ?>">
+        <button type="submit" style="background:none;border:none;cursor:pointer;font-size:16px"><?= $f['is_active'] ? '🟢' : '🔴' ?></button></form>
+    </td>
+    <td>
+        <form method="POST" style="display:inline" onsubmit="return confirm('Delete this feature?')"><input type="hidden" name="action" value="delete_feature"><input type="hidden" name="feature_id" value="<?= $f['id'] ?>">
+        <button type="submit" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:12px">Del</button></form>
+    </td>
+</tr>
+<?php endforeach; ?>
+</tbody>
+</table>
+<div class="card" style="margin-top:20px;padding:16px">
+<h3 style="margin-bottom:10px;font-size:14px">Add New Feature</h3>
+<form method="POST" style="display:flex;flex-wrap:wrap;gap:10px;align-items:end">
+<input type="hidden" name="action" value="add_feature">
+<div><label style="font-size:11px;display:block;margin-bottom:2px">Key</label><input type="text" name="feature_key" required placeholder="e.g. rab_advanced" style="padding:5px 8px;border-radius:4px;border:1px solid #d0d0d0;font-size:12px;width:160px"></div>
+<div><label style="font-size:11px;display:block;margin-bottom:2px">Label</label><input type="text" name="feature_label" required placeholder="Label" style="padding:5px 8px;border-radius:4px;border:1px solid #d0d0d0;font-size:12px;width:180px"></div>
+<div><label style="font-size:11px;display:block;margin-bottom:2px">Description</label><input type="text" name="description" placeholder="Optional" style="padding:5px 8px;border-radius:4px;border:1px solid #d0d0d0;font-size:12px;width:160px"></div>
+<div style="display:flex;gap:8px;align-items:center">
+    <label style="font-size:11px"><input type="checkbox" name="tier_free"> Free</label>
+    <label style="font-size:11px"><input type="checkbox" name="tier_basic"> Basic</label>
+    <label style="font-size:11px"><input type="checkbox" name="tier_premium" checked> Prem</label>
+    <label style="font-size:11px"><input type="checkbox" name="require_login" checked> Login</label>
+</div>
+<button type="submit" class="btn btn-p" style="font-size:12px;padding:5px 14px">Add</button>
+</form>
+</div>
 
 <?php endif; ?>
 
