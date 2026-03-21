@@ -40,6 +40,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
+require_once(__DIR__ . '/smtp_mailer.php');
+
 // ─── DB ──────────────────────────────────────────────────────────
 function get_db(): PDO {
     static $pdo = null;
@@ -90,18 +92,47 @@ function send_verification_email(string $email, string $display_name, string $to
     $verify_url = $site_url . '/api/user.php?action=verify&token=' . urlencode($token);
 
     $subject = 'Verify your Build in Lombok account';
-    $body = "Hi {$display_name},\n\n"
-          . "Welcome to Build in Lombok! Please verify your email address by clicking the link below:\n\n"
-          . "{$verify_url}\n\n"
-          . "This link expires in 24 hours.\n\n"
-          . "If you didn't create this account, you can safely ignore this email.\n\n"
-          . "— Build in Lombok Team";
 
-    $headers = "From: noreply@roving-i.com.au\r\n"
-             . "Reply-To: noreply@roving-i.com.au\r\n"
-             . "Content-Type: text/plain; charset=UTF-8\r\n";
+    $text_body = "Hi {$display_name},\n\n"
+               . "Welcome to Build in Lombok! Please verify your email address by clicking the link below:\n\n"
+               . "{$verify_url}\n\n"
+               . "This link expires in 24 hours.\n\n"
+               . "If you didn't create this account, you can safely ignore this email.\n\n"
+               . "-- Build in Lombok Team";
 
-    return @mail($email, $subject, $body, $headers);
+    $html_body = '
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family:Arial,Helvetica,sans-serif;background:#f7f5f0;margin:0;padding:0;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f7f5f0;padding:40px 0;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;">
+  <tr><td style="background:#0c7c84;padding:30px 40px;text-align:center;">
+    <h1 style="color:#ffffff;margin:0;font-size:24px;">Build in Lombok</h1>
+  </td></tr>
+  <tr><td style="padding:40px;">
+    <p style="color:#333;font-size:16px;line-height:1.6;margin:0 0 20px;">Hi ' . htmlspecialchars($display_name) . ',</p>
+    <p style="color:#333;font-size:16px;line-height:1.6;margin:0 0 20px;">Welcome to Build in Lombok! Please verify your email address by clicking the button below:</p>
+    <p style="text-align:center;margin:30px 0;">
+      <a href="' . htmlspecialchars($verify_url) . '" style="background:#0c7c84;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:6px;font-size:16px;font-weight:bold;display:inline-block;">Verify Email Address</a>
+    </p>
+    <p style="color:#666;font-size:14px;line-height:1.5;margin:0 0 10px;">Or copy and paste this link into your browser:</p>
+    <p style="color:#0c7c84;font-size:13px;word-break:break-all;margin:0 0 20px;">' . htmlspecialchars($verify_url) . '</p>
+    <p style="color:#666;font-size:14px;line-height:1.5;margin:0 0 10px;">This link expires in 24 hours.</p>
+    <p style="color:#999;font-size:13px;line-height:1.5;margin:20px 0 0;">If you didn\'t create this account, you can safely ignore this email.</p>
+  </td></tr>
+  <tr><td style="background:#f7f5f0;padding:20px 40px;text-align:center;">
+    <p style="color:#999;font-size:12px;margin:0;">&copy; ' . date('Y') . ' Build in Lombok. All rights reserved.</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>';
+
+    $result = smtp_send_mail($email, $subject, $html_body, $text_body);
+    return ($result === true);
 }
 
 function send_reset_email(string $email, string $display_name, string $token): bool {
@@ -109,18 +140,47 @@ function send_reset_email(string $email, string $display_name, string $token): b
     $reset_url = $site_url . '/#reset-password?token=' . urlencode($token);
 
     $subject = 'Reset your Build in Lombok password';
-    $body = "Hi {$display_name},\n\n"
-          . "You requested a password reset. Click the link below to set a new password:\n\n"
-          . "{$reset_url}\n\n"
-          . "This link expires in 1 hour.\n\n"
-          . "If you didn't request this, you can safely ignore this email.\n\n"
-          . "— Build in Lombok Team";
 
-    $headers = "From: noreply@roving-i.com.au\r\n"
-             . "Reply-To: noreply@roving-i.com.au\r\n"
-             . "Content-Type: text/plain; charset=UTF-8\r\n";
+    $text_body = "Hi {$display_name},\n\n"
+               . "You requested a password reset. Click the link below to set a new password:\n\n"
+               . "{$reset_url}\n\n"
+               . "This link expires in 1 hour.\n\n"
+               . "If you didn't request this, you can safely ignore this email.\n\n"
+               . "-- Build in Lombok Team";
 
-    return @mail($email, $subject, $body, $headers);
+    $html_body = '
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family:Arial,Helvetica,sans-serif;background:#f7f5f0;margin:0;padding:0;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f7f5f0;padding:40px 0;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;">
+  <tr><td style="background:#0c7c84;padding:30px 40px;text-align:center;">
+    <h1 style="color:#ffffff;margin:0;font-size:24px;">Build in Lombok</h1>
+  </td></tr>
+  <tr><td style="padding:40px;">
+    <p style="color:#333;font-size:16px;line-height:1.6;margin:0 0 20px;">Hi ' . htmlspecialchars($display_name) . ',</p>
+    <p style="color:#333;font-size:16px;line-height:1.6;margin:0 0 20px;">You requested a password reset. Click the button below to set a new password:</p>
+    <p style="text-align:center;margin:30px 0;">
+      <a href="' . htmlspecialchars($reset_url) . '" style="background:#d4604a;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:6px;font-size:16px;font-weight:bold;display:inline-block;">Reset Password</a>
+    </p>
+    <p style="color:#666;font-size:14px;line-height:1.5;margin:0 0 10px;">Or copy and paste this link into your browser:</p>
+    <p style="color:#0c7c84;font-size:13px;word-break:break-all;margin:0 0 20px;">' . htmlspecialchars($reset_url) . '</p>
+    <p style="color:#666;font-size:14px;line-height:1.5;margin:0 0 10px;">This link expires in 1 hour.</p>
+    <p style="color:#999;font-size:13px;line-height:1.5;margin:20px 0 0;">If you didn\'t request this, you can safely ignore this email.</p>
+  </td></tr>
+  <tr><td style="background:#f7f5f0;padding:20px 40px;text-align:center;">
+    <p style="color:#999;font-size:12px;margin:0;">&copy; ' . date('Y') . ' Build in Lombok. All rights reserved.</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>';
+
+    $result = smtp_send_mail($email, $subject, $html_body, $text_body);
+    return ($result === true);
 }
 
 // ─── ROUTING ─────────────────────────────────────────────────────
@@ -158,6 +218,8 @@ switch ($action) {
     case 'set_primary_image': handle_set_primary_image(); break;
     // Review check
     case 'check_reviews':  handle_check_reviews(); break;
+    // Email test (admin only — remove after confirming)
+    case 'test_email':     handle_test_email(); break;
     default:               json_error(400, 'Unknown action');
 }
 
@@ -1153,4 +1215,35 @@ function handle_check_reviews(): void {
         'current_rating'       => $api_result ? $api_result['rating'] : ($entity['google_rating'] ?? null),
         'current_review_count' => $api_result ? $api_result['review_count'] : ($entity['google_review_count'] ?? null),
     ]);
+}
+
+// =================================================================
+// TEST EMAIL (admin only — remove after confirming SMTP works)
+// =================================================================
+
+function handle_test_email(): void {
+    // Only allow if admin password is provided as a safety guard
+    $data = get_post_data();
+    $admin_pass = $data['admin_pass'] ?? ($_GET['admin_pass'] ?? '');
+    if ($admin_pass !== ADMIN_PASS) {
+        json_error(403, 'Admin password required to send test email.');
+    }
+
+    $to = $data['to'] ?? ($_GET['to'] ?? '');
+    if (!$to || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+        json_error(400, 'Provide a valid "to" email address.');
+    }
+
+    $result = smtp_send_mail(
+        $to,
+        'Build in Lombok — SMTP Test',
+        '<html><body style="font-family:Arial,sans-serif;padding:40px;"><h2 style="color:#0c7c84;">SMTP is working!</h2><p>This test email was sent via <strong>mail.roving-i.com.au:465</strong> (SSL) from <strong>no-reply@roving-i.com.au</strong>.</p><p style="color:#999;font-size:13px;">You can remove the test_email endpoint from user.php now.</p></body></html>',
+        "SMTP is working!\n\nThis test email was sent via mail.roving-i.com.au:465 (SSL) from no-reply@roving-i.com.au.\n\nYou can remove the test_email endpoint from user.php now."
+    );
+
+    if ($result === true) {
+        json_out(array('success' => true, 'message' => 'Test email sent successfully to ' . $to));
+    } else {
+        json_out(array('success' => false, 'error' => $result), 500);
+    }
 }
