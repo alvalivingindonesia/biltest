@@ -446,7 +446,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($action, $ajaxActions)) {
         $result['msg'] = 'Error: ' . $e->getMessage();
     }
 
-    echo json_encode($result);J
+    echo json_encode($result);
     exit;
 }
 
