@@ -300,7 +300,9 @@ if ($action === 'export_excel' && $id > 0) {
 }
 
 // ─── AJAX / POST ACTIONS ─────────────────────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action) {
+$ajaxActions = ['save_item','delete_item','save_section','delete_section','recalculate','get_sections','update_area'];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($action, $ajaxActions)) {
     header('Content-Type: application/json; charset=utf-8');
     $db = get_db();
     $result = ['ok' => false, 'msg' => ''];
@@ -444,17 +446,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action) {
         $result['msg'] = 'Error: ' . $e->getMessage();
     }
 
-    echo json_encode($result);
+    echo json_encode($result);J
     exit;
 }
 
 // ─── REGULAR POST ACTIONS (non-AJAX) ─────────────────────────────────
 $db = get_db();
 
-$ajaxActions = ['saveitem','deleteitem','savesection','deletesection',
-                'recalculate','getsections','updatearea'];
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($action, $ajaxActions)) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         // ── Create/Edit Project ──
         if ($action === 'save_project') {
