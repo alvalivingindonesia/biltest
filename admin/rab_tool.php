@@ -451,7 +451,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action) {
 // ─── REGULAR POST ACTIONS (non-AJAX) ─────────────────────────────────
 $db = get_db();
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+$ajaxActions = ['saveitem','deleteitem','savesection','deletesection',
+                'recalculate','getsections','updatearea'];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($action, $ajaxActions)) {
     try {
         // ── Create/Edit Project ──
         if ($action === 'save_project') {
