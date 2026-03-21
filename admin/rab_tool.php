@@ -1550,6 +1550,7 @@ echo json_encode($p_data);
 
 </div><!-- grid -->
 </form>
+<?php endif; /* close if (!$presets) else */ ?>
 
 <?php
 
