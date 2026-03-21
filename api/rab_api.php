@@ -138,6 +138,25 @@ switch ($action) {
     case 'estimate':        handle_estimate(); break;
     case 'check_feature':   handle_check_feature(); break;
     case 'feature_list':    handle_feature_list(); break;
+    // ── Detailed RAB endpoints ──
+    case 'projects':        handle_projects(); break;
+    case 'save_project':    handle_save_project(); break;
+    case 'delete_project':  handle_delete_project(); break;
+    case 'project_detail':  handle_project_detail(); break;
+    case 'create_rab':      handle_create_rab(); break;
+    case 'clone_rab':       handle_clone_rab(); break;
+    case 'delete_rab':      handle_delete_rab(); break;
+    case 'rab_detail':      handle_rab_detail(); break;
+    case 'disciplines':     handle_disciplines(); break;
+    case 'units':           handle_units(); break;
+    case 'get_sections':    handle_get_sections(); break;
+    case 'save_item':       handle_save_item(); break;
+    case 'delete_item':     handle_delete_item(); break;
+    case 'save_section':    handle_save_section(); break;
+    case 'delete_section':  handle_delete_section(); break;
+    case 'update_area':     handle_update_area(); break;
+    case 'recalculate':     handle_recalculate(); break;
+    case 'export_excel':    handle_export_excel(); break;
     default:                json_error(400, 'Unknown action');
 }
 
@@ -417,4 +436,595 @@ function handle_feature_list() {
         'current_tier' => $tier,
         'logged_in' => $uid ? true : false
     ));
+}
+
+
+// =================================================================
+// DETAILED RAB HELPER: recalculate_rab
+// =================================================================
+function recalculate_rab($db, $rab_id) {
+    $rab_id = (int)$rab_id;
+    $stmt = $db->prepare("
+        SELECT d.code,
+               COALESCE(SUM(i.quantity * i.rate), 0) AS disc_total
+        FROM rab_sections s
+        JOIN rab_disciplines d ON d.id = s.discipline_id
+        LEFT JOIN rab_items i ON i.section_id = s.id
+        WHERE s.rab_id = ?
+        GROUP BY d.code
+    ");
+    $stmt->execute(array($rab_id));
+    $rows = $stmt->fetchAll();
+
+    $arch = 0; $mep = 0; $str = 0;
+    foreach ($rows as $r) {
+        if ($r['code'] === 'ARCH') $arch = (float)$r['disc_total'];
+        if ($r['code'] === 'MEP')  $mep  = (float)$r['disc_total'];
+        if ($r['code'] === 'STR')  $str  = (float)$r['disc_total'];
+    }
+    $grand = $arch + $mep + $str;
+
+    $db->prepare("UPDATE rab_items i JOIN rab_sections s ON s.id = i.section_id SET i.total = i.quantity * i.rate WHERE s.rab_id = ?")->execute(array($rab_id));
+
+    $ta = $db->prepare("SELECT house_area_m2 FROM rab_totals WHERE rab_id = ?");
+    $ta->execute(array($rab_id));
+    $ta_row = $ta->fetch();
+    $house_area = $ta_row ? (float)$ta_row['house_area_m2'] : 0;
+    $cost_per_m2 = ($house_area > 0) ? round($grand / $house_area, 2) : null;
+
+    $exists = $db->prepare("SELECT id FROM rab_totals WHERE rab_id = ?");
+    $exists->execute(array($rab_id));
+    if ($exists->fetch()) {
+        $db->prepare("UPDATE rab_totals SET architecture_total=?, mep_total=?, structure_total=?, grand_total=?, cost_per_m2=? WHERE rab_id=?")
+           ->execute(array($arch, $mep, $str, $grand, $cost_per_m2, $rab_id));
+    } else {
+        $db->prepare("INSERT INTO rab_totals (rab_id, architecture_total, mep_total, structure_total, grand_total, cost_per_m2) VALUES (?,?,?,?,?,?)")
+           ->execute(array($rab_id, $arch, $mep, $str, $grand, $cost_per_m2));
+    }
+
+    return array('arch' => $arch, 'mep' => $mep, 'str' => $str, 'grand' => $grand, 'house_area_m2' => $house_area, 'cost_per_m2' => $cost_per_m2);
+}
+
+function create_default_sections($db, $rab_id) {
+    $disciplines = $db->query("SELECT id, code FROM rab_disciplines ORDER BY id")->fetchAll();
+    $disc_map = array();
+    foreach ($disciplines as $d) {
+        $disc_map[$d['code']] = $d['id'];
+    }
+    $sections = array(
+        'ARCH' => array('Site Works','Walls','Floors','Ceilings','Doors & Windows','Roof','Finishes','Waterproofing','External Works'),
+        'MEP'  => array('Electrical','Lighting','Plumbing & Sanitary','HVAC','Fire Fighting'),
+        'STR'  => array('Excavation','Foundations','Columns & Beams','Slabs','Stairs','Retaining Walls','Roof Structure'),
+    );
+    $stmt = $db->prepare("INSERT INTO rab_sections (rab_id, discipline_id, name, order_index) VALUES (?,?,?,?)");
+    foreach ($sections as $code => $names) {
+        if (!isset($disc_map[$code])) continue;
+        $disc_id = $disc_map[$code];
+        foreach ($names as $idx => $sname) {
+            $stmt->execute(array($rab_id, $disc_id, $sname, $idx));
+        }
+    }
+}
+
+
+// =================================================================
+// PROJECTS LIST
+// =================================================================
+function handle_projects() {
+    $uid = require_auth();
+    $db = get_db();
+    $rows = $db->query("SELECT p.*, (SELECT COUNT(*) FROM rab_rabs r WHERE r.project_id = p.id) AS rab_count FROM rab_projects p ORDER BY p.created_at DESC")->fetchAll();
+    json_out(array('data' => $rows));
+}
+
+
+// =================================================================
+// SAVE PROJECT (create or update)
+// =================================================================
+function handle_save_project() {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+    $uid = require_auth();
+    $data = get_post_data();
+
+    $proj_id  = (int)(isset($data['id']) ? $data['id'] : 0);
+    $name     = trim(isset($data['name']) ? $data['name'] : '');
+    $location = trim(isset($data['location']) ? $data['location'] : '');
+    $desc     = trim(isset($data['description']) ? $data['description'] : '');
+    $area     = isset($data['gross_floor_area_m2']) ? (float)$data['gross_floor_area_m2'] : null;
+    $status   = isset($data['status']) ? $data['status'] : 'draft';
+    if (!in_array($status, array('draft','active','archived'))) $status = 'draft';
+    if (!$name) json_error(400, 'Project name is required.');
+
+    $db = get_db();
+    if ($proj_id) {
+        $db->prepare("UPDATE rab_projects SET name=?, location=?, description=?, gross_floor_area_m2=?, status=? WHERE id=?")
+           ->execute(array($name, $location ? $location : null, $desc ? $desc : null, $area, $status, $proj_id));
+    } else {
+        $db->prepare("INSERT INTO rab_projects (name, location, description, gross_floor_area_m2, status) VALUES (?,?,?,?,?)")
+           ->execute(array($name, $location ? $location : null, $desc ? $desc : null, $area, $status));
+        $proj_id = (int)$db->lastInsertId();
+    }
+    json_out(array('success' => true, 'project_id' => $proj_id));
+}
+
+
+// =================================================================
+// DELETE PROJECT
+// =================================================================
+function handle_delete_project() {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+    $uid = require_auth();
+    $data = get_post_data();
+    $proj_id = (int)(isset($data['id']) ? $data['id'] : 0);
+    if (!$proj_id) json_error(400, 'id required');
+    $db = get_db();
+    $db->prepare("DELETE FROM rab_projects WHERE id=?")->execute(array($proj_id));
+    json_out(array('success' => true));
+}
+
+
+// =================================================================
+// PROJECT DETAIL (with RAB versions)
+// =================================================================
+function handle_project_detail() {
+    $uid = require_auth();
+    $id = (int)(isset($_GET['id']) ? $_GET['id'] : 0);
+    if (!$id) json_error(400, 'id required');
+    $db = get_db();
+    $proj = $db->prepare("SELECT * FROM rab_projects WHERE id=?");
+    $proj->execute(array($id));
+    $project = $proj->fetch();
+    if (!$project) json_error(404, 'Project not found.');
+
+    $rabs = $db->prepare("SELECT r.*, t.grand_total, t.cost_per_m2 FROM rab_rabs r LEFT JOIN rab_totals t ON t.rab_id = r.id WHERE r.project_id = ? ORDER BY r.version DESC");
+    $rabs->execute(array($id));
+    $project['rabs'] = $rabs->fetchAll();
+
+    json_out(array('data' => $project));
+}
+
+
+// =================================================================
+// CREATE RAB
+// =================================================================
+function handle_create_rab() {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+    $uid = require_auth();
+    $data = get_post_data();
+    $proj_id  = (int)(isset($data['project_id']) ? $data['project_id'] : 0);
+    $rab_name = trim(isset($data['name']) ? $data['name'] : '');
+    if (!$proj_id) json_error(400, 'project_id required');
+
+    $db = get_db();
+    $vq = $db->prepare("SELECT COALESCE(MAX(version),0)+1 FROM rab_rabs WHERE project_id=?");
+    $vq->execute(array($proj_id));
+    $version = (int)$vq->fetchColumn();
+    if (!$rab_name) $rab_name = 'Version ' . $version;
+
+    $db->prepare("INSERT INTO rab_rabs (project_id, version, name) VALUES (?,?,?)")
+       ->execute(array($proj_id, $version, $rab_name));
+    $new_rab_id = (int)$db->lastInsertId();
+    create_default_sections($db, $new_rab_id);
+    $db->prepare("INSERT INTO rab_totals (rab_id, house_area_m2) VALUES (?, (SELECT gross_floor_area_m2 FROM rab_projects WHERE id=?))")
+       ->execute(array($new_rab_id, $proj_id));
+    recalculate_rab($db, $new_rab_id);
+
+    json_out(array('success' => true, 'rab_id' => $new_rab_id));
+}
+
+
+// =================================================================
+// CLONE RAB
+// =================================================================
+function handle_clone_rab() {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+    $uid = require_auth();
+    $data = get_post_data();
+    $rab_id = (int)(isset($data['rab_id']) ? $data['rab_id'] : 0);
+    if (!$rab_id) json_error(400, 'rab_id required');
+
+    $db = get_db();
+    $src = $db->prepare("SELECT * FROM rab_rabs WHERE id=?");
+    $src->execute(array($rab_id));
+    $rab = $src->fetch();
+    if (!$rab) json_error(404, 'RAB not found.');
+
+    $vq = $db->prepare("SELECT COALESCE(MAX(version),0)+1 FROM rab_rabs WHERE project_id=?");
+    $vq->execute(array($rab['project_id']));
+    $next_v = (int)$vq->fetchColumn();
+
+    $db->prepare("INSERT INTO rab_rabs (project_id, version, name, notes) VALUES (?,?,?,?)")
+       ->execute(array($rab['project_id'], $next_v, $rab['name'] . ' (Copy)', $rab['notes']));
+    $new_rab_id = (int)$db->lastInsertId();
+
+    $sects = $db->prepare("SELECT * FROM rab_sections WHERE rab_id=? ORDER BY discipline_id, order_index");
+    $sects->execute(array($rab_id));
+    $sect_rows = $sects->fetchAll();
+    $sect_map = array();
+    $ins_sect = $db->prepare("INSERT INTO rab_sections (rab_id, discipline_id, name, order_index) VALUES (?,?,?,?)");
+    foreach ($sect_rows as $s) {
+        $ins_sect->execute(array($new_rab_id, $s['discipline_id'], $s['name'], $s['order_index']));
+        $sect_map[$s['id']] = (int)$db->lastInsertId();
+    }
+
+    $items = $db->prepare("SELECT * FROM rab_items WHERE section_id IN (SELECT id FROM rab_sections WHERE rab_id=?) ORDER BY order_index");
+    $items->execute(array($rab_id));
+    $item_rows = $items->fetchAll();
+    $ins_item = $db->prepare("INSERT INTO rab_items (section_id, item_template_id, name, description, unit_id, quantity, rate, total, order_index) VALUES (?,?,?,?,?,?,?,?,?)");
+    foreach ($item_rows as $it) {
+        $new_sect = isset($sect_map[$it['section_id']]) ? $sect_map[$it['section_id']] : null;
+        if (!$new_sect) continue;
+        $ins_item->execute(array(
+            $new_sect, $it['item_template_id'], $it['name'], $it['description'],
+            $it['unit_id'], $it['quantity'], $it['rate'], $it['total'], $it['order_index']
+        ));
+    }
+
+    $old_totals = $db->prepare("SELECT * FROM rab_totals WHERE rab_id=?");
+    $old_totals->execute(array($rab_id));
+    $ot = $old_totals->fetch();
+    if ($ot) {
+        $db->prepare("INSERT INTO rab_totals (rab_id, architecture_total, mep_total, structure_total, grand_total, house_area_m2, cost_per_m2) VALUES (?,?,?,?,?,?,?)")
+           ->execute(array($new_rab_id, $ot['architecture_total'], $ot['mep_total'], $ot['structure_total'], $ot['grand_total'], $ot['house_area_m2'], $ot['cost_per_m2']));
+    }
+    recalculate_rab($db, $new_rab_id);
+
+    json_out(array('success' => true, 'rab_id' => $new_rab_id));
+}
+
+
+// =================================================================
+// DELETE RAB
+// =================================================================
+function handle_delete_rab() {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+    $uid = require_auth();
+    $data = get_post_data();
+    $rab_id = (int)(isset($data['rab_id']) ? $data['rab_id'] : 0);
+    if (!$rab_id) json_error(400, 'rab_id required');
+    $db = get_db();
+    $db->prepare("DELETE FROM rab_items WHERE section_id IN (SELECT id FROM rab_sections WHERE rab_id=?)")->execute(array($rab_id));
+    $db->prepare("DELETE FROM rab_sections WHERE rab_id=?")->execute(array($rab_id));
+    $db->prepare("DELETE FROM rab_totals WHERE rab_id=?")->execute(array($rab_id));
+    $db->prepare("DELETE FROM rab_rabs WHERE id=?")->execute(array($rab_id));
+    json_out(array('success' => true));
+}
+
+
+// =================================================================
+// RAB DETAIL (single rab with totals)
+// =================================================================
+function handle_rab_detail() {
+    $uid = require_auth();
+    $id = (int)(isset($_GET['id']) ? $_GET['id'] : 0);
+    if (!$id) json_error(400, 'id required');
+    $db = get_db();
+    $stmt = $db->prepare("SELECT r.*, p.name AS project_name, p.gross_floor_area_m2, p.location FROM rab_rabs r JOIN rab_projects p ON p.id=r.project_id WHERE r.id=?");
+    $stmt->execute(array($id));
+    $rab = $stmt->fetch();
+    if (!$rab) json_error(404, 'RAB not found.');
+
+    $totals = $db->prepare("SELECT * FROM rab_totals WHERE rab_id=?");
+    $totals->execute(array($id));
+    $rab['totals'] = $totals->fetch();
+    if (!$rab['totals']) $rab['totals'] = array('architecture_total' => 0, 'mep_total' => 0, 'structure_total' => 0, 'grand_total' => 0, 'house_area_m2' => 0, 'cost_per_m2' => 0);
+
+    $disc = $db->query("SELECT id, code, name FROM rab_disciplines ORDER BY id");
+    $rab['disciplines'] = $disc->fetchAll();
+
+    json_out(array('data' => $rab));
+}
+
+
+// =================================================================
+// DISCIPLINES LIST
+// =================================================================
+function handle_disciplines() {
+    $db = get_db();
+    json_out(array('data' => $db->query("SELECT id, code, name FROM rab_disciplines ORDER BY id")->fetchAll()));
+}
+
+
+// =================================================================
+// UNITS LIST
+// =================================================================
+function handle_units() {
+    $db = get_db();
+    json_out(array('data' => $db->query("SELECT id, code, name FROM rab_units ORDER BY name")->fetchAll()));
+}
+
+
+// =================================================================
+// GET SECTIONS (with items) for a RAB + discipline
+// =================================================================
+function handle_get_sections() {
+    $uid = require_auth();
+    $rab_id  = (int)(isset($_GET['rab_id']) ? $_GET['rab_id'] : 0);
+    $disc_id = (int)(isset($_GET['disc_id']) ? $_GET['disc_id'] : 0);
+    if (!$rab_id || !$disc_id) json_error(400, 'rab_id and disc_id required');
+
+    $db = get_db();
+    $sects_q = $db->prepare("SELECT s.id, s.name, s.order_index FROM rab_sections s WHERE s.rab_id=? AND s.discipline_id=? ORDER BY s.order_index");
+    $sects_q->execute(array($rab_id, $disc_id));
+    $sects = $sects_q->fetchAll();
+
+    $out = array();
+    foreach ($sects as $s) {
+        $items_q = $db->prepare("SELECT i.*, u.code AS unit_code FROM rab_items i LEFT JOIN rab_units u ON u.id=i.unit_id WHERE i.section_id=? ORDER BY i.order_index");
+        $items_q->execute(array($s['id']));
+        $s['items'] = $items_q->fetchAll();
+        $out[] = $s;
+    }
+    json_out(array('ok' => true, 'sections' => $out));
+}
+
+
+// =================================================================
+// SAVE ITEM
+// =================================================================
+function handle_save_item() {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+    $uid = require_auth();
+    $data = get_post_data();
+
+    $item_id    = (int)(isset($data['item_id']) ? $data['item_id'] : 0);
+    $section_id = (int)(isset($data['section_id']) ? $data['section_id'] : 0);
+    $name       = trim(isset($data['name']) ? $data['name'] : '');
+    $unit_id    = (int)(isset($data['unit_id']) ? $data['unit_id'] : 0);
+    $quantity   = (float)(isset($data['quantity']) ? $data['quantity'] : 0);
+    $rate       = (float)(isset($data['rate']) ? $data['rate'] : 0);
+    $tpl_id     = (int)(isset($data['tpl_id']) ? $data['tpl_id'] : 0);
+    if ($tpl_id === 0) $tpl_id = null;
+    $total      = $quantity * $rate;
+
+    if (!$name || !$unit_id || !$section_id) json_error(400, 'Missing required fields.');
+
+    $db = get_db();
+    if ($item_id) {
+        $db->prepare("UPDATE rab_items SET name=?, unit_id=?, quantity=?, rate=?, total=?, item_template_id=? WHERE id=?")
+           ->execute(array($name, $unit_id, $quantity, $rate, $total, $tpl_id, $item_id));
+    } else {
+        $max_idx = $db->prepare("SELECT COALESCE(MAX(order_index),0)+1 FROM rab_items WHERE section_id=?");
+        $max_idx->execute(array($section_id));
+        $oidx = (int)$max_idx->fetchColumn();
+        $db->prepare("INSERT INTO rab_items (section_id, item_template_id, name, unit_id, quantity, rate, total, order_index) VALUES (?,?,?,?,?,?,?,?)")
+           ->execute(array($section_id, $tpl_id, $name, $unit_id, $quantity, $rate, $total, $oidx));
+        $item_id = (int)$db->lastInsertId();
+    }
+
+    $sq = $db->prepare("SELECT s.rab_id FROM rab_sections s WHERE s.id=?");
+    $sq->execute(array($section_id));
+    $sq_row = $sq->fetch();
+    $totals = recalculate_rab($db, $sq_row['rab_id']);
+
+    json_out(array('ok' => true, 'item_id' => $item_id, 'total' => $total, 'totals' => $totals));
+}
+
+
+// =================================================================
+// DELETE ITEM
+// =================================================================
+function handle_delete_item() {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+    $uid = require_auth();
+    $data = get_post_data();
+    $item_id = (int)(isset($data['item_id']) ? $data['item_id'] : 0);
+    if (!$item_id) json_error(400, 'item_id required');
+
+    $db = get_db();
+    $it = $db->prepare("SELECT s.rab_id FROM rab_items i JOIN rab_sections s ON s.id=i.section_id WHERE i.id=?");
+    $it->execute(array($item_id));
+    $row = $it->fetch();
+    if (!$row) json_error(404, 'Item not found.');
+    $db->prepare("DELETE FROM rab_items WHERE id=?")->execute(array($item_id));
+    $totals = recalculate_rab($db, $row['rab_id']);
+    json_out(array('ok' => true, 'totals' => $totals));
+}
+
+
+// =================================================================
+// SAVE SECTION
+// =================================================================
+function handle_save_section() {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+    $uid = require_auth();
+    $data = get_post_data();
+
+    $section_id = (int)(isset($data['section_id']) ? $data['section_id'] : 0);
+    $rab_id     = (int)(isset($data['rab_id']) ? $data['rab_id'] : 0);
+    $disc_id    = (int)(isset($data['disc_id']) ? $data['disc_id'] : 0);
+    $name       = trim(isset($data['name']) ? $data['name'] : '');
+    if (!$name) json_error(400, 'Section name required.');
+
+    $db = get_db();
+    if ($section_id) {
+        $db->prepare("UPDATE rab_sections SET name=? WHERE id=?")->execute(array($name, $section_id));
+    } else {
+        if (!$rab_id || !$disc_id) json_error(400, 'rab_id and disc_id required.');
+        $max_oi = $db->prepare("SELECT COALESCE(MAX(order_index),0)+1 FROM rab_sections WHERE rab_id=? AND discipline_id=?");
+        $max_oi->execute(array($rab_id, $disc_id));
+        $oidx = (int)$max_oi->fetchColumn();
+        $db->prepare("INSERT INTO rab_sections (rab_id, discipline_id, name, order_index) VALUES (?,?,?,?)")
+           ->execute(array($rab_id, $disc_id, $name, $oidx));
+        $section_id = (int)$db->lastInsertId();
+    }
+    json_out(array('ok' => true, 'section_id' => $section_id));
+}
+
+
+// =================================================================
+// DELETE SECTION
+// =================================================================
+function handle_delete_section() {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+    $uid = require_auth();
+    $data = get_post_data();
+    $section_id = (int)(isset($data['section_id']) ? $data['section_id'] : 0);
+    if (!$section_id) json_error(400, 'section_id required');
+
+    $db = get_db();
+    $cnt = $db->prepare("SELECT COUNT(*) FROM rab_items WHERE section_id=?");
+    $cnt->execute(array($section_id));
+    if ($cnt->fetchColumn() > 0) json_error(400, 'Cannot delete section with items. Remove all items first.');
+
+    $sq = $db->prepare("SELECT rab_id FROM rab_sections WHERE id=?");
+    $sq->execute(array($section_id));
+    $sq_row = $sq->fetch();
+    $db->prepare("DELETE FROM rab_sections WHERE id=?")->execute(array($section_id));
+    recalculate_rab($db, $sq_row['rab_id']);
+    json_out(array('ok' => true));
+}
+
+
+// =================================================================
+// UPDATE AREA (house_area_m2)
+// =================================================================
+function handle_update_area() {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+    $uid = require_auth();
+    $data = get_post_data();
+    $rab_id = (int)(isset($data['rab_id']) ? $data['rab_id'] : 0);
+    $area   = (float)(isset($data['area']) ? $data['area'] : 0);
+    if (!$rab_id) json_error(400, 'rab_id required');
+
+    $db = get_db();
+    $exists = $db->prepare("SELECT id FROM rab_totals WHERE rab_id=?");
+    $exists->execute(array($rab_id));
+    if ($exists->fetch()) {
+        $db->prepare("UPDATE rab_totals SET house_area_m2=? WHERE rab_id=?")->execute(array($area, $rab_id));
+    } else {
+        $db->prepare("INSERT INTO rab_totals (rab_id, house_area_m2) VALUES (?,?)")->execute(array($rab_id, $area));
+    }
+    $totals = recalculate_rab($db, $rab_id);
+    json_out(array('ok' => true, 'totals' => $totals));
+}
+
+
+// =================================================================
+// RECALCULATE
+// =================================================================
+function handle_recalculate() {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+    $uid = require_auth();
+    $data = get_post_data();
+    $rab_id = (int)(isset($data['rab_id']) ? $data['rab_id'] : 0);
+    if (!$rab_id) json_error(400, 'rab_id required');
+    $db = get_db();
+    $totals = recalculate_rab($db, $rab_id);
+    json_out(array('ok' => true, 'totals' => $totals));
+}
+
+
+// =================================================================
+// EXPORT EXCEL
+// =================================================================
+function handle_export_excel() {
+    $uid = require_auth();
+    $id = (int)(isset($_GET['id']) ? $_GET['id'] : 0);
+    if (!$id) json_error(400, 'id required');
+
+    $db = get_db();
+    $rab = $db->prepare("SELECT r.*, p.name AS project_name, p.gross_floor_area_m2 FROM rab_rabs r JOIN rab_projects p ON p.id=r.project_id WHERE r.id=?");
+    $rab->execute(array($id));
+    $rab_row = $rab->fetch();
+    if (!$rab_row) json_error(404, 'RAB not found.');
+
+    $disciplines = $db->query("SELECT id, code, name FROM rab_disciplines ORDER BY id")->fetchAll();
+    $totals_q = $db->prepare("SELECT * FROM rab_totals WHERE rab_id=?");
+    $totals_q->execute(array($id));
+    $totals = $totals_q->fetch();
+
+    $proj_name = $rab_row['project_name'];
+    $safe_name = preg_replace('/[^a-zA-Z0-9\-_ ]/', '', $proj_name);
+    $safe_name = str_replace(' ', '_', trim($safe_name));
+
+    header('Content-Type: application/vnd.ms-excel; charset=utf-8');
+    header('Content-Disposition: attachment; filename="RAB-' . $safe_name . '-v' . $rab_row['version'] . '.xls"');
+    header('Cache-Control: max-age=0');
+
+    echo '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">';
+    echo '<head><meta charset="utf-8"><style>';
+    echo 'td,th{border:1px solid #ccc;padding:4px 8px;font-size:11pt;}';
+    echo '.title{font-size:14pt;font-weight:bold;border:none;}';
+    echo '.subtitle{font-size:10pt;color:#555;border:none;}';
+    echo '.disc-header{background:#0c7c84;color:white;font-weight:bold;}';
+    echo '.sect-header{background:#1e3a5f;color:#93c5fd;font-weight:bold;}';
+    echo '.col-header{background:#162032;color:#94a3b8;font-weight:bold;}';
+    echo '.subtotal{background:#1a2540;font-weight:bold;}';
+    echo '.grand-total{background:#0c2336;color:#0c7c84;font-weight:bold;font-size:12pt;}';
+    echo '.num{text-align:right;}';
+    echo '</style></head><body>';
+    echo '<table cellspacing="0" cellpadding="4">';
+
+    echo '<tr><td colspan="7" class="title" style="border:none;">RENCANA ANGGARAN BIAYA (RAB)</td></tr>';
+    echo '<tr><td colspan="7" class="subtitle" style="border:none;">Proyek: ' . htmlspecialchars($proj_name, ENT_QUOTES, 'UTF-8') . ' &mdash; v' . $rab_row['version'] . '</td></tr>';
+    echo '<tr><td colspan="7" class="subtitle" style="border:none;">Tanggal: ' . date('d/m/Y') . '</td></tr>';
+    if ($rab_row['gross_floor_area_m2']) {
+        echo '<tr><td colspan="7" class="subtitle" style="border:none;">Luas Bangunan: ' . number_format((float)$rab_row['gross_floor_area_m2'], 2, ',', '.') . ' m&sup2;</td></tr>';
+    }
+    echo '<tr><td colspan="7" style="border:none;">&nbsp;</td></tr>';
+
+    echo '<tr><td colspan="7" class="disc-header">RINGKASAN / SUMMARY</td></tr>';
+    echo '<tr class="col-header"><th>Disiplin</th><th colspan="5">&nbsp;</th><th class="num">Total (IDR)</th></tr>';
+    if ($totals) {
+        echo '<tr><td>Architecture</td><td colspan="5"></td><td class="num">' . fmt_idr($totals['architecture_total']) . '</td></tr>';
+        echo '<tr><td>MEP</td><td colspan="5"></td><td class="num">' . fmt_idr($totals['mep_total']) . '</td></tr>';
+        echo '<tr><td>Structure</td><td colspan="5"></td><td class="num">' . fmt_idr($totals['structure_total']) . '</td></tr>';
+        echo '<tr class="grand-total"><td colspan="6">GRAND TOTAL</td><td class="num">' . fmt_idr($totals['grand_total']) . '</td></tr>';
+        if ($totals['house_area_m2'] && $totals['cost_per_m2']) {
+            echo '<tr><td colspan="6">Cost per m&sup2; (luas ' . number_format((float)$totals['house_area_m2'], 2, ',', '.') . ' m&sup2;)</td><td class="num">' . fmt_idr($totals['cost_per_m2']) . '</td></tr>';
+        }
+    }
+    echo '<tr><td colspan="7" style="border:none;">&nbsp;</td></tr>';
+
+    echo '<tr><td colspan="7" class="disc-header">RINCIAN ANGGARAN BIAYA</td></tr>';
+    echo '<tr class="col-header"><th>No.</th><th>Uraian Pekerjaan</th><th>Satuan</th><th class="num">Vol.</th><th class="num">Harga Satuan (IDR)</th><th class="num">Jumlah (IDR)</th><th>&nbsp;</th></tr>';
+
+    $item_no = 0;
+    foreach ($disciplines as $disc) {
+        $sects_q = $db->prepare("SELECT * FROM rab_sections WHERE rab_id=? AND discipline_id=? ORDER BY order_index");
+        $sects_q->execute(array($id, $disc['id']));
+        $sects = $sects_q->fetchAll();
+        if (!$sects) continue;
+
+        echo '<tr><td colspan="7" class="disc-header">' . htmlspecialchars($disc['name'], ENT_QUOTES, 'UTF-8') . '</td></tr>';
+        $disc_total = 0;
+        $sect_alpha = 'A';
+
+        foreach ($sects as $sect) {
+            $items_q = $db->prepare("SELECT i.*, u.code AS unit_code FROM rab_items i LEFT JOIN rab_units u ON u.id=i.unit_id WHERE i.section_id=? ORDER BY i.order_index");
+            $items_q->execute(array($sect['id']));
+            $sitems = $items_q->fetchAll();
+
+            echo '<tr class="sect-header"><td>' . $sect_alpha . '</td><td colspan="5">' . htmlspecialchars($sect['name'], ENT_QUOTES, 'UTF-8') . '</td><td></td></tr>';
+            $sect_alpha++;
+
+            $sect_total = 0;
+            foreach ($sitems as $it) {
+                $item_no++;
+                $total = (float)$it['quantity'] * (float)$it['rate'];
+                $sect_total += $total;
+                echo '<tr>';
+                echo '<td>' . $item_no . '</td>';
+                echo '<td>' . htmlspecialchars($it['name'], ENT_QUOTES, 'UTF-8') . '</td>';
+                echo '<td>' . htmlspecialchars($it['unit_code'], ENT_QUOTES, 'UTF-8') . '</td>';
+                echo '<td class="num">' . number_format((float)$it['quantity'], 3, ',', '.') . '</td>';
+                echo '<td class="num">' . fmt_idr($it['rate']) . '</td>';
+                echo '<td class="num">' . fmt_idr($total) . '</td>';
+                echo '<td></td>';
+                echo '</tr>';
+            }
+            $disc_total += $sect_total;
+            echo '<tr class="subtotal"><td colspan="5" style="text-align:right;">Subtotal ' . htmlspecialchars($sect['name'], ENT_QUOTES, 'UTF-8') . '</td><td class="num">' . fmt_idr($sect_total) . '</td><td></td></tr>';
+        }
+        echo '<tr class="subtotal" style="background:#0c2040;"><td colspan="5" style="text-align:right;">Total ' . htmlspecialchars($disc['name'], ENT_QUOTES, 'UTF-8') . '</td><td class="num">' . fmt_idr($disc_total) . '</td><td></td></tr>';
+        echo '<tr><td colspan="7" style="border:none;">&nbsp;</td></tr>';
+    }
+
+    if ($totals) {
+        echo '<tr class="grand-total"><td colspan="5" style="text-align:right;">GRAND TOTAL</td><td class="num">' . fmt_idr($totals['grand_total']) . '</td><td></td></tr>';
+    }
+
+    echo '</table></body></html>';
+    exit;
 }

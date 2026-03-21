@@ -4737,3 +4737,439 @@ a.rab-tool-card:hover {
   background: rgba(12, 124, 132, 0.03);
   border-color: rgba(12, 124, 132, 0.15);
 }
+
+/* =====================================================
+   RAB DETAILED TOOL STYLES (rdtl- prefix)
+   ===================================================== */
+
+/* Toolbar: title + action button */
+.rdtl-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-5);
+}
+
+.rdtl-section-title {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--color-heading);
+  margin: 0;
+}
+
+/* Project cards on the project list */
+.rdtl-project-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5) var(--space-6);
+  margin-bottom: var(--space-3);
+  text-decoration: none;
+  color: var(--color-text);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.rdtl-project-card:hover {
+  border-color: var(--color-accent);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+  text-decoration: none;
+}
+
+.rdtl-project-name {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-heading);
+  margin: 0 0 var(--space-1) 0;
+}
+
+.rdtl-project-meta {
+  font-size: var(--text-sm);
+  color: var(--color-text-faint);
+  margin: 0;
+}
+
+.rdtl-project-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+/* Status badges */
+.rdtl-status {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+}
+
+.rdtl-status--draft {
+  background: rgba(138, 133, 120, 0.12);
+  color: #8a8578;
+}
+
+.rdtl-status--active {
+  background: rgba(12, 124, 132, 0.12);
+  color: var(--color-accent);
+}
+
+.rdtl-status--archived {
+  background: rgba(212, 96, 74, 0.12);
+  color: #d4604a;
+}
+
+/* Project detail header */
+.rdtl-proj-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+@media (max-width: 600px) {
+  .rdtl-proj-header {
+    flex-direction: column;
+  }
+}
+
+.rdtl-proj-title {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  color: var(--color-heading);
+  margin: 0 0 var(--space-1) 0;
+}
+
+.rdtl-proj-meta {
+  font-size: var(--text-sm);
+  color: var(--color-text-faint);
+  margin: 0;
+}
+
+.rdtl-proj-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+/* RAB version list */
+.rdtl-rab-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.rdtl-rab-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+}
+
+@media (max-width: 700px) {
+  .rdtl-rab-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+}
+
+.rdtl-rab-name {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-heading);
+  text-decoration: none;
+}
+
+.rdtl-rab-name:hover {
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
+.rdtl-rab-meta {
+  font-size: var(--text-sm);
+  color: var(--color-text-faint);
+  margin: var(--space-1) 0 0 0;
+}
+
+.rdtl-rab-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+/* Editor header */
+.rdtl-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+@media (max-width: 600px) {
+  .rdtl-editor-header {
+    flex-direction: column;
+  }
+}
+
+/* Summary bar */
+.rdtl-summary-bar {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-5);
+}
+
+.rdtl-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 100px;
+}
+
+.rdtl-summary-item--grand {
+  border-left: 2px solid var(--color-primary);
+  padding-left: var(--space-3);
+}
+
+.rdtl-summary-label {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rdtl-summary-val {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--color-heading);
+  font-variant-numeric: tabular-nums;
+}
+
+.rdtl-summary-item--grand .rdtl-summary-val {
+  color: var(--color-primary);
+  font-size: var(--text-lg);
+}
+
+.rdtl-area-input {
+  width: 90px;
+  padding: 4px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-family: var(--font-body);
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+.rdtl-area-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(12,124,132,0.12);
+}
+
+/* Discipline tabs */
+.rdtl-disc-tabs {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+  border-bottom: 2px solid var(--color-border);
+  padding-bottom: 0;
+}
+
+.rdtl-disc-tab {
+  padding: var(--space-2) var(--space-5);
+  border: none;
+  background: none;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  font-family: var(--font-body);
+  color: var(--color-text-faint);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.rdtl-disc-tab:hover {
+  color: var(--color-heading);
+}
+
+.rdtl-disc-tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* Section blocks */
+.rdtl-section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-4);
+  overflow: hidden;
+}
+
+.rdtl-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-3) var(--space-5);
+  background: rgba(12, 124, 132, 0.04);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.rdtl-section-name {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-heading);
+  margin: 0;
+}
+
+.rdtl-section-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.rdtl-section-total {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Icon buttons */
+.rdtl-btn-icon {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--color-text-faint);
+  transition: all 0.15s;
+}
+
+.rdtl-btn-icon:hover {
+  background: var(--color-surface-offset, #f0ede8);
+  color: var(--color-heading);
+  border-color: var(--color-heading);
+}
+
+.rdtl-btn-icon--danger:hover {
+  background: rgba(220, 38, 38, 0.08);
+  color: #dc2626;
+  border-color: #dc2626;
+}
+
+/* Items table */
+.rdtl-items-table-wrap {
+  overflow-x: auto;
+}
+
+.rdtl-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.rdtl-items-table th {
+  text-align: left;
+  font-weight: 600;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-faint);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.rdtl-items-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+  vertical-align: middle;
+}
+
+.rdtl-item-row:hover {
+  background: rgba(12, 124, 132, 0.02);
+}
+
+.rdtl-item-name {
+  min-width: 180px;
+  max-width: 320px;
+}
+
+.rdtl-item-unit { white-space: nowrap; }
+
+.rdtl-item-qty,
+.rdtl-item-rate,
+.rdtl-item-total {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rdtl-item-total {
+  font-weight: 600;
+}
+
+.rdtl-item-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
+/* Add item area */
+.rdtl-add-item-area {
+  padding: var(--space-3) var(--space-5);
+}
+
+/* Item form (add/edit inline) */
+.rdtl-item-form {
+  padding: var(--space-3) 0;
+}
+
+.rdtl-item-form-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: var(--space-2);
+}
+
+@media (max-width: 700px) {
+  .rdtl-item-form-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.rdtl-item-form-grid .rab-input,
+.rdtl-item-form-grid .rab-select {
+  padding: 6px 10px;
+  font-size: var(--text-sm);
+}

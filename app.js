@@ -517,7 +517,7 @@ async function router() {
       a.classList.add('active');
     }
     // RAB Tools
-    if (hrefPage === 'rab-calculator' && (page === 'rab-calculator' || page === 'rab-estimates' || page === 'rab-result')) {
+    if (hrefPage === 'rab-calculator' && (page === 'rab-calculator' || page === 'rab-estimates' || page === 'rab-result' || page === 'rab-projects' || page === 'rab-project' || page === 'rab-editor')) {
       a.classList.add('active');
     }
     // About
@@ -563,6 +563,9 @@ async function router() {
     case 'rab-calculator': await renderRABCalculator(view); break;
     case 'rab-estimates': await renderRABEstimates(view); break;
     case 'rab-result': await renderRABResult(view, params); break;
+    case 'rab-projects': await renderRABProjects(view); break;
+    case 'rab-project': await renderRABProjectDetail(view, segments[1]); break;
+    case 'rab-editor': await renderRABEditor(view, segments[1]); break;
     default: await renderHome(view);
   }
 
@@ -3259,12 +3262,12 @@ async function renderRABCalculator(el) {
     + '        <p class="rab-tool-card-desc">Enter floor areas, quality level, and optional extras to get an instant cost estimate in seconds.</p>'
     + '        <span class="rab-tool-card-badge">Free</span>'
     + '      </div>'
-    + '      <a href="/admin/rab_tool.php" class="rab-tool-card" target="_blank" rel="noopener">'
+    + '      <a href="#rab-projects" class="rab-tool-card" onclick="navigate(\'rab-projects\');return false;">'
     + '        <div class="rab-tool-card-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3h18v18H3z"/><path d="M3 9h18M9 3v18M15 3v18"/><path d="M3 15h18"/></svg></div>'
     + '        <h3 class="rab-tool-card-title">Detailed RAB Tool</h3>'
     + '        <p class="rab-tool-card-desc">Full bill of quantities with Architecture, MEP, and Structure disciplines. Create projects, manage line items, and export to Excel.</p>'
     + '        <span class="rab-tool-card-badge rab-tool-card-badge--pro">Pro</span>'
-    + '        <span class="rab-tool-card-cta">Open RAB Tool <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17l9.2-9.2M17 17V7H7"/></svg></span>'
+    + '        <span class="rab-tool-card-cta">Open RAB Tool <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>'
     + '      </a>'
     + '    </div>'
     + (presets.length === 0
@@ -3750,6 +3753,700 @@ async function renderRABResult(el, params) {
       + '<a href="#rab-calculator" class="btn btn--primary" style="margin-top:var(--space-4)" onclick="navigate(\'rab-calculator\');return false;">Back to Calculator</a>'
       + '</div>';
   }
+}
+
+
+// =====================================================
+// RENDER: RAB PROJECTS LIST
+// =====================================================
+
+var _rabUnitsCache = null;
+
+async function rabLoadUnits() {
+  if (_rabUnitsCache) return _rabUnitsCache;
+  try {
+    var res = await fetch(RAB_API + '?action=units', { credentials: 'include' });
+    var json = await res.json();
+    _rabUnitsCache = json.data || [];
+  } catch(e) { _rabUnitsCache = []; }
+  return _rabUnitsCache;
+}
+
+async function renderRABProjects(el) {
+  if (!UserAuth.user) {
+    el.innerHTML = ''
+      + '<div class="dir-hero"><div class="container">'
+      + '  <h1 class="dir-hero-title">Detailed RAB Tool</h1>'
+      + '  <p class="dir-hero-desc">Sign in to create and manage your detailed bill of quantities.</p>'
+      + '</div></div>'
+      + '<div class="section"><div class="container" style="text-align:center;padding:var(--space-12) 0;">'
+      + '  <button class="btn btn--primary" onclick="showAuthModal(\'login\')">Sign In to Continue</button>'
+      + '</div></div>';
+    return;
+  }
+
+  el.innerHTML = ''
+    + '<div class="dir-hero"><div class="container">'
+    + '  <h1 class="dir-hero-title">Detailed RAB Tool</h1>'
+    + '  <p class="dir-hero-desc">Create projects and manage full bills of quantities with Architecture, MEP, and Structure disciplines.</p>'
+    + '  <div class="rab-hero-tabs">'
+    + '    <a href="#rab-calculator" class="rab-tab" onclick="navigate(\'rab-calculator\');return false;">Calculator</a>'
+    + '    <a href="#rab-projects" class="rab-tab active">My RAB Projects</a>'
+    + '    <a href="#rab-estimates" class="rab-tab" onclick="navigate(\'rab-estimates\');return false;">Saved Estimates</a>'
+    + '  </div>'
+    + '</div></div>'
+    + '<div class="section"><div class="container">'
+    + '  <div class="rdtl-toolbar">'
+    + '    <h2 class="rdtl-section-title">My Projects</h2>'
+    + '    <button class="btn btn--primary" id="rdtl-new-proj-btn" onclick="rdtlShowNewProject()">+ New Project</button>'
+    + '  </div>'
+    + '  <div id="rdtl-new-project-form" style="display:none"></div>'
+    + '  <div id="rdtl-projects-list"><div class="page-loading"><div class="page-loading-spinner"></div></div></div>'
+    + '</div></div>';
+
+  try {
+    var res = await fetch(RAB_API + '?action=projects', { credentials: 'include' });
+    var json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Failed to load projects');
+    var projects = json.data || [];
+    var listEl = el.querySelector('#rdtl-projects-list');
+
+    if (projects.length === 0) {
+      listEl.innerHTML = ''
+        + '<div class="rab-empty-state">'
+        + '  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="1.5" style="margin-bottom:var(--space-4)"><path d="M3 3h18v18H3z"/><path d="M3 9h18M9 3v18"/></svg>'
+        + '  <h3 style="font-family:var(--font-display);margin-bottom:var(--space-2)">No projects yet</h3>'
+        + '  <p style="color:var(--color-text-faint);margin-bottom:var(--space-4)">Create your first project to start building a detailed RAB.</p>'
+        + '</div>';
+      return;
+    }
+
+    var cards = projects.map(function(p) {
+      var statusBadge = '<span class="rdtl-status rdtl-status--' + escHtml(p.status || 'draft') + '">' + escHtml(p.status || 'draft') + '</span>';
+      return ''
+        + '<a href="#rab-project/' + p.id + '" class="rdtl-project-card" onclick="navigate(\'rab-project/' + p.id + '\');return false;">'
+        + '  <div class="rdtl-project-info">'
+        + '    <h3 class="rdtl-project-name">' + escHtml(p.name) + '</h3>'
+        + '    <p class="rdtl-project-meta">'
+        + (p.location ? escHtml(p.location) + ' \u2022 ' : '')
+        + (p.gross_floor_area_m2 ? Number(p.gross_floor_area_m2).toFixed(0) + ' m\u00B2 \u2022 ' : '')
+        + p.rab_count + ' RAB version' + (p.rab_count != 1 ? 's' : '')
+        + '    </p>'
+        + '  </div>'
+        + '  <div class="rdtl-project-right">'
+        + statusBadge
+        + '    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--color-text-faint)"><path d="M9 18l6-6-6-6"/></svg>'
+        + '  </div>'
+        + '</a>';
+    }).join('');
+
+    listEl.innerHTML = cards;
+  } catch(e) {
+    el.querySelector('#rdtl-projects-list').innerHTML = '<div class="rab-card" style="text-align:center;color:var(--color-text-faint);padding:var(--space-8)">' + escHtml(e.message) + '</div>';
+  }
+}
+
+function rdtlShowNewProject() {
+  var formEl = document.getElementById('rdtl-new-project-form');
+  if (!formEl) return;
+  if (formEl.style.display !== 'none') { formEl.style.display = 'none'; return; }
+  formEl.style.display = 'block';
+  formEl.innerHTML = ''
+    + '<div class="rab-card" style="margin-bottom:var(--space-5)">'
+    + '  <h3 class="rab-card-title">New Project</h3>'
+    + '  <div class="rab-field"><label class="rab-label">Project Name *</label><input type="text" id="rdtl-proj-name" class="rab-input" placeholder="e.g. Villa Sengigi"></div>'
+    + '  <div class="rab-fields-grid">'
+    + '    <div class="rab-field"><label class="rab-label">Location</label><input type="text" id="rdtl-proj-loc" class="rab-input" placeholder="e.g. Senggigi, Lombok"></div>'
+    + '    <div class="rab-field"><label class="rab-label">Gross Floor Area (m\u00B2)</label><input type="number" id="rdtl-proj-area" class="rab-input" min="0" step="0.5" placeholder="e.g. 250"></div>'
+    + '  </div>'
+    + '  <div class="rab-field"><label class="rab-label">Description</label><textarea id="rdtl-proj-desc" class="rab-input" rows="2" placeholder="Brief project description"></textarea></div>'
+    + '  <div style="display:flex;gap:var(--space-3)">'
+    + '    <button class="btn btn--primary" onclick="rdtlSaveProject()">Create Project</button>'
+    + '    <button class="btn btn--outline" onclick="document.getElementById(\'rdtl-new-project-form\').style.display=\'none\'">Cancel</button>'
+    + '  </div>'
+    + '</div>';
+  var nameInput = document.getElementById('rdtl-proj-name');
+  if (nameInput) nameInput.focus();
+}
+
+function rdtlSaveProject(projId) {
+  var name = document.getElementById('rdtl-proj-name').value.trim();
+  if (!name) { showToast('Project name is required.', 'error'); return; }
+  var data = {
+    name: name,
+    location: document.getElementById('rdtl-proj-loc').value.trim(),
+    description: document.getElementById('rdtl-proj-desc').value.trim(),
+    gross_floor_area_m2: parseFloat(document.getElementById('rdtl-proj-area').value) || null
+  };
+  if (projId) data.id = projId;
+
+  fetch(RAB_API + '?action=save_project', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  .then(function(res) { return res.json().then(function(j) { return { ok: res.ok, json: j }; }); })
+  .then(function(out) {
+    if (!out.ok) throw new Error(out.json.error || 'Save failed');
+    showToast('Project saved.', 'success');
+    if (projId) { navigate('rab-project/' + projId); }
+    else { navigate('rab-project/' + out.json.project_id); }
+  })
+  .catch(function(e) { showToast(e.message, 'error'); });
+}
+
+
+// =====================================================
+// RENDER: RAB PROJECT DETAIL
+// =====================================================
+
+async function renderRABProjectDetail(el, projectId) {
+  if (!UserAuth.user) { navigate('rab-projects'); return; }
+  if (!projectId) { navigate('rab-projects'); return; }
+
+  el.innerHTML = ''
+    + '<div class="dir-hero"><div class="container">'
+    + '  <h1 class="dir-hero-title">Project Detail</h1>'
+    + '  <p class="dir-hero-desc">Manage RAB versions for this project.</p>'
+    + '</div></div>'
+    + '<div class="section"><div class="container"><div id="rdtl-proj-content"><div class="page-loading"><div class="page-loading-spinner"></div></div></div></div></div>';
+
+  try {
+    var res = await fetch(RAB_API + '?action=project_detail&id=' + projectId, { credentials: 'include' });
+    var json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Not found');
+    var p = json.data;
+    var contentEl = el.querySelector('#rdtl-proj-content');
+
+    var html = ''
+      + '<a href="#rab-projects" class="rab-back-link" onclick="navigate(\'rab-projects\');return false;">\u2190 All Projects</a>'
+      + '<div class="rdtl-proj-header">'
+      + '  <div>'
+      + '    <h2 class="rdtl-proj-title">' + escHtml(p.name) + '</h2>'
+      + '    <p class="rdtl-proj-meta">';
+    if (p.location) html += escHtml(p.location) + ' \u2022 ';
+    if (p.gross_floor_area_m2) html += Number(p.gross_floor_area_m2).toFixed(0) + ' m\u00B2 \u2022 ';
+    html += '<span class="rdtl-status rdtl-status--' + escHtml(p.status) + '">' + escHtml(p.status) + '</span>';
+    html += '</p>';
+    if (p.description) html += '<p style="color:var(--color-text-faint);font-size:var(--text-sm);margin-top:var(--space-1)">' + escHtml(p.description) + '</p>';
+    html += '  </div>'
+      + '  <div class="rdtl-proj-actions">'
+      + '    <button class="btn btn--outline btn--sm" onclick="rdtlEditProject(' + p.id + ')">Edit</button>'
+      + '    <button class="btn btn--danger-outline btn--sm" onclick="rdtlDeleteProject(' + p.id + ')">Delete</button>'
+      + '  </div>'
+      + '</div>';
+
+    // RAB versions
+    html += '<div class="rdtl-toolbar" style="margin-top:var(--space-6)">'
+      + '  <h3 class="rdtl-section-title">RAB Versions</h3>'
+      + '  <button class="btn btn--primary btn--sm" onclick="rdtlCreateRab(' + p.id + ')">+ New RAB Version</button>'
+      + '</div>';
+
+    var rabs = p.rabs || [];
+    if (rabs.length === 0) {
+      html += '<div class="rab-card" style="text-align:center;color:var(--color-text-faint);padding:var(--space-6)">No RAB versions yet. Create one to get started.</div>';
+    } else {
+      html += '<div class="rdtl-rab-list">';
+      rabs.forEach(function(r) {
+        html += ''
+          + '<div class="rdtl-rab-card">'
+          + '  <div class="rdtl-rab-info">'
+          + '    <a href="#rab-editor/' + r.id + '" class="rdtl-rab-name" onclick="navigate(\'rab-editor/' + r.id + '\');return false;">v' + r.version + ' \u2014 ' + escHtml(r.name) + '</a>'
+          + '    <p class="rdtl-rab-meta">'
+          + (r.grand_total ? 'Total: ' + fmtIDR(r.grand_total) : 'No items yet')
+          + (r.cost_per_m2 ? ' \u2022 ' + fmtIDR(r.cost_per_m2) + '/m\u00B2' : '')
+          + '    </p>'
+          + '  </div>'
+          + '  <div class="rdtl-rab-actions">'
+          + '    <button class="btn btn--primary btn--sm" onclick="navigate(\'rab-editor/' + r.id + '\')">Edit</button>'
+          + '    <button class="btn btn--outline btn--sm" onclick="rdtlCloneRab(' + r.id + ',' + p.id + ')">Clone</button>'
+          + '    <a href="' + RAB_API + '?action=export_excel&id=' + r.id + '" class="btn btn--outline btn--sm">Excel</a>'
+          + '    <button class="btn btn--danger-outline btn--sm" onclick="rdtlDeleteRab(' + r.id + ',' + p.id + ')">Delete</button>'
+          + '  </div>'
+          + '</div>';
+      });
+      html += '</div>';
+    }
+
+    contentEl.innerHTML = html;
+  } catch(e) {
+    el.querySelector('#rdtl-proj-content').innerHTML = '<div class="rab-card" style="text-align:center;padding:var(--space-8)"><p style="color:var(--color-text-faint)">' + escHtml(e.message) + '</p></div>';
+  }
+}
+
+function rdtlEditProject(projId) {
+  // Navigate to a simple edit view — reuse inline approach
+  fetch(RAB_API + '?action=project_detail&id=' + projId, { credentials: 'include' })
+  .then(function(res) { return res.json(); })
+  .then(function(json) {
+    var p = json.data;
+    var html = ''
+      + '<div class="rab-card" style="margin-top:var(--space-4)">'
+      + '  <h3 class="rab-card-title">Edit Project</h3>'
+      + '  <div class="rab-field"><label class="rab-label">Project Name *</label><input type="text" id="rdtl-proj-name" class="rab-input" value="' + escHtml(p.name) + '"></div>'
+      + '  <div class="rab-fields-grid">'
+      + '    <div class="rab-field"><label class="rab-label">Location</label><input type="text" id="rdtl-proj-loc" class="rab-input" value="' + escHtml(p.location || '') + '"></div>'
+      + '    <div class="rab-field"><label class="rab-label">Gross Floor Area (m\u00B2)</label><input type="number" id="rdtl-proj-area" class="rab-input" min="0" step="0.5" value="' + (p.gross_floor_area_m2 || '') + '"></div>'
+      + '  </div>'
+      + '  <div class="rab-field"><label class="rab-label">Description</label><textarea id="rdtl-proj-desc" class="rab-input" rows="2">' + escHtml(p.description || '') + '</textarea></div>'
+      + '  <div class="rab-field"><label class="rab-label">Status</label><select id="rdtl-proj-status" class="rab-select"><option value="draft"' + (p.status === 'draft' ? ' selected' : '') + '>Draft</option><option value="active"' + (p.status === 'active' ? ' selected' : '') + '>Active</option><option value="archived"' + (p.status === 'archived' ? ' selected' : '') + '>Archived</option></select></div>'
+      + '  <div style="display:flex;gap:var(--space-3)">'
+      + '    <button class="btn btn--primary" onclick="rdtlSaveProjectEdit(' + projId + ')">Save Changes</button>'
+      + '    <button class="btn btn--outline" onclick="navigate(\'rab-project/' + projId + '\')">Cancel</button>'
+      + '  </div>'
+      + '</div>';
+    var content = document.getElementById('rdtl-proj-content');
+    if (content) content.innerHTML = html;
+  });
+}
+
+function rdtlSaveProjectEdit(projId) {
+  var data = {
+    id: projId,
+    name: document.getElementById('rdtl-proj-name').value.trim(),
+    location: document.getElementById('rdtl-proj-loc').value.trim(),
+    description: document.getElementById('rdtl-proj-desc').value.trim(),
+    gross_floor_area_m2: parseFloat(document.getElementById('rdtl-proj-area').value) || null,
+    status: document.getElementById('rdtl-proj-status').value
+  };
+  if (!data.name) { showToast('Project name is required.', 'error'); return; }
+  fetch(RAB_API + '?action=save_project', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  .then(function(res) { return res.json().then(function(j) { return { ok: res.ok, json: j }; }); })
+  .then(function(out) {
+    if (!out.ok) throw new Error(out.json.error || 'Save failed');
+    showToast('Project updated.', 'success');
+    navigate('rab-project/' + projId);
+  })
+  .catch(function(e) { showToast(e.message, 'error'); });
+}
+
+function rdtlDeleteProject(projId) {
+  if (!confirm('Delete this project and all its RAB data? This cannot be undone.')) return;
+  fetch(RAB_API + '?action=delete_project', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: projId })
+  })
+  .then(function(res) { return res.json().then(function(j) { return { ok: res.ok, json: j }; }); })
+  .then(function(out) {
+    if (!out.ok) throw new Error(out.json.error || 'Delete failed');
+    showToast('Project deleted.', 'success');
+    navigate('rab-projects');
+  })
+  .catch(function(e) { showToast(e.message, 'error'); });
+}
+
+function rdtlCreateRab(projId) {
+  var name = prompt('RAB version name (optional):');
+  if (name === null) return;
+  fetch(RAB_API + '?action=create_rab', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project_id: projId, name: name || '' })
+  })
+  .then(function(res) { return res.json().then(function(j) { return { ok: res.ok, json: j }; }); })
+  .then(function(out) {
+    if (!out.ok) throw new Error(out.json.error || 'Create failed');
+    showToast('RAB version created.', 'success');
+    navigate('rab-editor/' + out.json.rab_id);
+  })
+  .catch(function(e) { showToast(e.message, 'error'); });
+}
+
+function rdtlCloneRab(rabId, projId) {
+  if (!confirm('Clone this RAB version?')) return;
+  fetch(RAB_API + '?action=clone_rab', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rab_id: rabId })
+  })
+  .then(function(res) { return res.json().then(function(j) { return { ok: res.ok, json: j }; }); })
+  .then(function(out) {
+    if (!out.ok) throw new Error(out.json.error || 'Clone failed');
+    showToast('RAB cloned.', 'success');
+    navigate('rab-project/' + projId);
+  })
+  .catch(function(e) { showToast(e.message, 'error'); });
+}
+
+function rdtlDeleteRab(rabId, projId) {
+  if (!confirm('Delete this RAB version? This cannot be undone.')) return;
+  fetch(RAB_API + '?action=delete_rab', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rab_id: rabId })
+  })
+  .then(function(res) { return res.json().then(function(j) { return { ok: res.ok, json: j }; }); })
+  .then(function(out) {
+    if (!out.ok) throw new Error(out.json.error || 'Delete failed');
+    showToast('RAB deleted.', 'success');
+    navigate('rab-project/' + projId);
+  })
+  .catch(function(e) { showToast(e.message, 'error'); });
+}
+
+
+// =====================================================
+// RENDER: RAB EDITOR (full discipline/section/item editor)
+// =====================================================
+
+var _rabEditorState = { rabId: 0, rab: null, activeDiscId: 0, units: [] };
+
+async function renderRABEditor(el, rabId) {
+  if (!UserAuth.user) { navigate('rab-projects'); return; }
+  if (!rabId) { navigate('rab-projects'); return; }
+  _rabEditorState.rabId = parseInt(rabId);
+
+  el.innerHTML = ''
+    + '<div class="dir-hero"><div class="container">'
+    + '  <h1 class="dir-hero-title">RAB Editor</h1>'
+    + '  <p class="dir-hero-desc">Edit your bill of quantities line by line.</p>'
+    + '</div></div>'
+    + '<div class="section"><div class="container"><div id="rdtl-editor-content"><div class="page-loading"><div class="page-loading-spinner"></div></div></div></div></div>';
+
+  try {
+    var reqs = await Promise.all([
+      fetch(RAB_API + '?action=rab_detail&id=' + rabId, { credentials: 'include' }).then(function(r) { return r.json(); }),
+      rabLoadUnits()
+    ]);
+    var rabJson = reqs[0];
+    var units = reqs[1];
+    if (rabJson.error) throw new Error(rabJson.error);
+    var rab = rabJson.data;
+    _rabEditorState.rab = rab;
+    _rabEditorState.units = units;
+
+    var disciplines = rab.disciplines || [];
+    if (disciplines.length > 0 && !_rabEditorState.activeDiscId) {
+      _rabEditorState.activeDiscId = parseInt(disciplines[0].id);
+    }
+
+    var contentEl = el.querySelector('#rdtl-editor-content');
+    rdtlRenderEditorChrome(contentEl, rab, disciplines);
+    rdtlLoadSections();
+  } catch(e) {
+    el.querySelector('#rdtl-editor-content').innerHTML = '<div class="rab-card" style="text-align:center;padding:var(--space-8)"><p style="color:var(--color-text-faint)">' + escHtml(e.message) + '</p></div>';
+  }
+}
+
+function rdtlRenderEditorChrome(contentEl, rab, disciplines) {
+  var t = rab.totals || {};
+  var html = ''
+    + '<a href="#rab-project/' + rab.project_id + '" class="rab-back-link" onclick="navigate(\'rab-project/' + rab.project_id + '\');return false;">\u2190 ' + escHtml(rab.project_name) + '</a>'
+    + '<div class="rdtl-editor-header">'
+    + '  <div>'
+    + '    <h2 class="rdtl-proj-title">v' + rab.version + ' \u2014 ' + escHtml(rab.name) + '</h2>'
+    + '    <p class="rdtl-proj-meta">' + escHtml(rab.project_name) + (rab.location ? ' \u2022 ' + escHtml(rab.location) : '') + '</p>'
+    + '  </div>'
+    + '  <a href="' + RAB_API + '?action=export_excel&id=' + rab.id + '" class="btn btn--outline btn--sm">Export Excel</a>'
+    + '</div>';
+
+  // Summary bar
+  html += '<div class="rdtl-summary-bar">'
+    + '  <div class="rdtl-summary-item"><span class="rdtl-summary-label">Architecture</span><span class="rdtl-summary-val" id="rdtl-total-arch">' + fmtIDR(t.architecture_total || 0) + '</span></div>'
+    + '  <div class="rdtl-summary-item"><span class="rdtl-summary-label">MEP</span><span class="rdtl-summary-val" id="rdtl-total-mep">' + fmtIDR(t.mep_total || 0) + '</span></div>'
+    + '  <div class="rdtl-summary-item"><span class="rdtl-summary-label">Structure</span><span class="rdtl-summary-val" id="rdtl-total-str">' + fmtIDR(t.structure_total || 0) + '</span></div>'
+    + '  <div class="rdtl-summary-item rdtl-summary-item--grand"><span class="rdtl-summary-label">Grand Total</span><span class="rdtl-summary-val" id="rdtl-total-grand">' + fmtIDR(t.grand_total || 0) + '</span></div>'
+    + '  <div class="rdtl-summary-item"><span class="rdtl-summary-label">Area (m\u00B2)</span>'
+    + '    <input type="number" class="rdtl-area-input" id="rdtl-area-input" value="' + (t.house_area_m2 || '') + '" min="0" step="0.5" onchange="rdtlUpdateArea()" title="House area for cost/m\u00B2 calculation">'
+    + '  </div>'
+    + '  <div class="rdtl-summary-item"><span class="rdtl-summary-label">Cost/m\u00B2</span><span class="rdtl-summary-val" id="rdtl-total-perm2">' + (t.cost_per_m2 ? fmtIDR(t.cost_per_m2) : '\u2014') + '</span></div>'
+    + '</div>';
+
+  // Discipline tabs
+  html += '<div class="rdtl-disc-tabs">';
+  disciplines.forEach(function(d) {
+    var isActive = parseInt(d.id) === _rabEditorState.activeDiscId;
+    html += '<button class="rdtl-disc-tab' + (isActive ? ' active' : '') + '" data-disc-id="' + d.id + '" onclick="rdtlSwitchDisc(' + d.id + ')">' + escHtml(d.name) + '</button>';
+  });
+  html += '</div>';
+
+  // Sections container
+  html += '<div id="rdtl-sections-area"><div class="page-loading"><div class="page-loading-spinner"></div></div></div>';
+
+  // Add section button
+  html += '<div style="margin-top:var(--space-4)">'
+    + '  <button class="btn btn--outline btn--sm" onclick="rdtlAddSection()">+ Add Section</button>'
+    + '</div>';
+
+  contentEl.innerHTML = html;
+}
+
+function rdtlSwitchDisc(discId) {
+  _rabEditorState.activeDiscId = parseInt(discId);
+  // Update tab styling
+  document.querySelectorAll('.rdtl-disc-tab').forEach(function(btn) {
+    btn.classList.toggle('active', parseInt(btn.getAttribute('data-disc-id')) === _rabEditorState.activeDiscId);
+  });
+  rdtlLoadSections();
+}
+
+function rdtlLoadSections() {
+  var area = document.getElementById('rdtl-sections-area');
+  if (!area) return;
+  area.innerHTML = '<div class="page-loading"><div class="page-loading-spinner"></div></div>';
+
+  fetch(RAB_API + '?action=get_sections&rab_id=' + _rabEditorState.rabId + '&disc_id=' + _rabEditorState.activeDiscId, { credentials: 'include' })
+  .then(function(res) { return res.json(); })
+  .then(function(json) {
+    if (!json.ok) throw new Error('Failed to load sections');
+    var sections = json.sections || [];
+    rdtlRenderSections(area, sections);
+  })
+  .catch(function(e) {
+    area.innerHTML = '<div class="rab-card" style="color:var(--color-text-faint);text-align:center;padding:var(--space-6)">' + escHtml(e.message) + '</div>';
+  });
+}
+
+function rdtlRenderSections(area, sections) {
+  if (sections.length === 0) {
+    area.innerHTML = '<div class="rab-card" style="text-align:center;color:var(--color-text-faint);padding:var(--space-6)">No sections yet. Add a section to start.</div>';
+    return;
+  }
+
+  var units = _rabEditorState.units;
+  var unitOpts = units.map(function(u) { return '<option value="' + u.id + '">' + escHtml(u.code) + ' \u2014 ' + escHtml(u.name) + '</option>'; }).join('');
+
+  var html = '';
+  sections.forEach(function(sect) {
+    var sectionTotal = 0;
+    var itemsHtml = '';
+
+    (sect.items || []).forEach(function(it) {
+      var total = Number(it.quantity) * Number(it.rate);
+      sectionTotal += total;
+      itemsHtml += ''
+        + '<tr class="rdtl-item-row" data-item-id="' + it.id + '">'
+        + '  <td class="rdtl-item-name">' + escHtml(it.name) + '</td>'
+        + '  <td class="rdtl-item-unit">' + escHtml(it.unit_code || '') + '</td>'
+        + '  <td class="rdtl-item-qty">' + Number(it.quantity).toFixed(3) + '</td>'
+        + '  <td class="rdtl-item-rate">' + fmtIDR(it.rate) + '</td>'
+        + '  <td class="rdtl-item-total">' + fmtIDR(total) + '</td>'
+        + '  <td class="rdtl-item-actions">'
+        + '    <button class="rdtl-btn-icon" onclick="rdtlEditItem(' + it.id + ',' + sect.id + ')" title="Edit">\u270E</button>'
+        + '    <button class="rdtl-btn-icon rdtl-btn-icon--danger" onclick="rdtlDeleteItem(' + it.id + ')" title="Delete">\u2715</button>'
+        + '  </td>'
+        + '</tr>';
+    });
+
+    html += ''
+      + '<div class="rdtl-section" data-section-id="' + sect.id + '">'
+      + '  <div class="rdtl-section-header">'
+      + '    <h4 class="rdtl-section-name">' + escHtml(sect.name) + '</h4>'
+      + '    <div class="rdtl-section-actions">'
+      + '      <span class="rdtl-section-total">Subtotal: ' + fmtIDR(sectionTotal) + '</span>'
+      + '      <button class="rdtl-btn-icon" onclick="rdtlRenameSection(' + sect.id + ',\'' + escHtml(sect.name).replace(/'/g, "\\'") + '\')" title="Rename">\u270E</button>'
+      + '      <button class="rdtl-btn-icon rdtl-btn-icon--danger" onclick="rdtlDeleteSection(' + sect.id + ')" title="Delete">\u2715</button>'
+      + '    </div>'
+      + '  </div>'
+      + '  <div class="rdtl-items-table-wrap">'
+      + '    <table class="rdtl-items-table">'
+      + '      <thead><tr><th>Description</th><th>Unit</th><th>Qty</th><th>Rate (IDR)</th><th>Total (IDR)</th><th></th></tr></thead>'
+      + '      <tbody>' + itemsHtml + '</tbody>'
+      + '    </table>'
+      + '  </div>'
+      + '  <div class="rdtl-add-item-area" id="rdtl-add-item-' + sect.id + '">'
+      + '    <button class="btn btn--outline btn--sm" onclick="rdtlShowAddItem(' + sect.id + ')">+ Add Item</button>'
+      + '  </div>'
+      + '</div>';
+  });
+
+  area.innerHTML = html;
+}
+
+function rdtlShowAddItem(sectionId) {
+  var area = document.getElementById('rdtl-add-item-' + sectionId);
+  if (!area) return;
+  // If form already shown, hide it
+  if (area.querySelector('.rdtl-item-form')) { area.innerHTML = '<button class="btn btn--outline btn--sm" onclick="rdtlShowAddItem(' + sectionId + ')">+ Add Item</button>'; return; }
+
+  var units = _rabEditorState.units;
+  var unitOpts = '<option value="">Select unit...</option>' + units.map(function(u) { return '<option value="' + u.id + '">' + escHtml(u.code) + '</option>'; }).join('');
+
+  area.innerHTML = ''
+    + '<div class="rdtl-item-form">'
+    + '  <div class="rdtl-item-form-grid">'
+    + '    <input type="text" class="rab-input" id="rdtl-new-name-' + sectionId + '" placeholder="Item description">'
+    + '    <select class="rab-select" id="rdtl-new-unit-' + sectionId + '">' + unitOpts + '</select>'
+    + '    <input type="number" class="rab-input" id="rdtl-new-qty-' + sectionId + '" placeholder="Qty" min="0" step="0.001">'
+    + '    <input type="number" class="rab-input" id="rdtl-new-rate-' + sectionId + '" placeholder="Rate (IDR)" min="0" step="1">'
+    + '  </div>'
+    + '  <div style="display:flex;gap:var(--space-2);margin-top:var(--space-2)">'
+    + '    <button class="btn btn--primary btn--sm" onclick="rdtlSaveNewItem(' + sectionId + ')">Save</button>'
+    + '    <button class="btn btn--outline btn--sm" onclick="rdtlShowAddItem(' + sectionId + ')">Cancel</button>'
+    + '  </div>'
+    + '</div>';
+  var nameInput = document.getElementById('rdtl-new-name-' + sectionId);
+  if (nameInput) nameInput.focus();
+}
+
+function rdtlSaveNewItem(sectionId) {
+  var name = document.getElementById('rdtl-new-name-' + sectionId).value.trim();
+  var unitId = document.getElementById('rdtl-new-unit-' + sectionId).value;
+  var qty = parseFloat(document.getElementById('rdtl-new-qty-' + sectionId).value) || 0;
+  var rate = parseFloat(document.getElementById('rdtl-new-rate-' + sectionId).value) || 0;
+  if (!name) { showToast('Item description is required.', 'error'); return; }
+  if (!unitId) { showToast('Please select a unit.', 'error'); return; }
+
+  fetch(RAB_API + '?action=save_item', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ section_id: sectionId, name: name, unit_id: parseInt(unitId), quantity: qty, rate: rate })
+  })
+  .then(function(res) { return res.json(); })
+  .then(function(json) {
+    if (!json.ok) throw new Error('Save failed');
+    rdtlUpdateTotals(json.totals);
+    rdtlLoadSections();
+  })
+  .catch(function(e) { showToast(e.message, 'error'); });
+}
+
+function rdtlEditItem(itemId, sectionId) {
+  // Find the item row and replace with inline edit form
+  var row = document.querySelector('tr[data-item-id="' + itemId + '"]');
+  if (!row) return;
+
+  var name = row.querySelector('.rdtl-item-name').textContent;
+  var qtyText = row.querySelector('.rdtl-item-qty').textContent;
+  var rateText = row.querySelector('.rdtl-item-rate').textContent.replace(/[^\d]/g, '');
+  var unitCode = row.querySelector('.rdtl-item-unit').textContent;
+
+  var units = _rabEditorState.units;
+  var unitOpts = units.map(function(u) {
+    var sel = (u.code === unitCode) ? ' selected' : '';
+    return '<option value="' + u.id + '"' + sel + '>' + escHtml(u.code) + '</option>';
+  }).join('');
+
+  row.innerHTML = ''
+    + '<td colspan="5"><div class="rdtl-item-form-grid">'
+    + '  <input type="text" class="rab-input" id="rdtl-edit-name-' + itemId + '" value="' + escHtml(name) + '">'
+    + '  <select class="rab-select" id="rdtl-edit-unit-' + itemId + '">' + unitOpts + '</select>'
+    + '  <input type="number" class="rab-input" id="rdtl-edit-qty-' + itemId + '" value="' + qtyText + '" min="0" step="0.001">'
+    + '  <input type="number" class="rab-input" id="rdtl-edit-rate-' + itemId + '" value="' + rateText + '" min="0" step="1">'
+    + '</div></td>'
+    + '<td><div style="display:flex;gap:4px;flex-direction:column">'
+    + '  <button class="btn btn--primary btn--sm" onclick="rdtlSaveEditItem(' + itemId + ',' + sectionId + ')">Save</button>'
+    + '  <button class="btn btn--outline btn--sm" onclick="rdtlLoadSections()">Cancel</button>'
+    + '</div></td>';
+}
+
+function rdtlSaveEditItem(itemId, sectionId) {
+  var name = document.getElementById('rdtl-edit-name-' + itemId).value.trim();
+  var unitId = document.getElementById('rdtl-edit-unit-' + itemId).value;
+  var qty = parseFloat(document.getElementById('rdtl-edit-qty-' + itemId).value) || 0;
+  var rate = parseFloat(document.getElementById('rdtl-edit-rate-' + itemId).value) || 0;
+  if (!name) { showToast('Item description is required.', 'error'); return; }
+
+  fetch(RAB_API + '?action=save_item', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ item_id: itemId, section_id: sectionId, name: name, unit_id: parseInt(unitId), quantity: qty, rate: rate })
+  })
+  .then(function(res) { return res.json(); })
+  .then(function(json) {
+    if (!json.ok) throw new Error('Save failed');
+    rdtlUpdateTotals(json.totals);
+    rdtlLoadSections();
+  })
+  .catch(function(e) { showToast(e.message, 'error'); });
+}
+
+function rdtlDeleteItem(itemId) {
+  if (!confirm('Delete this item?')) return;
+  fetch(RAB_API + '?action=delete_item', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ item_id: itemId })
+  })
+  .then(function(res) { return res.json(); })
+  .then(function(json) {
+    if (!json.ok) throw new Error('Delete failed');
+    rdtlUpdateTotals(json.totals);
+    rdtlLoadSections();
+  })
+  .catch(function(e) { showToast(e.message, 'error'); });
+}
+
+function rdtlAddSection() {
+  var name = prompt('New section name:');
+  if (!name || !name.trim()) return;
+  fetch(RAB_API + '?action=save_section', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rab_id: _rabEditorState.rabId, disc_id: _rabEditorState.activeDiscId, name: name.trim() })
+  })
+  .then(function(res) { return res.json(); })
+  .then(function(json) {
+    if (!json.ok) throw new Error('Create failed');
+    rdtlLoadSections();
+  })
+  .catch(function(e) { showToast(e.message, 'error'); });
+}
+
+function rdtlRenameSection(sectionId, currentName) {
+  var name = prompt('Rename section:', currentName);
+  if (!name || !name.trim()) return;
+  fetch(RAB_API + '?action=save_section', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ section_id: sectionId, name: name.trim() })
+  })
+  .then(function(res) { return res.json(); })
+  .then(function(json) {
+    if (!json.ok) throw new Error('Rename failed');
+    rdtlLoadSections();
+  })
+  .catch(function(e) { showToast(e.message, 'error'); });
+}
+
+function rdtlDeleteSection(sectionId) {
+  if (!confirm('Delete this section? It must have no items.')) return;
+  fetch(RAB_API + '?action=delete_section', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ section_id: sectionId })
+  })
+  .then(function(res) { return res.json(); })
+  .then(function(json) {
+    if (!json.ok) throw new Error(json.error || 'Delete failed');
+    rdtlLoadSections();
+  })
+  .catch(function(e) { showToast(e.message, 'error'); });
+}
+
+function rdtlUpdateArea() {
+  var area = parseFloat(document.getElementById('rdtl-area-input').value) || 0;
+  fetch(RAB_API + '?action=update_area', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rab_id: _rabEditorState.rabId, area: area })
+  })
+  .then(function(res) { return res.json(); })
+  .then(function(json) {
+    if (!json.ok) throw new Error('Update failed');
+    rdtlUpdateTotals(json.totals);
+  })
+  .catch(function(e) { showToast(e.message, 'error'); });
+}
+
+function rdtlUpdateTotals(totals) {
+  if (!totals) return;
+  var el;
+  el = document.getElementById('rdtl-total-arch');
+  if (el) el.textContent = fmtIDR(totals.arch || 0);
+  el = document.getElementById('rdtl-total-mep');
+  if (el) el.textContent = fmtIDR(totals.mep || 0);
+  el = document.getElementById('rdtl-total-str');
+  if (el) el.textContent = fmtIDR(totals.str || 0);
+  el = document.getElementById('rdtl-total-grand');
+  if (el) el.textContent = fmtIDR(totals.grand || 0);
+  el = document.getElementById('rdtl-total-perm2');
+  if (el) el.textContent = totals.cost_per_m2 ? fmtIDR(totals.cost_per_m2) : '\u2014';
 }
 
 
