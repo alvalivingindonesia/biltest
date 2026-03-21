@@ -516,6 +516,10 @@ async function router() {
     if (hrefPage === 'guides' && (page === 'guides' || page === 'guide')) {
       a.classList.add('active');
     }
+    // RAB Tools
+    if (hrefPage === 'rab-calculator' && (page === 'rab-calculator' || page === 'rab-estimates' || page === 'rab-result')) {
+      a.classList.add('active');
+    }
     // About
     if (hrefPage === 'about' && page === 'about') {
       a.classList.add('active');
@@ -556,6 +560,9 @@ async function router() {
     case 'create-listing': await renderCreateListing(view); break;
     case 'agent-signup': await renderAgentSignup(view); break;
     case 'about': renderAbout(view); break;
+    case 'rab-calculator': await renderRABCalculator(view); break;
+    case 'rab-estimates': await renderRABEstimates(view); break;
+    case 'rab-result': await renderRABResult(view, params); break;
     default: await renderHome(view);
   }
 
@@ -3207,6 +3214,537 @@ async function checkReviewUpdates(entityType, entityId) {
     showToast('Review update check submitted. Ratings will refresh shortly.', 'success');
   } catch(e) {
     showToast(e.message || 'Unable to check for review updates.', 'error');
+  }
+}
+
+
+// =====================================================
+// RENDER: RAB CALCULATOR (Frontend)
+// =====================================================
+
+var RAB_API = '/api/rab_api.php';
+
+function fmtIDR(val) {
+  if (!val && val !== 0) return 'Rp 0';
+  return 'Rp ' + Math.round(Number(val)).toLocaleString('id-ID');
+}
+
+async function renderRABCalculator(el) {
+  var presets = [];
+  try {
+    var res = await fetch(RAB_API + '?action=presets', { credentials: 'include' });
+    var json = await res.json();
+    presets = json.data || [];
+  } catch(e) { presets = []; }
+
+  var defaultPreset = presets.find(function(p) { return p.is_default == 1; }) || presets[0];
+
+  el.innerHTML = ''
+    + '<div class="rab-hero">'
+    + '  <div class="container">'
+    + '    <div class="rab-hero-content">'
+    + '      <p class="rab-hero-eyebrow">RAB Cost Tools</p>'
+    + '      <h1 class="rab-hero-title">Building Cost Calculator</h1>'
+    + '      <p class="rab-hero-subtitle">Get an instant cost estimate for your Lombok villa or home. Choose your building type, quality level, and optional extras to see an estimate in seconds.</p>'
+    + '      <div class="rab-hero-tabs">'
+    + '        <a href="#rab-calculator" class="rab-tab active">Calculator</a>'
+    + '        <a href="#rab-estimates" class="rab-tab" onclick="navigate(\'rab-estimates\');return false;">My Saved Estimates</a>'
+    + '      </div>'
+    + '    </div>'
+    + '  </div>'
+    + '</div>'
+    + '<div class="section">'
+    + '  <div class="container">'
+    + (presets.length === 0
+       ? '<div class="card" style="padding:var(--space-8);text-align:center;"><p style="color:var(--color-text-faint)">No calculator presets available yet. Please check back soon.</p></div>'
+       : '<div class="rab-calc-layout">' + buildCalcForm(presets, defaultPreset) + buildPresetSidebar(defaultPreset) + '</div>')
+    + '  </div>'
+    + '</div>';
+
+  if (presets.length === 0) return;
+
+  // Wire up events
+  var form = el.querySelector('#rab-calc-form');
+  var presetSel = el.querySelector('#rab-preset-sel');
+  var storeysSel = el.querySelector('#rab-storeys-sel');
+
+  if (presetSel) {
+    presetSel.addEventListener('change', function() {
+      var pid = parseInt(this.value);
+      var p = presets.find(function(x) { return x.id == pid; });
+      if (p) updatePresetSidebar(p);
+    });
+  }
+
+  if (storeysSel) {
+    storeysSel.addEventListener('change', function() {
+      var n = parseInt(this.value);
+      for (var i = 2; i <= 4; i++) {
+        var wrap = el.querySelector('#rab-fa-' + i);
+        if (wrap) wrap.style.display = i <= n ? '' : 'none';
+      }
+    });
+  }
+
+  // Toggle optional fields
+  var ckRooftop = el.querySelector('#rab-ck-rooftop');
+  if (ckRooftop) {
+    ckRooftop.addEventListener('change', function() {
+      el.querySelector('#rab-rooftop-wrap').style.display = this.checked ? '' : 'none';
+    });
+  }
+  var ckPool = el.querySelector('#rab-ck-pool');
+  if (ckPool) {
+    ckPool.addEventListener('change', function() {
+      el.querySelector('#rab-pool-wrap').style.display = this.checked ? '' : 'none';
+    });
+  }
+
+  // Quality radio styling
+  el.querySelectorAll('.rab-quality-opt input[type=radio]').forEach(function(r) {
+    r.addEventListener('change', function() {
+      el.querySelectorAll('.rab-quality-opt').forEach(function(o) { o.classList.remove('selected'); });
+      if (r.checked) r.closest('.rab-quality-opt').classList.add('selected');
+    });
+    if (r.checked) r.closest('.rab-quality-opt').classList.add('selected');
+  });
+
+  // Form submit
+  if (form) {
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      runRABCalculation(el, form, presets);
+    });
+  }
+}
+
+function buildCalcForm(presets, dp) {
+  var presetOpts = presets.map(function(p) {
+    return '<option value="' + p.id + '"' + (p.is_default == 1 ? ' selected' : '') + '>' + escHtml(p.name) + (p.description ? ' — ' + escHtml(p.description.substring(0, 60)) : '') + '</option>';
+  }).join('');
+
+  return ''
+    + '<div class="rab-calc-main">'
+    + '<form id="rab-calc-form">'
+    + '<div class="rab-card">'
+    + '  <h3 class="rab-card-title"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M3 10h18M3 7l9-4 9 4M4 10v11M20 10v11"/></svg> Building Type &amp; Quality</h3>'
+    + '  <div class="rab-field">'
+    + '    <label class="rab-label">Rate Preset</label>'
+    + '    <select id="rab-preset-sel" name="preset_id" class="rab-select">' + presetOpts + '</select>'
+    + '  </div>'
+    + '  <label class="rab-label" style="margin-bottom:var(--space-2)">Quality Level</label>'
+    + '  <div class="rab-quality-row">'
+    + '    <label class="rab-quality-opt"><input type="radio" name="quality" value="low"><span class="rab-quality-inner"><span class="rab-quality-name">Economy</span><span class="rab-quality-desc">Budget finish</span></span></label>'
+    + '    <label class="rab-quality-opt selected"><input type="radio" name="quality" value="mid" checked><span class="rab-quality-inner"><span class="rab-quality-name">Standard</span><span class="rab-quality-desc">Mid-range</span></span></label>'
+    + '    <label class="rab-quality-opt"><input type="radio" name="quality" value="high"><span class="rab-quality-inner"><span class="rab-quality-name">Premium</span><span class="rab-quality-desc">High-end finish</span></span></label>'
+    + '  </div>'
+    + '</div>'
+    + '<div class="rab-card">'
+    + '  <h3 class="rab-card-title"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg> Building Floors</h3>'
+    + '  <div class="rab-field">'
+    + '    <label class="rab-label">Number of Storeys</label>'
+    + '    <select id="rab-storeys-sel" name="num_storeys" class="rab-select">'
+    + '      <option value="1">1 Storey</option>'
+    + '      <option value="2">2 Storeys</option>'
+    + '      <option value="3">3 Storeys</option>'
+    + '      <option value="4">4+ Storeys</option>'
+    + '    </select>'
+    + '  </div>'
+    + '  <div class="rab-fields-grid">'
+    + '    <div class="rab-field" id="rab-fa-1"><label class="rab-label">Ground Floor (m\u00B2)</label><input type="number" name="floor_area_1" class="rab-input" min="0" step="0.5" placeholder="e.g. 150"></div>'
+    + '    <div class="rab-field" id="rab-fa-2" style="display:none"><label class="rab-label">1st Floor (m\u00B2)</label><input type="number" name="floor_area_2" class="rab-input" min="0" step="0.5" placeholder="e.g. 120" value="0"></div>'
+    + '    <div class="rab-field" id="rab-fa-3" style="display:none"><label class="rab-label">2nd Floor (m\u00B2)</label><input type="number" name="floor_area_3" class="rab-input" min="0" step="0.5" placeholder="e.g. 100" value="0"></div>'
+    + '    <div class="rab-field" id="rab-fa-4" style="display:none"><label class="rab-label">Other Levels (m\u00B2)</label><input type="number" name="floor_area_4" class="rab-input" min="0" step="0.5" placeholder="e.g. 80" value="0"></div>'
+    + '  </div>'
+    + '</div>'
+    + '<div class="rab-card">'
+    + '  <h3 class="rab-card-title"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg> Optional Extras</h3>'
+    + '  <label class="rab-check-label"><input type="checkbox" name="walkable_rooftop" id="rab-ck-rooftop"><span>Walkable Rooftop / Roof Deck</span></label>'
+    + '  <div id="rab-rooftop-wrap" style="display:none;margin-left:28px;margin-bottom:var(--space-4)">'
+    + '    <div class="rab-field"><label class="rab-label">Rooftop Area (m\u00B2)</label><input type="number" name="rooftop_area" class="rab-input" min="0" step="0.5" placeholder="e.g. 80"></div>'
+    + '  </div>'
+    + '  <label class="rab-check-label"><input type="checkbox" name="has_pool" id="rab-ck-pool"><span>Swimming Pool</span></label>'
+    + '  <div id="rab-pool-wrap" style="display:none;margin-left:28px;margin-bottom:var(--space-4)">'
+    + '    <div class="rab-fields-grid">'
+    + '      <div class="rab-field"><label class="rab-label">Pool Area (m\u00B2)</label><input type="number" name="pool_area" class="rab-input" min="0" step="0.5" placeholder="e.g. 30"></div>'
+    + '      <div class="rab-field"><label class="rab-label">Pool Type</label><div class="rab-radio-row"><label class="rab-check-label"><input type="radio" name="pool_type" value="standard" checked><span>Standard</span></label><label class="rab-check-label"><input type="radio" name="pool_type" value="infinity"><span>Infinity</span></label></div></div>'
+    + '    </div>'
+    + '  </div>'
+    + '  <div class="rab-field" style="margin-top:var(--space-3)"><label class="rab-label">Deck / Terrace Area (m\u00B2)</label><input type="number" name="deck_area" class="rab-input" min="0" step="0.5" placeholder="e.g. 40"></div>'
+    + '</div>'
+    + '<button type="submit" class="rab-submit-btn" id="rab-calc-submit">'
+    + '  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h8M8 14h4"/></svg>'
+    + '  Calculate Estimate'
+    + '</button>'
+    + '</form>'
+    + '<div id="rab-result-area" style="display:none"></div>'
+    + '</div>';
+}
+
+function buildPresetSidebar(dp) {
+  if (!dp) return '';
+  return ''
+    + '<div class="rab-calc-sidebar">'
+    + '<div class="rab-card rab-preset-card" id="rab-preset-info">'
+    + '  <h3 class="rab-card-title" style="font-size:var(--text-base)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> Rate Card</h3>'
+    + '  <div class="rab-rates" id="rab-rates-list">'
+    + buildRatesList(dp)
+    + '  </div>'
+    + '</div>'
+    + '<div class="rab-card rab-info-card">'
+    + '  <h4 style="font-family:var(--font-display);font-size:var(--text-base);margin-bottom:var(--space-2);color:var(--color-heading)">How it works</h4>'
+    + '  <ol class="rab-howto">'
+    + '    <li>Choose a building preset and quality level</li>'
+    + '    <li>Enter floor areas for each storey</li>'
+    + '    <li>Add optional extras (pool, rooftop, deck)</li>'
+    + '    <li>Hit Calculate for your instant estimate</li>'
+    + '    <li>Save estimates to revisit later</li>'
+    + '  </ol>'
+    + '  <p class="rab-disclaimer">Estimates are indicative only and based on current Lombok market rates. Final costs may vary based on site conditions, materials, and design complexity.</p>'
+    + '</div>'
+    + '</div>';
+}
+
+function buildRatesList(dp) {
+  return ''
+    + '<div class="rab-rate-row"><span>Economy (m\u00B2)</span><span class="rab-rate-val">' + fmtIDR(dp.base_cost_per_m2_low) + '</span></div>'
+    + '<div class="rab-rate-row"><span>Standard (m\u00B2)</span><span class="rab-rate-val">' + fmtIDR(dp.base_cost_per_m2_mid) + '</span></div>'
+    + '<div class="rab-rate-row"><span>Premium (m\u00B2)</span><span class="rab-rate-val">' + fmtIDR(dp.base_cost_per_m2_high) + '</span></div>'
+    + '<div class="rab-rate-row"><span>Standard Pool (m\u00B2)</span><span class="rab-rate-val">' + fmtIDR(dp.pool_cost_per_m2_standard) + '</span></div>'
+    + '<div class="rab-rate-row"><span>Infinity Pool (m\u00B2)</span><span class="rab-rate-val">' + fmtIDR(dp.pool_cost_per_m2_infinity) + '</span></div>'
+    + '<div class="rab-rate-row"><span>Deck (m\u00B2)</span><span class="rab-rate-val">' + fmtIDR(dp.deck_cost_per_m2) + '</span></div>'
+    + '<div class="rab-rate-row"><span>Rooftop (m\u00B2)</span><span class="rab-rate-val">' + fmtIDR(dp.rooftop_cost_per_m2) + '</span></div>'
+    + '<div class="rab-rate-row"><span>Location Factor</span><span class="rab-rate-val">' + Number(dp.location_factor).toFixed(3) + '\u00D7</span></div>'
+    + '<div class="rab-rate-row"><span>Contingency</span><span class="rab-rate-val">' + Number(dp.contingency_percent).toFixed(1) + '%</span></div>';
+}
+
+function updatePresetSidebar(p) {
+  var ratesEl = document.getElementById('rab-rates-list');
+  if (ratesEl) ratesEl.innerHTML = buildRatesList(p);
+}
+
+function escHtml(s) {
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+async function runRABCalculation(el, form, presets) {
+  var btn = el.querySelector('#rab-calc-submit');
+  var origText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="rab-spinner"></span> Calculating...';
+
+  var fd = new FormData(form);
+  var data = {};
+  fd.forEach(function(value, key) { data[key] = value; });
+  // Checkboxes
+  data.walkable_rooftop = form.querySelector('[name=walkable_rooftop]').checked ? 1 : 0;
+  data.has_pool = form.querySelector('[name=has_pool]').checked ? 1 : 0;
+
+  try {
+    var res = await fetch(RAB_API + '?action=calculate', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    var json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Calculation failed');
+
+    // Show result inline
+    showCalcResult(el, json.result, json.run_id);
+  } catch(e) {
+    showToast(e.message || 'Unable to calculate. Please try again.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origText;
+  }
+}
+
+function showCalcResult(el, r, runId) {
+  var area = el.querySelector('#rab-result-area');
+  if (!area) return;
+  area.style.display = 'block';
+  area.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  var breakdown = ''
+    + '<div class="rab-result-breakdown">'
+    + '  <div class="rab-result-header">'
+    + '    <h2 class="rab-result-title">Your Cost Estimate</h2>'
+    + '    <p class="rab-result-subtitle">' + escHtml(r.preset_name) + ' \u2022 ' + escHtml(r.quality_label) + ' Quality \u2022 ' + r.num_storeys + ' Storey' + (r.num_storeys > 1 ? 's' : '') + '</p>'
+    + '  </div>'
+    + '  <div class="rab-result-grand">'
+    + '    <span class="rab-result-grand-label">Estimated Total Cost</span>'
+    + '    <span class="rab-result-grand-val">' + fmtIDR(r.grand_total) + '</span>'
+    + '  </div>'
+    + '  <div class="rab-result-rows">'
+    + '    <div class="rab-result-row"><span>Building (' + r.total_floor_area.toFixed(1) + ' m\u00B2 @ ' + fmtIDR(r.building_rate) + '/m\u00B2)</span><span>' + fmtIDR(r.building_cost) + '</span></div>';
+
+  if (r.walkable_rooftop && r.rooftop_cost > 0) {
+    breakdown += '    <div class="rab-result-row"><span>Rooftop Deck (' + r.rooftop_area.toFixed(1) + ' m\u00B2)</span><span>' + fmtIDR(r.rooftop_cost) + '</span></div>';
+  }
+  if (r.has_pool && r.pool_cost > 0) {
+    breakdown += '    <div class="rab-result-row"><span>' + (r.pool_is_infinity ? 'Infinity' : 'Standard') + ' Pool (' + r.pool_area.toFixed(1) + ' m\u00B2)</span><span>' + fmtIDR(r.pool_cost) + '</span></div>';
+  }
+  if (r.deck_cost > 0) {
+    breakdown += '    <div class="rab-result-row"><span>Deck / Terrace (' + r.deck_area.toFixed(1) + ' m\u00B2)</span><span>' + fmtIDR(r.deck_cost) + '</span></div>';
+  }
+
+  breakdown += ''
+    + '    <div class="rab-result-row rab-result-row--sub"><span>Subtotal</span><span>' + fmtIDR(r.subtotal) + '</span></div>'
+    + '    <div class="rab-result-row"><span>Contingency (' + r.contingency_pct.toFixed(1) + '%)</span><span>' + fmtIDR(r.contingency) + '</span></div>'
+    + '    <div class="rab-result-row rab-result-row--total"><span>Grand Total</span><span>' + fmtIDR(r.grand_total) + '</span></div>'
+    + '  </div>'
+    + '  <div class="rab-result-actions">'
+    + '    <button class="btn btn--primary" id="rab-save-btn" onclick="saveRABEstimate(' + runId + ')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Save Estimate</button>'
+    + '    <button class="btn btn--outline" onclick="navigate(\'rab-calculator\');return false;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg> New Calculation</button>'
+    + '  </div>'
+    + '</div>';
+
+  area.innerHTML = breakdown;
+}
+
+function saveRABEstimate(runId) {
+  if (!UserAuth.user) {
+    showAuthModal('login');
+    return;
+  }
+  // Show name prompt
+  var name = prompt('Give your estimate a name (optional):');
+  if (name === null) return; // cancelled
+
+  var btn = document.getElementById('rab-save-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Saving...'; }
+
+  fetch(RAB_API + '?action=save_estimate', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ run_id: runId, name: name || '' })
+  })
+  .then(function(res) { return res.json().then(function(j) { return { ok: res.ok, json: j }; }); })
+  .then(function(out) {
+    if (!out.ok) throw new Error(out.json.error || 'Save failed');
+    showToast('Estimate saved. View it in My Saved Estimates.', 'success');
+    if (btn) { btn.innerHTML = '\u2713 Saved'; btn.disabled = true; }
+  })
+  .catch(function(e) {
+    showToast(e.message || 'Unable to save estimate.', 'error');
+    if (btn) { btn.disabled = false; btn.innerHTML = 'Save Estimate'; }
+  });
+}
+
+
+// =====================================================
+// RENDER: RAB SAVED ESTIMATES
+// =====================================================
+
+async function renderRABEstimates(el) {
+  if (!UserAuth.user) {
+    el.innerHTML = ''
+      + '<div class="rab-hero">'
+      + '  <div class="container">'
+      + '    <div class="rab-hero-content">'
+      + '      <p class="rab-hero-eyebrow">RAB Cost Tools</p>'
+      + '      <h1 class="rab-hero-title">My Saved Estimates</h1>'
+      + '      <p class="rab-hero-subtitle">Sign in to view and manage your saved cost estimates.</p>'
+      + '    </div>'
+      + '  </div>'
+      + '</div>'
+      + '<div class="section"><div class="container" style="text-align:center;padding:var(--space-12) 0;">'
+      + '  <button class="btn btn--primary" onclick="showAuthModal(\'login\')">Sign In to View Estimates</button>'
+      + '</div></div>';
+    return;
+  }
+
+  el.innerHTML = ''
+    + '<div class="rab-hero">'
+    + '  <div class="container">'
+    + '    <div class="rab-hero-content">'
+    + '      <p class="rab-hero-eyebrow">RAB Cost Tools</p>'
+    + '      <h1 class="rab-hero-title">My Saved Estimates</h1>'
+    + '      <p class="rab-hero-subtitle">View and manage your saved building cost estimates.</p>'
+    + '      <div class="rab-hero-tabs">'
+    + '        <a href="#rab-calculator" class="rab-tab" onclick="navigate(\'rab-calculator\');return false;">Calculator</a>'
+    + '        <a href="#rab-estimates" class="rab-tab active">My Saved Estimates</a>'
+    + '      </div>'
+    + '    </div>'
+    + '  </div>'
+    + '</div>'
+    + '<div class="section"><div class="container"><div id="rab-estimates-list"><div class="page-loading"><div class="page-loading-spinner"></div></div></div></div></div>';
+
+  try {
+    var res = await fetch(RAB_API + '?action=my_estimates', { credentials: 'include' });
+    var json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Failed to load estimates');
+    var estimates = json.data || [];
+    var listEl = el.querySelector('#rab-estimates-list');
+
+    if (estimates.length === 0) {
+      listEl.innerHTML = ''
+        + '<div class="rab-empty-state">'
+        + '  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="1.5" style="margin-bottom:var(--space-4)"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h8M8 14h4"/></svg>'
+        + '  <h3 style="font-family:var(--font-display);margin-bottom:var(--space-2)">No saved estimates yet</h3>'
+        + '  <p style="color:var(--color-text-faint);margin-bottom:var(--space-4)">Run a calculation and save it to see it here.</p>'
+        + '  <a href="#rab-calculator" class="btn btn--primary" onclick="navigate(\'rab-calculator\');return false;">Go to Calculator</a>'
+        + '</div>';
+      return;
+    }
+
+    var ql_map = { low: 'Economy', mid: 'Standard', high: 'Premium' };
+    var cards = estimates.map(function(est) {
+      var dateStr = est.created_at ? new Date(est.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+      return ''
+        + '<div class="rab-estimate-card">'
+        + '  <div class="rab-estimate-header">'
+        + '    <div>'
+        + '      <h3 class="rab-estimate-name">' + escHtml(est.name || 'Untitled Estimate') + '</h3>'
+        + '      <p class="rab-estimate-meta">' + escHtml(est.preset_name || '') + ' \u2022 ' + escHtml(est.quality_label || ql_map[est.quality_level] || '') + ' \u2022 ' + est.num_storeys + ' storey' + (est.num_storeys > 1 ? 's' : '') + ' \u2022 ' + Number(est.total_floor_area_m2).toFixed(0) + ' m\u00B2</p>'
+        + '      <p class="rab-estimate-date">' + dateStr + '</p>'
+        + '    </div>'
+        + '    <div class="rab-estimate-total">' + fmtIDR(est.grand_total_cost) + '</div>'
+        + '  </div>'
+        + '  <div class="rab-estimate-actions">'
+        + '    <button class="btn btn--sm btn--outline" onclick="navigate(\'rab-result?id=' + est.id + '\');return false;">View Details</button>'
+        + '    <button class="btn btn--sm btn--danger-outline" onclick="deleteRABEstimate(' + est.id + ', this)">Delete</button>'
+        + '  </div>'
+        + '</div>';
+    }).join('');
+
+    listEl.innerHTML = cards;
+  } catch(e) {
+    el.querySelector('#rab-estimates-list').innerHTML = '<div class="rab-card" style="text-align:center;color:var(--color-text-faint);padding:var(--space-8)">' + escHtml(e.message) + '</div>';
+  }
+}
+
+function deleteRABEstimate(runId, btnEl) {
+  if (!confirm('Remove this saved estimate?')) return;
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Removing...'; }
+
+  fetch(RAB_API + '?action=delete_estimate', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ run_id: runId })
+  })
+  .then(function(res) { return res.json().then(function(j) { return { ok: res.ok, json: j }; }); })
+  .then(function(out) {
+    if (!out.ok) throw new Error(out.json.error || 'Delete failed');
+    showToast('Estimate removed.', 'success');
+    // Refresh the list
+    var main = document.getElementById('main-content');
+    if (main) {
+      var view = document.createElement('div');
+      view.className = 'page-view';
+      renderRABEstimates(view).then(function() {
+        main.innerHTML = '';
+        main.appendChild(view);
+      });
+    }
+  })
+  .catch(function(e) {
+    showToast(e.message || 'Unable to delete.', 'error');
+    if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Delete'; }
+  });
+}
+
+
+// =====================================================
+// RENDER: RAB RESULT DETAIL
+// =====================================================
+
+async function renderRABResult(el, params) {
+  var id = params.id || 0;
+  if (!id) { navigate('rab-calculator'); return; }
+
+  el.innerHTML = ''
+    + '<div class="rab-hero">'
+    + '  <div class="container">'
+    + '    <div class="rab-hero-content">'
+    + '      <p class="rab-hero-eyebrow">RAB Cost Tools</p>'
+    + '      <h1 class="rab-hero-title">Estimate Detail</h1>'
+    + '    </div>'
+    + '  </div>'
+    + '</div>'
+    + '<div class="section"><div class="container"><div id="rab-detail-area"><div class="page-loading"><div class="page-loading-spinner"></div></div></div></div></div>';
+
+  try {
+    var res = await fetch(RAB_API + '?action=estimate&id=' + id, { credentials: 'include' });
+    var json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Not found');
+    var r = json.data;
+
+    var ql_map = { low: 'Economy', mid: 'Standard', high: 'Premium' };
+    var ql = ql_map[r.quality_level] || r.quality_level;
+    var detailEl = el.querySelector('#rab-detail-area');
+
+    var html = ''
+      + '<a href="#rab-estimates" class="rab-back-link" onclick="navigate(\'rab-estimates\');return false;">\u2190 Back to Estimates</a>'
+      + '<div class="rab-detail-grid">'
+      + '<div class="rab-card">'
+      + '  <h3 class="rab-card-title">' + escHtml(r.name || 'Untitled Estimate') + '</h3>'
+      + '  <p class="rab-estimate-meta" style="margin-bottom:var(--space-4)">' + escHtml(r.preset_name || '') + ' \u2022 ' + escHtml(ql) + ' \u2022 ' + r.num_storeys + ' storey' + (r.num_storeys > 1 ? 's' : '') + '</p>'
+      + '  <div class="rab-result-rows">'
+      + '    <div class="rab-result-row"><span>Ground Floor</span><span>' + Number(r.floor_area_level1_m2).toFixed(1) + ' m\u00B2</span></div>';
+
+    if (Number(r.floor_area_level2_m2) > 0) {
+      html += '    <div class="rab-result-row"><span>1st Floor</span><span>' + Number(r.floor_area_level2_m2).toFixed(1) + ' m\u00B2</span></div>';
+    }
+    if (Number(r.floor_area_level3_m2) > 0) {
+      html += '    <div class="rab-result-row"><span>2nd Floor</span><span>' + Number(r.floor_area_level3_m2).toFixed(1) + ' m\u00B2</span></div>';
+    }
+    if (Number(r.floor_area_other_m2) > 0) {
+      html += '    <div class="rab-result-row"><span>Other Levels</span><span>' + Number(r.floor_area_other_m2).toFixed(1) + ' m\u00B2</span></div>';
+    }
+
+    html += '    <div class="rab-result-row rab-result-row--sub"><span>Total Floor Area</span><span>' + Number(r.total_floor_area_m2).toFixed(1) + ' m\u00B2</span></div>';
+
+    if (Number(r.rooftop_walkable)) {
+      html += '    <div class="rab-result-row"><span>Rooftop Area</span><span>' + Number(r.rooftop_area_m2).toFixed(1) + ' m\u00B2</span></div>';
+    }
+    if (Number(r.pool_has_pool)) {
+      html += '    <div class="rab-result-row"><span>' + (Number(r.pool_is_infinity) ? 'Infinity' : 'Standard') + ' Pool</span><span>' + Number(r.pool_area_m2).toFixed(1) + ' m\u00B2</span></div>';
+    }
+    if (Number(r.deck_area_m2) > 0) {
+      html += '    <div class="rab-result-row"><span>Deck / Terrace</span><span>' + Number(r.deck_area_m2).toFixed(1) + ' m\u00B2</span></div>';
+    }
+
+    html += '  </div></div>';
+
+    html += ''
+      + '<div class="rab-card">'
+      + '  <h3 class="rab-card-title">Cost Breakdown</h3>'
+      + '  <div class="rab-result-rows">'
+      + '    <div class="rab-result-row"><span>Building Cost</span><span>' + fmtIDR(r.building_cost) + '</span></div>';
+    if (Number(r.rooftop_cost) > 0) {
+      html += '    <div class="rab-result-row"><span>Rooftop</span><span>' + fmtIDR(r.rooftop_cost) + '</span></div>';
+    }
+    if (Number(r.pool_cost) > 0) {
+      html += '    <div class="rab-result-row"><span>Pool</span><span>' + fmtIDR(r.pool_cost) + '</span></div>';
+    }
+    if (Number(r.deck_cost) > 0) {
+      html += '    <div class="rab-result-row"><span>Deck / Terrace</span><span>' + fmtIDR(r.deck_cost) + '</span></div>';
+    }
+
+    html += ''
+      + '    <div class="rab-result-row rab-result-row--sub"><span>Subtotal</span><span>' + fmtIDR(r.subtotal_cost) + '</span></div>'
+      + '    <div class="rab-result-row"><span>Contingency (' + Number(r.contingency_amount > 0 && r.subtotal_cost > 0 ? (r.contingency_amount / r.subtotal_cost * 100) : 0).toFixed(1) + '%)</span><span>' + fmtIDR(r.contingency_amount) + '</span></div>'
+      + '    <div class="rab-result-row rab-result-row--total"><span>Grand Total</span><span>' + fmtIDR(r.grand_total_cost) + '</span></div>'
+      + '  </div>'
+      + '</div>'
+      + '</div>'
+      + '<div class="rab-result-actions" style="margin-top:var(--space-4)">'
+      + '  <a href="#rab-calculator" class="btn btn--primary" onclick="navigate(\'rab-calculator\');return false;">New Calculation</a>'
+      + '  <a href="#rab-estimates" class="btn btn--outline" onclick="navigate(\'rab-estimates\');return false;">All Estimates</a>'
+      + '</div>';
+
+    detailEl.innerHTML = html;
+  } catch(e) {
+    el.querySelector('#rab-detail-area').innerHTML = '<div class="rab-card" style="text-align:center;color:var(--color-text-faint);padding:var(--space-8)">'
+      + '<p>' + escHtml(e.message) + '</p>'
+      + '<a href="#rab-calculator" class="btn btn--primary" style="margin-top:var(--space-4)" onclick="navigate(\'rab-calculator\');return false;">Back to Calculator</a>'
+      + '</div>';
   }
 }
 
