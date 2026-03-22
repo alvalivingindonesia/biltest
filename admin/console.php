@@ -21,6 +21,244 @@ if (isset($_POST['login'])) {
 if (isset($_GET['logout'])) { session_destroy(); header('Location: console.php'); exit; }
 if (empty($_SESSION['admin_auth'])) { show_login($auth_error); exit; }
 
+// ─── AJAX API ────────────────────────────────────────────────────────
+// All quick actions (delete, toggle, status change, approve/reject, edit)
+// return JSON when called with ?ajax=1
+if (isset($_GET['ajax']) && $_GET['ajax'] === '1' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json; charset=utf-8');
+    $db_ajax = new PDO('mysql:host='.DB_HOST.';dbname='.DB_NAME.';charset=utf8mb4', DB_USER, DB_PASS, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false,
+    ]);
+    $aj_action = $_POST['aj_action'] ?? '';
+    $aj_id = (int)($_POST['aj_id'] ?? 0);
+    $aj_result = array('ok' => false, 'msg' => 'Unknown action');
+    try {
+        switch ($aj_action) {
+            // ─── ENTITY DELETE (providers, developers, projects, guides) ───
+            case 'delete_entity':
+                $table = $_POST['aj_table'] ?? '';
+                $allowed = array('providers','developers','projects','guides');
+                if (in_array($table, $allowed) && $aj_id) {
+                    // Clean up junction tables for providers/developers
+                    if ($table === 'providers') {
+                        $db_ajax->prepare("DELETE FROM provider_categories WHERE provider_id=?")->execute(array($aj_id));
+                        $db_ajax->prepare("DELETE FROM provider_tags WHERE provider_id=?")->execute(array($aj_id));
+                    } elseif ($table === 'developers') {
+                        $db_ajax->prepare("DELETE FROM developer_areas WHERE developer_id=?")->execute(array($aj_id));
+                        $db_ajax->prepare("DELETE FROM developer_categories WHERE developer_id=?")->execute(array($aj_id));
+                        $db_ajax->prepare("DELETE FROM developer_tags WHERE developer_id=?")->execute(array($aj_id));
+                    }
+                    $db_ajax->prepare("DELETE FROM `{$table}` WHERE id=?")->execute(array($aj_id));
+                    $aj_result = array('ok' => true, 'msg' => ucfirst($table) . ' entry deleted.');
+                }
+                break;
+
+            // ─── LISTING ACTIONS ───
+            case 'listing_delete':
+                if ($aj_id) {
+                    $db_ajax->prepare("DELETE FROM listings WHERE id=?")->execute(array($aj_id));
+                    $aj_result = array('ok' => true, 'msg' => 'Listing deleted.');
+                }
+                break;
+
+            case 'listing_approve':
+                if ($aj_id) {
+                    $db_ajax->prepare("UPDATE listings SET is_approved=1, status='active' WHERE id=?")->execute(array($aj_id));
+                    $aj_result = array('ok' => true, 'msg' => 'Listing approved.', 'new_val' => 1);
+                }
+                break;
+
+            case 'listing_reject':
+                if ($aj_id) {
+                    $db_ajax->prepare("UPDATE listings SET is_approved=0, status='draft' WHERE id=?")->execute(array($aj_id));
+                    $aj_result = array('ok' => true, 'msg' => 'Listing rejected.', 'new_val' => 0);
+                }
+                break;
+
+            case 'listing_toggle_featured':
+                if ($aj_id) {
+                    $db_ajax->prepare("UPDATE listings SET is_featured = NOT is_featured WHERE id=?")->execute(array($aj_id));
+                    $row = $db_ajax->prepare("SELECT is_featured FROM listings WHERE id=?");
+                    $row->execute(array($aj_id));
+                    $nv = $row->fetchColumn();
+                    $aj_result = array('ok' => true, 'msg' => 'Featured status updated.', 'new_val' => (int)$nv);
+                }
+                break;
+
+            case 'listing_change_status':
+                if ($aj_id) {
+                    $ns = $_POST['new_status'] ?? '';
+                    $valid = array('draft','active','under_offer','sold','expired');
+                    if (in_array($ns, $valid)) {
+                        $db_ajax->prepare("UPDATE listings SET status=? WHERE id=?")->execute(array($ns, $aj_id));
+                        $aj_result = array('ok' => true, 'msg' => 'Status updated to ' . $ns . '.', 'new_val' => $ns);
+                    }
+                }
+                break;
+
+            case 'listing_edit':
+                if ($aj_id) {
+                    $fields = array();
+                    $vals = array();
+                    $allowed_f = array('title','listing_type','area_key','price_usd','price_idr','land_size_sqm','land_size_are','building_size_sqm','bedrooms','bathrooms','short_description','source_url','contact_whatsapp','agent_id','admin_notes');
+                    foreach ($allowed_f as $f) {
+                        if (isset($_POST[$f])) {
+                            $fields[] = "`" . $f . "`=?";
+                            $v = trim($_POST[$f]);
+                            $vals[] = ($v === '') ? null : $v;
+                        }
+                    }
+                    if (count($fields) > 0) {
+                        $vals[] = $aj_id;
+                        $db_ajax->prepare("UPDATE listings SET " . implode(',', $fields) . " WHERE id=?")->execute($vals);
+                    }
+                    // Return updated row data
+                    $upd = $db_ajax->prepare("SELECT pl.*, a.display_name AS agent_name, ar.label AS area_label FROM listings pl LEFT JOIN agents a ON a.id=pl.agent_id LEFT JOIN areas ar ON ar.`key`=pl.area_key WHERE pl.id=?");
+                    $upd->execute(array($aj_id));
+                    $aj_result = array('ok' => true, 'msg' => 'Listing updated.', 'row' => $upd->fetch());
+                }
+                break;
+
+            // ─── USER ACTIONS (list view) ───
+            case 'user_toggle_active':
+                if ($aj_id) {
+                    $db_ajax->prepare("UPDATE users SET is_active = NOT is_active WHERE id=?")->execute(array($aj_id));
+                    $row = $db_ajax->prepare("SELECT is_active FROM users WHERE id=?"); $row->execute(array($aj_id));
+                    $aj_result = array('ok' => true, 'msg' => 'User status updated.', 'new_val' => (int)$row->fetchColumn());
+                }
+                break;
+
+            // ─── AGENT ACTIONS ───
+            case 'agent_toggle_verified':
+                if ($aj_id) {
+                    $db_ajax->prepare("UPDATE agents SET is_verified = NOT is_verified WHERE id=?")->execute(array($aj_id));
+                    $row = $db_ajax->prepare("SELECT is_verified FROM agents WHERE id=?"); $row->execute(array($aj_id));
+                    $aj_result = array('ok' => true, 'msg' => 'Verification updated.', 'new_val' => (int)$row->fetchColumn());
+                }
+                break;
+
+            case 'agent_toggle_active':
+                if ($aj_id) {
+                    $db_ajax->prepare("UPDATE agents SET is_active = NOT is_active WHERE id=?")->execute(array($aj_id));
+                    $row = $db_ajax->prepare("SELECT is_active FROM agents WHERE id=?"); $row->execute(array($aj_id));
+                    $aj_result = array('ok' => true, 'msg' => 'Active status updated.', 'new_val' => (int)$row->fetchColumn());
+                }
+                break;
+
+            // ─── CLAIM/SUBMISSION REVIEW ───
+            case 'claim_review':
+                if ($aj_id) {
+                    $decision = $_POST['decision'] ?? '';
+                    $notes = trim($_POST['admin_notes'] ?? '');
+                    if (in_array($decision, array('approved','rejected'))) {
+                        $db_ajax->prepare("UPDATE claim_requests SET status=?, admin_notes=?, reviewed_at=NOW() WHERE id=?")
+                           ->execute(array($decision, $notes ?: null, $aj_id));
+                        if ($decision === 'approved') {
+                            $cl = $db_ajax->prepare("SELECT user_id, provider_id FROM claim_requests WHERE id=?");
+                            $cl->execute(array($aj_id));
+                            $cl = $cl->fetch();
+                            if ($cl) {
+                                $db_ajax->prepare("INSERT IGNORE INTO provider_owners (provider_id, user_id) VALUES (?,?)")->execute(array($cl['provider_id'], $cl['user_id']));
+                                $db_ajax->prepare("UPDATE users SET role='provider_owner' WHERE id=? AND role='user'")->execute(array($cl['user_id']));
+                            }
+                        }
+                        $aj_result = array('ok' => true, 'msg' => 'Claim ' . $decision . '.', 'new_val' => $decision);
+                    }
+                }
+                break;
+
+            case 'submission_review':
+                if ($aj_id) {
+                    $decision = $_POST['decision'] ?? '';
+                    $notes = trim($_POST['admin_notes'] ?? '');
+                    if ($decision === 'rejected') {
+                        $db_ajax->prepare("UPDATE listing_submissions SET status='rejected', admin_notes=?, reviewed_at=NOW() WHERE id=?")
+                           ->execute(array($notes ?: null, $aj_id));
+                        $aj_result = array('ok' => true, 'msg' => 'Submission rejected.', 'new_val' => 'rejected');
+                    } elseif ($decision === 'approved') {
+                        // simplified — just mark approved (the full provider-creation stays in the form handler for complex cases)
+                        $sub = $db_ajax->prepare("SELECT * FROM listing_submissions WHERE id=?"); $sub->execute(array($aj_id)); $sub = $sub->fetch();
+                        if ($sub) {
+                            $slug = strtolower(trim(preg_replace('/[\s-]+/', '-', preg_replace('/[^a-z0-9\s-]/', '', strtolower(trim($sub['business_name'])))), '-'));
+                            $cat_keys = explode(',', $sub['category_keys']);
+                            $first_cat = trim($cat_keys[0]);
+                            $db_ajax->prepare("INSERT INTO providers (slug, name, group_key, category_key, area_key, short_description, description, address, phone, whatsapp_number, website_url, google_maps_url, languages, is_active) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)")->execute(array(
+                                $slug, $sub['business_name'], $sub['group_key'], $first_cat, $sub['area_key'],
+                                $sub['short_description'], $sub['short_description'],
+                                $sub['address'], $sub['phone'], $sub['whatsapp_number'], $sub['website_url'],
+                                $sub['google_maps_url'], $sub['languages']
+                            ));
+                            $new_prov = (int)$db_ajax->lastInsertId();
+                            $cat_ins = $db_ajax->prepare("INSERT IGNORE INTO provider_categories (provider_id, category_key) VALUES (?,?)");
+                            foreach ($cat_keys as $ck) { $ck = trim($ck); if ($ck) $cat_ins->execute(array($new_prov, $ck)); }
+                            $db_ajax->prepare("INSERT IGNORE INTO provider_owners (provider_id, user_id) VALUES (?,?)")->execute(array($new_prov, $sub['user_id']));
+                            $db_ajax->prepare("UPDATE users SET role='provider_owner' WHERE id=? AND role='user'")->execute(array($sub['user_id']));
+                            $db_ajax->prepare("UPDATE listing_submissions SET status='approved', admin_notes=?, reviewed_at=NOW(), created_provider_id=? WHERE id=?")
+                               ->execute(array($notes ?: null, $new_prov, $aj_id));
+                            $aj_result = array('ok' => true, 'msg' => 'Submission approved — provider created.', 'new_val' => 'approved');
+                        }
+                    }
+                }
+                break;
+
+            // ─── SUBSCRIPTION UPDATE ───
+            case 'subscription_update':
+                if ($aj_id) {
+                    $tier = $_POST['subscription_tier'] ?? 'free';
+                    $period = $_POST['subscription_period'] ?: null;
+                    $expires = $_POST['subscription_expires_at'] ?: null;
+                    $auto_renew = isset($_POST['subscription_auto_renew']) ? 1 : 0;
+                    $valid_tiers = array('free','basic','premium');
+                    if (!in_array($tier, $valid_tiers)) $tier = 'free';
+                    if ($period && !in_array($period, array('monthly','annual','lifetime'))) $period = null;
+                    $started = ($tier !== 'free') ? date('Y-m-d H:i:s') : null;
+                    $db_ajax->prepare("UPDATE users SET subscription_tier=?, subscription_period=?, subscription_started_at=COALESCE(subscription_started_at, ?), subscription_expires_at=?, subscription_auto_renew=? WHERE id=?")
+                       ->execute(array($tier, $period, $started, $expires, $auto_renew, $aj_id));
+                    $aj_result = array('ok' => true, 'msg' => 'Subscription updated to ' . $tier . '.', 'new_val' => $tier);
+                }
+                break;
+
+            // ─── FEATURE ACCESS ───
+            case 'feature_update':
+                if ($aj_id) {
+                    $tf = isset($_POST['tier_free']) ? 1 : 0;
+                    $tb = isset($_POST['tier_basic']) ? 1 : 0;
+                    $tp = isset($_POST['tier_premium']) ? 1 : 0;
+                    $rl = isset($_POST['require_login']) ? 1 : 0;
+                    $ia = isset($_POST['is_active']) ? 1 : 0;
+                    $db_ajax->prepare("UPDATE feature_access SET tier_free=?, tier_basic=?, tier_premium=?, require_login=?, is_active=? WHERE id=?")
+                       ->execute(array($tf, $tb, $tp, $rl, $ia, $aj_id));
+                    $aj_result = array('ok' => true, 'msg' => 'Feature access updated.');
+                }
+                break;
+
+            case 'feature_delete':
+                if ($aj_id) {
+                    $db_ajax->prepare("DELETE FROM feature_access WHERE id=?")->execute(array($aj_id));
+                    $aj_result = array('ok' => true, 'msg' => 'Feature removed.');
+                }
+                break;
+
+            // ─── LOOKUP DELETE ───
+            case 'lookup_delete':
+                $ltable = $_POST['aj_table'] ?? '';
+                $lkey = $_POST['aj_key'] ?? '';
+                $ok_tables = array('groups','categories','areas','project_types','project_statuses');
+                if (in_array($ltable, $ok_tables) && $lkey) {
+                    $db_ajax->prepare("DELETE FROM `{$ltable}` WHERE `key`=?")->execute(array($lkey));
+                    $aj_result = array('ok' => true, 'msg' => 'Entry deleted.');
+                }
+                break;
+        }
+    } catch (Exception $e) {
+        $aj_result = array('ok' => false, 'msg' => 'Error: ' . $e->getMessage());
+    }
+    echo json_encode($aj_result);
+    exit;
+}
+
 // ─── DB ──────────────────────────────────────────────────────────────
 function get_db(): PDO {
     static $pdo = null;
@@ -984,7 +1222,7 @@ filterCatDropdown();
         <th>Active</th><th>Actions</th>
     </tr>
     <?php foreach ($rows as $r): ?>
-    <tr>
+    <tr id="entity-row-providers-<?= $r['id'] ?>">
         <td>
             <?php if (!empty($r['profile_photo_url'])): ?>
             <img src="<?= htmlspecialchars($r['profile_photo_url']) ?>" alt="" style="width:36px;height:36px;border-radius:4px;object-fit:cover;display:block">
@@ -1001,9 +1239,7 @@ filterCatDropdown();
         <td><?= $r['is_active'] ? '<span class="badge b-green">Yes</span>' : '<span class="badge b-red">No</span>' ?></td>
         <td class="actions">
             <a href="?s=providers&a=edit&id=<?= $r['id'] ?>" class="btn btn-o btn-sm">Edit</a>
-            <form method="POST" action="?s=providers&a=delete&id=<?= $r['id'] ?>" style="display:inline" onsubmit="return confirm('Delete this provider?')">
-                <button class="btn btn-r btn-sm">Del</button>
-            </form>
+            <button type="button" class="btn btn-r btn-sm" onclick="ajaxEntityDelete('providers',<?= $r['id'] ?>,'provider')">Del</button>
         </td>
     </tr>
     <?php endforeach; ?>
@@ -1190,7 +1426,7 @@ elseif ($section === 'developers' && $action === 'list'):
         <th>Active</th><th>Actions</th>
     </tr>
     <?php foreach ($rows as $r): ?>
-    <tr>
+    <tr id="entity-row-developers-<?= $r['id'] ?>">
         <td>
             <?php if (!empty($r['profile_photo_url'])): ?>
             <img src="<?= htmlspecialchars($r['profile_photo_url']) ?>" alt="" style="width:36px;height:36px;border-radius:4px;object-fit:cover;display:block">
@@ -1206,9 +1442,7 @@ elseif ($section === 'developers' && $action === 'list'):
         <td><?= $r['is_active'] ? '<span class="badge b-green">Yes</span>' : '<span class="badge b-red">No</span>' ?></td>
         <td class="actions">
             <a href="?s=developers&a=edit&id=<?= $r['id'] ?>" class="btn btn-o btn-sm">Edit</a>
-            <form method="POST" action="?s=developers&a=delete&id=<?= $r['id'] ?>" style="display:inline" onsubmit="return confirm('Delete?')">
-                <button class="btn btn-r btn-sm">Del</button>
-            </form>
+            <button type="button" class="btn btn-r btn-sm" onclick="ajaxEntityDelete('developers',<?= $r['id'] ?>,'developer')">Del</button>
         </td>
     </tr>
     <?php endforeach; ?>
@@ -1371,7 +1605,7 @@ elseif ($section === 'projects' && $action === 'list'):
 <table>
     <tr><th>Name</th><th>Developer</th><th>Type</th><th>Status</th><th>Area</th><th>Active</th><th>Actions</th></tr>
     <?php foreach ($rows as $r): ?>
-    <tr>
+    <tr id="entity-row-projects-<?= $r['id'] ?>">
         <td><a href="?s=projects&a=edit&id=<?= $r['id'] ?>"><?= htmlspecialchars($r['name']) ?></a></td>
         <td><?= htmlspecialchars($r['dev_name'] ?? '-') ?></td>
         <td><span class="badge b-blue"><?= htmlspecialchars($r['type_label'] ?? '-') ?></span></td>
@@ -1380,9 +1614,7 @@ elseif ($section === 'projects' && $action === 'list'):
         <td><?= $r['is_active'] ? '<span class="badge b-green">Yes</span>' : '<span class="badge b-red">No</span>' ?></td>
         <td class="actions">
             <a href="?s=projects&a=edit&id=<?= $r['id'] ?>" class="btn btn-o btn-sm">Edit</a>
-            <form method="POST" action="?s=projects&a=delete&id=<?= $r['id'] ?>" style="display:inline" onsubmit="return confirm('Delete?')">
-                <button class="btn btn-r btn-sm">Del</button>
-            </form>
+            <button type="button" class="btn btn-r btn-sm" onclick="ajaxEntityDelete('projects',<?= $r['id'] ?>,'project')">Del</button>
         </td>
     </tr>
     <?php endforeach; ?>
@@ -1490,7 +1722,7 @@ elseif ($section === 'guides' && $action === 'list'):
 <table>
     <tr><th>Title</th><th>Category</th><th>Read Time</th><th>Published</th><th>Updated</th><th>Actions</th></tr>
     <?php foreach ($rows as $r): ?>
-    <tr>
+    <tr id="entity-row-guides-<?= $r['id'] ?>">
         <td><a href="?s=guides&a=edit&id=<?= $r['id'] ?>"><?= htmlspecialchars($r['title']) ?></a></td>
         <td><span class="badge b-blue"><?= htmlspecialchars($r['category']) ?></span></td>
         <td><?= htmlspecialchars($r['read_time'] ?? '-') ?></td>
@@ -1498,9 +1730,7 @@ elseif ($section === 'guides' && $action === 'list'):
         <td style="color:#888;font-size:12px"><?= $r['updated_at'] ?></td>
         <td class="actions">
             <a href="?s=guides&a=edit&id=<?= $r['id'] ?>" class="btn btn-o btn-sm">Edit</a>
-            <form method="POST" action="?s=guides&a=delete&id=<?= $r['id'] ?>" style="display:inline" onsubmit="return confirm('Delete this guide?')">
-                <button class="btn btn-r btn-sm">Del</button>
-            </form>
+            <button type="button" class="btn btn-r btn-sm" onclick="ajaxEntityDelete('guides',<?= $r['id'] ?>,'guide')">Del</button>
         </td>
     </tr>
     <?php endforeach; ?>
@@ -1586,7 +1816,7 @@ elseif ($section === 'lookups'):
             </form>
         </tr>
         <?php else: ?>
-        <tr>
+        <tr id="lookup-row-<?= $tbl ?>-<?= htmlspecialchars($it['key']) ?>">
             <td><code style="font-size:12px;color:#666"><?= htmlspecialchars($it['key']) ?></code></td>
             <td><?= htmlspecialchars($it['label']) ?></td>
             <?php if ($cfg['has_group']): ?>
@@ -1598,11 +1828,7 @@ elseif ($section === 'lookups'):
             <td><?= $it['sort_order'] ?></td>
             <td class="actions">
                 <a href="?s=lookups&et=<?= $tbl ?>&ek=<?= urlencode($it['key']) ?>#lookup-<?= $tbl ?>" class="btn btn-o btn-sm">Edit</a>
-                <form method="POST" action="?s=lookups&a=delete_lookup" style="display:inline" onsubmit="return confirm('Delete this entry? This may break references.')">
-                    <input type="hidden" name="_table" value="<?= $tbl ?>">
-                    <input type="hidden" name="_key" value="<?= htmlspecialchars($it['key']) ?>">
-                    <button class="btn btn-r btn-sm">Del</button>
-                </form>
+                <button type="button" class="btn btn-r btn-sm" onclick="ajaxLookupDelete('<?= $tbl ?>','<?= htmlspecialchars($it['key'], ENT_QUOTES) ?>')">Del</button>
             </td>
         </tr>
         <?php endif; ?>
@@ -1836,21 +2062,18 @@ elseif ($section === 'users'):
 <table>
     <tr><th>Email</th><th>Name</th><th>Role</th><th>Tier</th><th>Verified</th><th>Status</th><th>Last Login</th><th>Joined</th><th>Actions</th></tr>
     <?php foreach ($users as $u): ?>
-    <tr>
+    <tr id="user-row-<?= $u['id'] ?>">
         <td><?= htmlspecialchars($u['email']) ?></td>
         <td><?= htmlspecialchars($u['display_name']) ?></td>
         <td><span class="badge <?= $u['role']==='admin'?'b-red':($u['role']==='provider_owner'?'b-blue':'b-green') ?>"><?= $u['role'] ?></span></td>
         <td><span class="badge <?= ($u['subscription_tier'] ?? 'free')==='premium'?'b-blue':(($u['subscription_tier'] ?? 'free')==='basic'?'b-green':'') ?>"><?= $u['subscription_tier'] ?: 'free' ?></span></td>
         <td><?= $u['is_verified'] ? '<span class="badge b-green">Yes</span>' : '<span class="badge b-yellow">No</span>' ?></td>
-        <td><?= $u['is_active'] ? '<span class="badge b-green">Active</span>' : '<span class="badge b-red">Inactive</span>' ?></td>
+        <td class="aj-user-status"><?= $u['is_active'] ? '<span class="badge b-green">Active</span>' : '<span class="badge b-red">Inactive</span>' ?></td>
         <td style="color:#888;font-size:12px"><?= $u['last_login_at'] ?: 'Never' ?></td>
         <td style="color:#888;font-size:12px"><?= $u['created_at'] ?></td>
         <td style="white-space:nowrap">
             <a href="?s=users&edit=<?= $u['id'] ?>" class="btn btn-p btn-sm">Manage</a>
-            <form method="POST" action="?s=users&a=toggle_user" style="display:inline">
-                <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
-                <button class="btn btn-o btn-sm"><?= $u['is_active'] ? 'Deactivate' : 'Activate' ?></button>
-            </form>
+            <button type="button" class="btn btn-o btn-sm aj-user-toggle" onclick="ajaxUserToggle(<?= $u['id'] ?>)"><?= $u['is_active'] ? 'Deactivate' : 'Activate' ?></button>
         </td>
     </tr>
     <?php endforeach; ?>
@@ -1885,11 +2108,11 @@ elseif ($section === 'claims'):
     <a href="?s=claims&fs=" class="btn <?= $f_status===''?'btn-p':'btn-o' ?> btn-sm">All</a>
 </div>
 <?php foreach ($claims as $cl): ?>
-<div class="card">
+<div class="card" id="claim-card-<?= $cl['id'] ?>">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
         <div>
             <strong><?= htmlspecialchars($cl['provider_name']) ?></strong>
-            <span class="badge <?= $cl['status']==='pending'?'b-yellow':($cl['status']==='approved'?'b-green':'b-red') ?>" style="margin-left:8px"><?= $cl['status'] ?></span>
+            <span class="badge aj-claim-badge <?= $cl['status']==='pending'?'b-yellow':($cl['status']==='approved'?'b-green':'b-red') ?>" style="margin-left:8px"><?= $cl['status'] ?></span>
         </div>
         <span style="color:#888;font-size:12px"><?= $cl['created_at'] ?></span>
     </div>
@@ -1901,15 +2124,14 @@ elseif ($section === 'claims'):
         <?php if ($cl['admin_notes']): ?><tr><td style="font-weight:600">Admin notes</td><td><?= htmlspecialchars($cl['admin_notes']) ?></td></tr><?php endif; ?>
     </table>
     <?php if ($cl['status'] === 'pending'): ?>
-    <form method="POST" action="?s=claims&a=review_claim" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-        <input type="hidden" name="claim_id" value="<?= $cl['id'] ?>">
+    <div class="aj-claim-form" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
         <div class="fg" style="flex:1;min-width:200px">
             <label>Admin Notes</label>
-            <input type="text" name="admin_notes" placeholder="Optional notes...">
+            <input type="text" id="claim-notes-<?= $cl['id'] ?>" placeholder="Optional notes...">
         </div>
-        <button name="decision" value="approved" class="btn btn-g btn-sm">Approve</button>
-        <button name="decision" value="rejected" class="btn btn-r btn-sm">Reject</button>
-    </form>
+        <button type="button" onclick="ajaxClaimReview(<?= $cl['id'] ?>,'approved')" class="btn btn-g btn-sm">Approve</button>
+        <button type="button" onclick="ajaxClaimReview(<?= $cl['id'] ?>,'rejected')" class="btn btn-r btn-sm">Reject</button>
+    </div>
     <?php endif; ?>
 </div>
 <?php endforeach; ?>
@@ -1943,11 +2165,11 @@ elseif ($section === 'submissions'):
     <a href="?s=submissions&fs=" class="btn <?= $f_status===''?'btn-p':'btn-o' ?> btn-sm">All</a>
 </div>
 <?php foreach ($subs as $sub): ?>
-<div class="card">
+<div class="card" id="sub-card-<?= $sub['id'] ?>">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
         <div>
             <strong><?= htmlspecialchars($sub['business_name']) ?></strong>
-            <span class="badge <?= $sub['status']==='pending'?'b-yellow':($sub['status']==='approved'?'b-green':'b-red') ?>" style="margin-left:8px"><?= $sub['status'] ?></span>
+            <span class="badge aj-sub-badge <?= $sub['status']==='pending'?'b-yellow':($sub['status']==='approved'?'b-green':'b-red') ?>" style="margin-left:8px"><?= $sub['status'] ?></span>
         </div>
         <span style="color:#888;font-size:12px"><?= $sub['created_at'] ?></span>
     </div>
@@ -1965,15 +2187,14 @@ elseif ($section === 'submissions'):
         <?php if ($sub['created_provider_id']): ?><tr><td style="font-weight:600">Provider</td><td><a href="?s=providers&a=edit&id=<?= $sub['created_provider_id'] ?>">View created provider #<?= $sub['created_provider_id'] ?></a></td></tr><?php endif; ?>
     </table>
     <?php if ($sub['status'] === 'pending'): ?>
-    <form method="POST" action="?s=submissions&a=review_submission" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-        <input type="hidden" name="sub_id" value="<?= $sub['id'] ?>">
+    <div class="aj-sub-form" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
         <div class="fg" style="flex:1;min-width:200px">
             <label>Admin Notes</label>
-            <input type="text" name="admin_notes" placeholder="Optional notes...">
+            <input type="text" id="sub-notes-<?= $sub['id'] ?>" placeholder="Optional notes...">
         </div>
-        <button name="decision" value="approved" class="btn btn-g btn-sm">Approve & Create</button>
-        <button name="decision" value="rejected" class="btn btn-r btn-sm">Reject</button>
-    </form>
+        <button type="button" onclick="ajaxSubmissionReview(<?= $sub['id'] ?>,'approved')" class="btn btn-g btn-sm">Approve & Create</button>
+        <button type="button" onclick="ajaxSubmissionReview(<?= $sub['id'] ?>,'rejected')" class="btn btn-r btn-sm">Reject</button>
+    </div>
     <?php endif; ?>
 </div>
 <?php endforeach; ?>
@@ -2039,7 +2260,7 @@ elseif ($section === 'agents'):
 <table>
     <tr><th style="width:40px">Photo</th><th>ID</th><th>User Email</th><th>Display Name</th><th>Agency Name</th><th>Website</th><th>Phone</th><th>Verified</th><th>Active</th><th>Listings</th><th>Created</th><th>Actions</th></tr>
     <?php foreach ($agents as $ag): ?>
-    <tr>
+    <tr id="agent-row-<?= $ag['id'] ?>">
         <td>
             <?php if (!empty($ag['profile_photo_url'])): ?>
             <img src="<?= htmlspecialchars($ag['profile_photo_url']) ?>" alt="" style="width:40px;height:40px;border-radius:50%;object-fit:cover;display:block">
@@ -2053,19 +2274,13 @@ elseif ($section === 'agents'):
         <td><?= htmlspecialchars($ag['agency_name'] ?? '-') ?></td>
         <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?php if (!empty($ag['website_url'])): ?><a href="<?= htmlspecialchars($ag['website_url']) ?>" target="_blank" title="<?= htmlspecialchars($ag['website_url']) ?>" style="color:#0c7c84"><?= htmlspecialchars(preg_replace('#^https?://(www\.)?#','', $ag['website_url'])) ?></a><?php else: ?>-<?php endif; ?></td>
         <td><?= htmlspecialchars($ag['phone'] ?? '-') ?></td>
-        <td><?= $ag['is_verified'] ? '<span class="badge b-green">Y</span>' : '<span class="badge b-red">N</span>' ?></td>
-        <td><?= $ag['is_active'] ? '<span class="badge b-green">Y</span>' : '<span class="badge b-red">N</span>' ?></td>
+        <td class="aj-agent-verified"><?= $ag['is_verified'] ? '<span class="badge b-green">Y</span>' : '<span class="badge b-red">N</span>' ?></td>
+        <td class="aj-agent-active"><?= $ag['is_active'] ? '<span class="badge b-green">Y</span>' : '<span class="badge b-red">N</span>' ?></td>
         <td style="text-align:center"><?= (int)$ag['listings_count'] ?></td>
         <td style="color:#888;font-size:12px"><?= $ag['created_at'] ?? '-' ?></td>
         <td class="actions" style="white-space:nowrap">
-            <form method="POST" action="?s=agents&a=toggle_verified" style="display:inline">
-                <input type="hidden" name="agent_id" value="<?= $ag['id'] ?>">
-                <button class="btn btn-o btn-sm" title="Toggle verified"><?= $ag['is_verified'] ? 'Unverify' : 'Verify' ?></button>
-            </form>
-            <form method="POST" action="?s=agents&a=toggle_active" style="display:inline">
-                <input type="hidden" name="agent_id" value="<?= $ag['id'] ?>">
-                <button class="btn btn-o btn-sm"><?= $ag['is_active'] ? 'Deactivate' : 'Activate' ?></button>
-            </form>
+            <button type="button" class="btn btn-o btn-sm aj-agent-verify-btn" onclick="ajaxAgentToggle('agent_toggle_verified',<?= $ag['id'] ?>)" title="Toggle verified"><?= $ag['is_verified'] ? 'Unverify' : 'Verify' ?></button>
+            <button type="button" class="btn btn-o btn-sm aj-agent-active-btn" onclick="ajaxAgentToggle('agent_toggle_active',<?= $ag['id'] ?>)"><?= $ag['is_active'] ? 'Deactivate' : 'Activate' ?></button>
             <?php if (!empty($ag['user_id'])): ?>
             <a href="?s=users&q=<?= urlencode($ag['email'] ?? '') ?>" class="btn btn-o btn-sm" title="View user account">User</a>
             <?php endif; ?>
@@ -2174,42 +2389,29 @@ elseif ($section === 'listings'):
         <td style="font-size:12px;white-space:nowrap"><?= $lst['land_size_are'] ? number_format((float)$lst['land_size_are'],0) . ' are' : ($lst['land_size_sqm'] ? number_format((float)$lst['land_size_sqm']) . ' m²' : '-') ?></td>
         <td style="font-size:12px;white-space:nowrap"><?= $lst['price_usd'] ? '$' . number_format((float)$lst['price_usd']) : ($lst['price_idr'] ? 'Rp ' . number_format((float)$lst['price_idr'],0,',','.') : '-') ?></td>
         <td>
-            <form method="POST" action="?s=listings&a=change_status" style="display:inline">
-                <input type="hidden" name="listing_id" value="<?= $lst['id'] ?>">
-                <select name="new_status" onchange="this.form.submit()" style="padding:2px 4px;font-size:11px;border:1px solid #d0d0d0;border-radius:4px;cursor:pointer;background:<?= $lst['status']==='active'?'#dcfce7':($lst['status']==='sold'||$lst['status']==='expired'?'#fee2e2':'#fef9c3') ?>">
+            <select onchange="ajaxListingStatus(this,<?= $lst['id'] ?>)" style="padding:2px 4px;font-size:11px;border:1px solid #d0d0d0;border-radius:4px;cursor:pointer;background:<?= $lst['status']==='active'?'#dcfce7':($lst['status']==='sold'||$lst['status']==='expired'?'#fee2e2':'#fef9c3') ?>">
                     <option value="draft" <?= $lst['status']==='draft'?'selected':'' ?>>draft</option>
                     <option value="active" <?= $lst['status']==='active'?'selected':'' ?>>active</option>
                     <option value="under_offer" <?= $lst['status']==='under_offer'?'selected':'' ?>>under_offer</option>
                     <option value="sold" <?= $lst['status']==='sold'?'selected':'' ?>>sold</option>
                     <option value="expired" <?= $lst['status']==='expired'?'selected':'' ?>>expired</option>
                 </select>
-            </form>
         </td>
         <td style="text-align:center">
-            <form method="POST" action="?s=listings&a=<?= $lst['is_approved'] ? 'reject_listing' : 'approve_listing' ?>" style="display:inline"<?= $lst['is_approved'] ? ' onsubmit="return confirm(\'Reject this listing?\')"' : '' ?>>
-                <input type="hidden" name="listing_id" value="<?= $lst['id'] ?>">
-                <button type="submit" style="background:none;border:none;cursor:pointer;font-size:16px" title="<?= $lst['is_approved'] ? 'Click to reject' : 'Click to approve' ?>"><?= $lst['is_approved'] ? '✅' : '❌' ?></button>
-            </form>
+            <button type="button" class="aj-appr-btn" onclick="ajaxListingApprove(<?= $lst['id'] ?>,<?= $lst['is_approved'] ? 'true' : 'false' ?>)" style="background:none;border:none;cursor:pointer;font-size:16px" title="<?= $lst['is_approved'] ? 'Click to reject' : 'Click to approve' ?>"><?= $lst['is_approved'] ? '✅' : '❌' ?></button>
         </td>
         <td style="text-align:center">
-            <form method="POST" action="?s=listings&a=toggle_featured" style="display:inline">
-                <input type="hidden" name="listing_id" value="<?= $lst['id'] ?>">
-                <button type="submit" style="background:none;border:none;cursor:pointer;font-size:16px" title="<?= !empty($lst['is_featured']) ? 'Unfeature' : 'Feature' ?>"><?= !empty($lst['is_featured']) ? '⭐' : '☆' ?></button>
-            </form>
+            <button type="button" class="aj-feat-btn" onclick="ajaxListingFeatured(<?= $lst['id'] ?>)" style="background:none;border:none;cursor:pointer;font-size:16px" title="<?= !empty($lst['is_featured']) ? 'Unfeature' : 'Feature' ?>"><?= !empty($lst['is_featured']) ? '⭐' : '☆' ?></button>
         </td>
         <td style="text-align:right;white-space:nowrap">
             <button type="button" class="btn btn-o btn-sm" onclick="toggleListingEdit(<?= $lst['id'] ?>)" style="font-size:11px;padding:3px 10px">Edit</button>
-            <form method="POST" action="?s=listings&a=delete_listing" style="display:inline" onsubmit="return confirm('Delete listing #<?= $lst['id'] ?> permanently?')">
-                <input type="hidden" name="listing_id" value="<?= $lst['id'] ?>">
-                <button class="btn btn-r btn-sm" style="font-size:11px;padding:3px 8px">Del</button>
-            </form>
+            <button type="button" class="btn btn-r btn-sm" onclick="ajaxListingDelete(<?= $lst['id'] ?>)" style="font-size:11px;padding:3px 8px">Del</button>
         </td>
     </tr>
     <!-- Edit row -->
     <tr id="lst-edit-<?= $lst['id'] ?>" style="display:none;background:rgba(12,124,132,.04)">
         <td colspan="10">
-            <form method="POST" action="?s=listings&a=edit_listing" style="padding:12px 4px">
-                <input type="hidden" name="listing_id" value="<?= $lst['id'] ?>">
+            <div style="padding:12px 4px">
                 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 16px;margin-bottom:10px">
                     <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Title</label><input type="text" name="title" value="<?= htmlspecialchars($lst['title'] ?? '') ?>" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
                     <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Type</label><input type="text" name="listing_type" value="<?= htmlspecialchars($lst['listing_type'] ?? $lst['listing_type_key'] ?? '') ?>" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
@@ -2240,10 +2442,10 @@ elseif ($section === 'listings'):
                 </div>
                 <div style="margin-bottom:10px"><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Admin Notes</label><textarea name="admin_notes" rows="2" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px;resize:vertical"><?= htmlspecialchars($lst['admin_notes'] ?? '') ?></textarea></div>
                 <div style="display:flex;gap:8px">
-                    <button type="submit" class="btn btn-p" style="font-size:12px;padding:5px 16px">Save Changes</button>
+                    <button type="button" class="btn btn-p" onclick="ajaxListingEdit(<?= $lst['id'] ?>)" style="font-size:12px;padding:5px 16px">Save Changes</button>
                     <button type="button" class="btn btn-o" onclick="toggleListingEdit(<?= $lst['id'] ?>)" style="font-size:12px;padding:5px 12px">Cancel</button>
                 </div>
-            </form>
+            </div>
         </td>
     </tr>
     <?php endforeach; ?>
@@ -2511,12 +2713,12 @@ function triggerReviewCheck(btn) {
     btn.disabled = true;
     btn.textContent = 'Running…';
     fetch('../api/reviews.php', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'check_all'})})
-        .then(r => r.json())
-        .then(data => {
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
             btn.textContent = 'Done — reload to see results';
             btn.disabled = false;
         })
-        .catch(err => {
+        .catch(function(err) {
             btn.textContent = 'Error — check console';
             btn.disabled = false;
             console.error(err);
@@ -2545,7 +2747,7 @@ elseif ($section === 'subscriptions'):
     <td><?= htmlspecialchars($su['display_name']) ?></td>
     <td style="font-size:12px"><?= htmlspecialchars($su['email']) ?></td>
     <td><span style="background:<?= $su['role']==='admin'?'#dc2626':($su['role']==='provider_owner'?'#2563eb':'#64748b') ?>;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px"><?= $su['role'] ?></span></td>
-    <td><span style="background:<?= $su['subscription_tier']==='premium'?'#0c7c84':($su['subscription_tier']==='basic'?'#2563eb':'#94a3b8') ?>;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px"><?= strtoupper($su['subscription_tier'] ?: 'free') ?></span></td>
+    <td class="aj-sub-tier"><span style="background:<?= $su['subscription_tier']==='premium'?'#0c7c84':($su['subscription_tier']==='basic'?'#2563eb':'#94a3b8') ?>;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px"><?= strtoupper($su['subscription_tier'] ?: 'free') ?></span></td>
     <td><?= $su['subscription_period'] ?: '—' ?></td>
     <td style="font-size:12px"><?= $su['subscription_expires_at'] ? date('d M Y', strtotime($su['subscription_expires_at'])) : '—' ?></td>
     <td><?= $su['subscription_auto_renew'] ? '✓' : '—' ?></td>
@@ -2553,9 +2755,7 @@ elseif ($section === 'subscriptions'):
 </tr>
 <tr id="erow-<?= $su['id'] ?>" style="display:none;background:rgba(12,124,132,.04)">
     <td colspan="9">
-        <form method="POST" style="display:flex;flex-wrap:wrap;gap:12px;align-items:end;padding:8px 0">
-            <input type="hidden" name="action" value="update_tier">
-            <input type="hidden" name="user_id" value="<?= $su['id'] ?>">
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:end;padding:8px 0">
             <div><label style="font-size:11px;display:block;margin-bottom:2px">Tier</label>
                 <select name="subscription_tier" style="padding:6px 10px;border-radius:4px;border:1px solid #d0d0d0;font-size:13px">
                     <option value="free" <?= $su['subscription_tier']==='free'?'selected':'' ?>>Free</option>
@@ -2577,9 +2777,9 @@ elseif ($section === 'subscriptions'):
             <div><label style="font-size:11px;display:block;margin-bottom:2px">&nbsp;</label>
                 <label style="font-size:12px;cursor:pointer"><input type="checkbox" name="subscription_auto_renew" <?= $su['subscription_auto_renew']?'checked':'' ?>> Auto-Renew</label>
             </div>
-            <button type="submit" class="btn btn-p" style="font-size:12px;padding:6px 16px">Save</button>
+            <button type="button" class="btn btn-p" onclick="ajaxSubscriptionUpdate(<?= $su['id'] ?>)" style="font-size:12px;padding:6px 16px">Save</button>
             <button type="button" class="btn btn-o" onclick="document.getElementById('erow-<?= $su['id'] ?>').style.display='none'" style="font-size:12px;padding:6px 12px">Cancel</button>
-        </form>
+        </div>
     </td>
 </tr>
 <?php endforeach; ?>
@@ -2602,37 +2802,15 @@ elseif ($section === 'feature_access'):
 <thead><tr><th>Key</th><th>Label</th><th style="text-align:center">Free</th><th style="text-align:center">Basic</th><th style="text-align:center">Premium</th><th style="text-align:center">Login</th><th style="text-align:center">Active</th><th>Delete</th></tr></thead>
 <tbody>
 <?php foreach ($fa_features as $f): ?>
-<tr>
+<tr id="feat-row-<?= $f['id'] ?>">
     <td style="font-family:monospace;font-size:12px"><?= htmlspecialchars($f['feature_key']) ?></td>
     <td><?= htmlspecialchars($f['feature_label']) ?></td>
-    <?php
-    $tiers = array('tier_free','tier_basic','tier_premium');
-    foreach ($tiers as $tc) {
-        echo '<td style="text-align:center"><form method="POST" style="display:inline"><input type="hidden" name="action" value="update_feature"><input type="hidden" name="feature_id" value="' . $f['id'] . '">';
-        foreach (array('tier_free','tier_basic','tier_premium','require_login','is_active') as $fld) {
-            if ($fld === $tc) {
-                echo '<input type="hidden" name="' . $tc . '" value="' . ($f[$tc] ? 0 : 1) . '">';
-            } else {
-                echo '<input type="hidden" name="' . $fld . '" value="' . $f[$fld] . '">';
-            }
-        }
-        echo '<button type="submit" style="background:none;border:none;cursor:pointer;font-size:16px">' . ($f[$tc] ? '✅' : '❌') . '</button></form></td>';
-    }
-    ?>
-    <td style="text-align:center">
-        <form method="POST" style="display:inline"><input type="hidden" name="action" value="update_feature"><input type="hidden" name="feature_id" value="<?= $f['id'] ?>">
-        <input type="hidden" name="tier_free" value="<?= $f['tier_free'] ?>"><input type="hidden" name="tier_basic" value="<?= $f['tier_basic'] ?>"><input type="hidden" name="tier_premium" value="<?= $f['tier_premium'] ?>"><input type="hidden" name="require_login" value="<?= $f['require_login'] ? 0 : 1 ?>"><input type="hidden" name="is_active" value="<?= $f['is_active'] ?>">
-        <button type="submit" style="background:none;border:none;cursor:pointer;font-size:16px"><?= $f['require_login'] ? '🔒' : '🔓' ?></button></form>
-    </td>
-    <td style="text-align:center">
-        <form method="POST" style="display:inline"><input type="hidden" name="action" value="update_feature"><input type="hidden" name="feature_id" value="<?= $f['id'] ?>">
-        <input type="hidden" name="tier_free" value="<?= $f['tier_free'] ?>"><input type="hidden" name="tier_basic" value="<?= $f['tier_basic'] ?>"><input type="hidden" name="tier_premium" value="<?= $f['tier_premium'] ?>"><input type="hidden" name="require_login" value="<?= $f['require_login'] ?>"><input type="hidden" name="is_active" value="<?= $f['is_active'] ? 0 : 1 ?>">
-        <button type="submit" style="background:none;border:none;cursor:pointer;font-size:16px"><?= $f['is_active'] ? '🟢' : '🔴' ?></button></form>
-    </td>
-    <td>
-        <form method="POST" style="display:inline" onsubmit="return confirm('Delete this feature?')"><input type="hidden" name="action" value="delete_feature"><input type="hidden" name="feature_id" value="<?= $f['id'] ?>">
-        <button type="submit" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:12px">Del</button></form>
-    </td>
+    <td style="text-align:center"><button type="button" data-field="tier_free" data-val="<?= $f['tier_free'] ?>" onclick="ajaxFeatureToggle(<?= $f['id'] ?>,'tier_free')" style="background:none;border:none;cursor:pointer;font-size:16px"><?= $f['tier_free'] ? '✅' : '❌' ?></button></td>
+    <td style="text-align:center"><button type="button" data-field="tier_basic" data-val="<?= $f['tier_basic'] ?>" onclick="ajaxFeatureToggle(<?= $f['id'] ?>,'tier_basic')" style="background:none;border:none;cursor:pointer;font-size:16px"><?= $f['tier_basic'] ? '✅' : '❌' ?></button></td>
+    <td style="text-align:center"><button type="button" data-field="tier_premium" data-val="<?= $f['tier_premium'] ?>" onclick="ajaxFeatureToggle(<?= $f['id'] ?>,'tier_premium')" style="background:none;border:none;cursor:pointer;font-size:16px"><?= $f['tier_premium'] ? '✅' : '❌' ?></button></td>
+    <td style="text-align:center"><button type="button" data-field="require_login" data-val="<?= $f['require_login'] ?>" onclick="ajaxFeatureToggle(<?= $f['id'] ?>,'require_login')" style="background:none;border:none;cursor:pointer;font-size:16px"><?= $f['require_login'] ? '🔒' : '🔓' ?></button></td>
+    <td style="text-align:center"><button type="button" data-field="is_active" data-val="<?= $f['is_active'] ?>" onclick="ajaxFeatureToggle(<?= $f['id'] ?>,'is_active')" style="background:none;border:none;cursor:pointer;font-size:16px"><?= $f['is_active'] ? '🟢' : '🔴' ?></button></td>
+    <td><button type="button" onclick="ajaxFeatureDelete(<?= $f['id'] ?>)" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:12px">Del</button></td>
 </tr>
 <?php endforeach; ?>
 </tbody>
@@ -2826,6 +3004,297 @@ if (window.location.hash) {
 
 </div><!-- main -->
 </div><!-- shell -->
+<div id="ajax-flash" style="display:none;position:fixed;top:16px;right:16px;padding:12px 20px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.15);transition:opacity .3s"></div>
+<script>
+/* ── AJAX Helpers (PHP 7.x compatible: var + function(){}) ────────── */
+function ajaxFlash(msg, isError) {
+    var el = document.getElementById('ajax-flash');
+    el.textContent = msg;
+    el.style.background = isError ? '#fee2e2' : '#dcfce7';
+    el.style.color = isError ? '#dc2626' : '#16a34a';
+    el.style.border = '1px solid ' + (isError ? '#fecaca' : '#bbf7d0');
+    el.style.display = 'block';
+    el.style.opacity = '1';
+    clearTimeout(window._flashTimer);
+    window._flashTimer = setTimeout(function() {
+        el.style.opacity = '0';
+        setTimeout(function() { el.style.display = 'none'; }, 300);
+    }, 3000);
+}
+
+function ajaxAction(params, onSuccess) {
+    var fd = new FormData();
+    var keys = Object.keys(params);
+    for (var i = 0; i < keys.length; i++) {
+        fd.append(keys[i], params[keys[i]]);
+    }
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', 'console.php?ajax=1', true);
+    xhr.onload = function() {
+        if (xhr.status === 200) {
+            try {
+                var data = JSON.parse(xhr.responseText);
+                if (data.ok) {
+                    ajaxFlash(data.msg, false);
+                    if (typeof onSuccess === 'function') onSuccess(data);
+                } else {
+                    ajaxFlash(data.msg || 'Action failed.', true);
+                }
+            } catch(e) {
+                ajaxFlash('Invalid server response.', true);
+            }
+        } else {
+            ajaxFlash('Server error (' + xhr.status + ').', true);
+        }
+    };
+    xhr.onerror = function() { ajaxFlash('Network error.', true); };
+    xhr.send(fd);
+}
+
+function fadeOutRow(el) {
+    el.style.transition = 'opacity 0.4s, max-height 0.4s';
+    el.style.opacity = '0';
+    el.style.maxHeight = el.offsetHeight + 'px';
+    el.style.overflow = 'hidden';
+    setTimeout(function() {
+        el.style.maxHeight = '0';
+        el.style.padding = '0';
+        setTimeout(function() { el.remove(); }, 400);
+    }, 300);
+}
+
+/* ── Listings AJAX ───────────────────────────────────────────────── */
+function ajaxListingDelete(id) {
+    if (!confirm('Delete listing #' + id + ' permanently?')) return;
+    ajaxAction({aj_action: 'listing_delete', aj_id: id}, function() {
+        var row = document.getElementById('lst-row-' + id);
+        var editRow = document.getElementById('lst-edit-' + id);
+        if (row) fadeOutRow(row);
+        if (editRow) editRow.remove();
+    });
+}
+
+function ajaxListingStatus(sel, id) {
+    ajaxAction({aj_action: 'listing_change_status', aj_id: id, new_status: sel.value}, function(data) {
+        /* Update select background colour */
+        var v = data.new_val || sel.value;
+        sel.style.background = (v === 'active') ? '#dcfce7' : ((v === 'sold' || v === 'expired') ? '#fee2e2' : '#fef9c3');
+    });
+}
+
+function ajaxListingApprove(id, currentlyApproved) {
+    var action = currentlyApproved ? 'listing_reject' : 'listing_approve';
+    if (currentlyApproved && !confirm('Reject this listing?')) return;
+    ajaxAction({aj_action: action, aj_id: id}, function(data) {
+        var cell = document.querySelector('#lst-row-' + id + ' .aj-appr-btn');
+        if (cell) {
+            var isNowApproved = (data.new_val === 1 || data.new_val === '1');
+            cell.innerHTML = isNowApproved ? '\u2705' : '\u274C';
+            cell.setAttribute('onclick', 'ajaxListingApprove(' + id + ',' + (isNowApproved ? 'true' : 'false') + ')');
+            cell.title = isNowApproved ? 'Click to reject' : 'Click to approve';
+        }
+    });
+}
+
+function ajaxListingFeatured(id) {
+    ajaxAction({aj_action: 'listing_toggle_featured', aj_id: id}, function(data) {
+        var cell = document.querySelector('#lst-row-' + id + ' .aj-feat-btn');
+        if (cell) {
+            var isF = (data.new_val === 1 || data.new_val === '1');
+            cell.innerHTML = isF ? '\u2B50' : '\u2606';
+            cell.title = isF ? 'Unfeature' : 'Feature';
+        }
+    });
+}
+
+function ajaxListingEdit(id) {
+    var editRow = document.getElementById('lst-edit-' + id);
+    if (!editRow) return;
+    var inputs = editRow.querySelectorAll('input, select, textarea');
+    var params = {aj_action: 'listing_edit', aj_id: id};
+    for (var i = 0; i < inputs.length; i++) {
+        var inp = inputs[i];
+        if (inp.name && inp.name !== 'listing_id') {
+            params[inp.name] = inp.value;
+        }
+    }
+    ajaxAction(params, function(data) {
+        /* Close edit row */
+        editRow.style.display = 'none';
+        /* Update display row with new data if available */
+        if (data.row) {
+            var row = document.getElementById('lst-row-' + id);
+            if (row) {
+                var titleCell = row.querySelector('td:nth-child(2)');
+                if (titleCell && data.row.title) {
+                    var a = titleCell.querySelector('a');
+                    var span = titleCell.querySelector('span');
+                    if (a) a.textContent = data.row.title.length > 50 ? data.row.title.substring(0,47) + '...' : data.row.title;
+                    if (span) span.textContent = data.row.title.length > 50 ? data.row.title.substring(0,47) + '...' : data.row.title;
+                }
+            }
+        }
+    });
+}
+
+/* ── Entity Delete (providers, developers, projects, guides) ─────── */
+function ajaxEntityDelete(table, id, label) {
+    if (!confirm('Delete this ' + label + '?')) return;
+    ajaxAction({aj_action: 'delete_entity', aj_table: table, aj_id: id}, function() {
+        var row = document.getElementById('entity-row-' + table + '-' + id);
+        if (row) fadeOutRow(row);
+    });
+}
+
+/* ── Users: toggle active ────────────────────────────────────────── */
+function ajaxUserToggle(id) {
+    ajaxAction({aj_action: 'user_toggle_active', aj_id: id}, function(data) {
+        var row = document.getElementById('user-row-' + id);
+        if (!row) return;
+        var statusCell = row.querySelector('.aj-user-status');
+        var btn = row.querySelector('.aj-user-toggle');
+        if (statusCell) {
+            var isActive = (data.new_val === 1 || data.new_val === '1');
+            statusCell.innerHTML = isActive ? '<span class="badge b-green">Active</span>' : '<span class="badge b-red">Inactive</span>';
+            if (btn) btn.textContent = isActive ? 'Deactivate' : 'Activate';
+        }
+    });
+}
+
+/* ── Agents: toggle verified / active ────────────────────────────── */
+function ajaxAgentToggle(action, id) {
+    ajaxAction({aj_action: action, aj_id: id}, function(data) {
+        var row = document.getElementById('agent-row-' + id);
+        if (!row) return;
+        var isOn = (data.new_val === 1 || data.new_val === '1');
+        if (action === 'agent_toggle_verified') {
+            var cell = row.querySelector('.aj-agent-verified');
+            if (cell) cell.innerHTML = isOn ? '<span class="badge b-green">Y</span>' : '<span class="badge b-red">N</span>';
+            var btn = row.querySelector('.aj-agent-verify-btn');
+            if (btn) btn.textContent = isOn ? 'Unverify' : 'Verify';
+        } else {
+            var cell2 = row.querySelector('.aj-agent-active');
+            if (cell2) cell2.innerHTML = isOn ? '<span class="badge b-green">Y</span>' : '<span class="badge b-red">N</span>';
+            var btn2 = row.querySelector('.aj-agent-active-btn');
+            if (btn2) btn2.textContent = isOn ? 'Deactivate' : 'Activate';
+        }
+    });
+}
+
+/* ── Claims: review ──────────────────────────────────────────────── */
+function ajaxClaimReview(id, decision) {
+    var notesInput = document.getElementById('claim-notes-' + id);
+    var notes = notesInput ? notesInput.value : '';
+    ajaxAction({aj_action: 'claim_review', aj_id: id, decision: decision, admin_notes: notes}, function(data) {
+        var card = document.getElementById('claim-card-' + id);
+        if (card) {
+            /* Update badge */
+            var badge = card.querySelector('.aj-claim-badge');
+            if (badge) {
+                badge.textContent = decision;
+                badge.className = 'badge ' + (decision === 'approved' ? 'b-green' : 'b-red');
+            }
+            /* Remove the form */
+            var form = card.querySelector('.aj-claim-form');
+            if (form) form.remove();
+        }
+    });
+}
+
+/* ── Submissions: review ─────────────────────────────────────────── */
+function ajaxSubmissionReview(id, decision) {
+    var notesInput = document.getElementById('sub-notes-' + id);
+    var notes = notesInput ? notesInput.value : '';
+    ajaxAction({aj_action: 'submission_review', aj_id: id, decision: decision, admin_notes: notes}, function(data) {
+        var card = document.getElementById('sub-card-' + id);
+        if (card) {
+            var badge = card.querySelector('.aj-sub-badge');
+            if (badge) {
+                badge.textContent = decision;
+                badge.className = 'badge ' + (decision === 'approved' ? 'b-green' : 'b-red');
+            }
+            var form = card.querySelector('.aj-sub-form');
+            if (form) form.remove();
+        }
+    });
+}
+
+/* ── Subscriptions: update ───────────────────────────────────────── */
+function ajaxSubscriptionUpdate(userId) {
+    var editRow = document.getElementById('erow-' + userId);
+    if (!editRow) return;
+    var params = {aj_action: 'subscription_update', aj_id: userId};
+    var tier = editRow.querySelector('[name=subscription_tier]');
+    var period = editRow.querySelector('[name=subscription_period]');
+    var expires = editRow.querySelector('[name=subscription_expires_at]');
+    var autoRenew = editRow.querySelector('[name=subscription_auto_renew]');
+    if (tier) params.subscription_tier = tier.value;
+    if (period) params.subscription_period = period.value;
+    if (expires) params.subscription_expires_at = expires.value;
+    if (autoRenew && autoRenew.checked) params.subscription_auto_renew = '1';
+    ajaxAction(params, function(data) {
+        editRow.style.display = 'none';
+        /* Update tier badge in display row */
+        var displayRow = editRow.previousElementSibling;
+        if (displayRow) {
+            var tierCell = displayRow.querySelector('.aj-sub-tier');
+            if (tierCell && data.new_val) {
+                var bg = data.new_val === 'premium' ? '#0c7c84' : (data.new_val === 'basic' ? '#2563eb' : '#94a3b8');
+                tierCell.innerHTML = '<span style="background:' + bg + ';color:#fff;padding:2px 8px;border-radius:4px;font-size:11px">' + data.new_val.toUpperCase() + '</span>';
+            }
+        }
+    });
+}
+
+/* ── Feature Access: toggle & delete ─────────────────────────────── */
+function ajaxFeatureToggle(featureId, toggleField) {
+    var row = document.getElementById('feat-row-' + featureId);
+    if (!row) return;
+    /* Build current state */
+    var params = {aj_action: 'feature_update', aj_id: featureId};
+    var fields = ['tier_free','tier_basic','tier_premium','require_login','is_active'];
+    for (var i = 0; i < fields.length; i++) {
+        var btn = row.querySelector('[data-field="' + fields[i] + '"]');
+        if (btn) {
+            var currentVal = parseInt(btn.getAttribute('data-val'));
+            if (fields[i] === toggleField) {
+                params[fields[i]] = currentVal ? '0' : '1';
+            } else {
+                params[fields[i]] = String(currentVal);
+            }
+        }
+    }
+    ajaxAction(params, function() {
+        /* Toggle button display */
+        var togBtn = row.querySelector('[data-field="' + toggleField + '"]');
+        if (togBtn) {
+            var curVal = parseInt(togBtn.getAttribute('data-val'));
+            var newVal = curVal ? 0 : 1;
+            togBtn.setAttribute('data-val', newVal);
+            var icons = {tier_free: ['\u274C','\u2705'], tier_basic: ['\u274C','\u2705'], tier_premium: ['\u274C','\u2705'], require_login: ['\uD83D\uDD13','\uD83D\uDD12'], is_active: ['\uD83D\uDD34','\uD83D\uDFE2']};
+            var pair = icons[toggleField];
+            if (pair) togBtn.textContent = newVal ? pair[1] : pair[0];
+        }
+    });
+}
+
+function ajaxFeatureDelete(featureId) {
+    if (!confirm('Delete this feature?')) return;
+    ajaxAction({aj_action: 'feature_delete', aj_id: featureId}, function() {
+        var row = document.getElementById('feat-row-' + featureId);
+        if (row) fadeOutRow(row);
+    });
+}
+
+/* ── Lookup Delete ───────────────────────────────────────────────── */
+function ajaxLookupDelete(table, key) {
+    if (!confirm('Delete this entry? This may break references.')) return;
+    ajaxAction({aj_action: 'lookup_delete', aj_table: table, aj_key: key}, function() {
+        var row = document.getElementById('lookup-row-' + table + '-' + key);
+        if (row) fadeOutRow(row);
+    });
+}
+</script>
 </body>
 </html>
 <?php
