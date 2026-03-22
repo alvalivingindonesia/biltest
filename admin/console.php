@@ -2524,10 +2524,10 @@ elseif ($section === 'listings'):
                             <?php foreach ($all_agents as $ag): ?><option value="<?= $ag['id'] ?>" <?= ((int)($lst['agent_id'] ?? 0))===(int)$ag['id']?'selected':'' ?>><?= htmlspecialchars($ag['display_name']) ?> (#<?= $ag['id'] ?>)</option><?php endforeach; ?>
                         </select>
                     </div>
-                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Price USD</label><input type="number" name="price_usd" value="<?= htmlspecialchars($lst['price_usd'] ?? '') ?>" data-lst-id="<?= $lst['id'] ?>" data-currency="usd" onchange="lstPriceConvert(this)" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
-                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Price IDR</label><input type="number" name="price_idr" value="<?= htmlspecialchars($lst['price_idr'] ?? '') ?>" data-lst-id="<?= $lst['id'] ?>" data-currency="idr" onchange="lstPriceConvert(this)" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
-                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Price EUR</label><input type="number" name="price_eur" value="<?= htmlspecialchars($lst['price_eur'] ?? '') ?>" data-lst-id="<?= $lst['id'] ?>" data-currency="eur" onchange="lstPriceConvert(this)" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
-                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Price AUD</label><input type="number" name="price_aud" value="<?= htmlspecialchars($lst['price_aud'] ?? '') ?>" data-lst-id="<?= $lst['id'] ?>" data-currency="aud" onchange="lstPriceConvert(this)" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
+                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Price USD</label><input type="number" name="price_usd" value="<?= htmlspecialchars($lst['price_usd'] ?? '') ?>" data-lst-id="<?= $lst['id'] ?>" data-currency="usd" oninput="lstPriceConvert(this)" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
+                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Price IDR</label><input type="number" name="price_idr" value="<?= htmlspecialchars($lst['price_idr'] ?? '') ?>" data-lst-id="<?= $lst['id'] ?>" data-currency="idr" oninput="lstPriceConvert(this)" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
+                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Price EUR</label><input type="number" name="price_eur" value="<?= htmlspecialchars($lst['price_eur'] ?? '') ?>" data-lst-id="<?= $lst['id'] ?>" data-currency="eur" oninput="lstPriceConvert(this)" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
+                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Price AUD</label><input type="number" name="price_aud" value="<?= htmlspecialchars($lst['price_aud'] ?? '') ?>" data-lst-id="<?= $lst['id'] ?>" data-currency="aud" oninput="lstPriceConvert(this)" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
                     <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Land (m²)</label><input type="number" name="land_size_sqm" value="<?= htmlspecialchars($lst['land_size_sqm'] ?? '') ?>" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
                     <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Land (are)</label><input type="number" name="land_size_are" value="<?= htmlspecialchars($lst['land_size_are'] ?? '') ?>" step="0.01" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
                     <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Building (m²)</label><input type="number" name="building_size_sqm" value="<?= htmlspecialchars($lst['building_size_sqm'] ?? '') ?>" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
@@ -3301,10 +3301,23 @@ var CURRENCY_RATES = <?php
 function lstPriceConvert(el) {
     var src = (el.getAttribute('data-currency') || '').toUpperCase();
     var val = parseFloat(el.value);
-    if (!val || val <= 0) return;
-    var editRow = el.closest('tr');
-    if (!editRow) return;
+    /* Find the edit row — either the <tr> itself or fall back to lst-edit-{id} */
+    var row = el.closest('tr');
+    if (!row) {
+        var lstId = el.getAttribute('data-lst-id');
+        if (lstId) row = document.getElementById('lst-edit-' + lstId);
+    }
+    if (!row) return;
     var currencies = ['USD','IDR','EUR','AUD'];
+    if (isNaN(val) || val <= 0) {
+        /* Source cleared — clear all other currency fields in same row */
+        for (var ci = 0; ci < currencies.length; ci++) {
+            if (currencies[ci] === src) continue;
+            var clr = row.querySelector('input[data-currency="' + currencies[ci].toLowerCase() + '"]');
+            if (clr) clr.value = '';
+        }
+        return;
+    }
     for (var ci = 0; ci < currencies.length; ci++) {
         var tgt = currencies[ci];
         if (tgt === src) continue;
@@ -3312,15 +3325,7 @@ function lstPriceConvert(el) {
         var rate = CURRENCY_RATES[rateKey];
         if (!rate) continue;
         var converted = Math.round(val * rate);
-        var inp = editRow.parentNode.querySelector('input[data-currency="' + tgt.toLowerCase() + '"]');
-        if (!inp) {
-            /* search in sibling rows for same listing */
-            var lstId = el.getAttribute('data-lst-id');
-            if (lstId) {
-                var editTr = document.getElementById('lst-edit-' + lstId);
-                if (editTr) inp = editTr.querySelector('input[data-currency="' + tgt.toLowerCase() + '"]');
-            }
-        }
+        var inp = row.querySelector('input[data-currency="' + tgt.toLowerCase() + '"]');
         if (inp) inp.value = converted;
     }
 }
