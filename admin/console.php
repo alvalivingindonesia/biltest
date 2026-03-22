@@ -3121,20 +3121,73 @@ function ajaxListingEdit(id) {
     ajaxAction(params, function(data) {
         /* Close edit row */
         editRow.style.display = 'none';
-        /* Update display row with new data if available */
+        /* Update every visible cell in the display row */
         if (data.row) {
+            var r = data.row;
             var row = document.getElementById('lst-row-' + id);
-            if (row) {
-                var titleCell = row.querySelector('td:nth-child(2)');
-                if (titleCell && data.row.title) {
-                    var a = titleCell.querySelector('a');
-                    var span = titleCell.querySelector('span');
-                    if (a) a.textContent = data.row.title.length > 50 ? data.row.title.substring(0,47) + '...' : data.row.title;
-                    if (span) span.textContent = data.row.title.length > 50 ? data.row.title.substring(0,47) + '...' : data.row.title;
-                }
+            if (!row) return;
+            var cells = row.querySelectorAll('td');
+            /* cell 0 = image (skip), cell 1 = title/source, cell 2 = area, cell 3 = agent,
+               cell 4 = land, cell 5 = price, cell 6 = status, cell 7 = appr, cell 8 = feat, cell 9 = actions */
+
+            /* ── Title / Source (cell 1) ── */
+            var titleText = r.title || '-';
+            var shortTitle = titleText.length > 50 ? titleText.substring(0, 47) + '...' : titleText;
+            var typeText = r.listing_type || r.listing_type_key || '-';
+            var dateText = r.created_at ? r.created_at.substring(0, 10) : '';
+            if (r.source_url) {
+                cells[1].innerHTML = '<a href="' + escHtml(r.source_url) + '" target="_blank" rel="noopener" style="color:#0c7c84;text-decoration:none;font-weight:500">' + escHtml(shortTitle) + '</a>'
+                    + '<div style="font-size:11px;color:#94a3b8;margin-top:1px">#' + id + ' \u00b7 ' + escHtml(typeText) + ' \u00b7 ' + dateText + '</div>';
+            } else {
+                cells[1].innerHTML = '<span style="font-weight:500">' + escHtml(shortTitle) + '</span>'
+                    + '<div style="font-size:11px;color:#94a3b8;margin-top:1px">#' + id + ' \u00b7 ' + escHtml(typeText) + ' \u00b7 ' + dateText + '</div>';
             }
+
+            /* ── Area (cell 2) ── */
+            cells[2].textContent = r.area_label || '-';
+
+            /* ── Agent (cell 3) ── */
+            cells[3].textContent = r.agent_name || 'Private Seller';
+
+            /* ── Land size (cell 4) ── */
+            if (r.land_size_are && parseFloat(r.land_size_are) > 0) {
+                cells[4].textContent = formatNum(r.land_size_are, 0) + ' are';
+            } else if (r.land_size_sqm && parseFloat(r.land_size_sqm) > 0) {
+                cells[4].textContent = formatNum(r.land_size_sqm, 0) + ' m\u00B2';
+            } else {
+                cells[4].textContent = '-';
+            }
+
+            /* ── Price (cell 5) ── */
+            if (r.price_usd && parseFloat(r.price_usd) > 0) {
+                cells[5].textContent = '$' + formatNum(r.price_usd, 0);
+            } else if (r.price_idr && parseFloat(r.price_idr) > 0) {
+                cells[5].textContent = 'Rp ' + formatNum(r.price_idr, 0);
+            } else {
+                cells[5].textContent = '-';
+            }
+
+            /* Brief green flash on the row to confirm */
+            row.style.transition = 'background 0.3s';
+            row.style.background = '#f0fdf4';
+            setTimeout(function() { row.style.background = ''; }, 1200);
         }
     });
+}
+
+/* Helper: escape HTML entities */
+function escHtml(s) {
+    if (!s) return '';
+    var d = document.createElement('div');
+    d.appendChild(document.createTextNode(s));
+    return d.innerHTML;
+}
+
+/* Helper: format number with thousands separator */
+function formatNum(n, decimals) {
+    var num = parseFloat(n);
+    if (isNaN(num)) return '0';
+    return num.toFixed(decimals || 0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 /* ── Entity Delete (providers, developers, projects, guides) ─────── */
