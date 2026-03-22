@@ -27,7 +27,7 @@ function convert_listing_prices($db_conn, &$fields, &$vals) {
     $currencies = array('usd', 'idr', 'eur', 'aud');
     $prices = array();
     foreach ($currencies as $c) {
-        $key = 'price_' . $c;
+        $key = 'price' . $c;
         $prices[$c] = (isset($_POST[$key]) && trim($_POST[$key]) !== '') ? floatval($_POST[$key]) : null;
     }
     // Find the source currency (first non-empty)
@@ -51,7 +51,7 @@ function convert_listing_prices($db_conn, &$fields, &$vals) {
         $rateKey = strtoupper($source) . '_' . strtoupper($target);
         if (!isset($rates[$rateKey])) continue;
         $converted = round($prices[$source] * $rates[$rateKey]);
-        $col = '`price_' . $target . '`=?';
+        $col = 'price' . $target . '=?';
         $replaced = false;
         for ($i = 0; $i < count($fields); $i++) {
             if ($fields[$i] === $col) { $vals[$i] = $converted; $replaced = true; break; }
