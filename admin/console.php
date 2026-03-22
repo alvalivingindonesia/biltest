@@ -102,7 +102,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1' && $_SERVER['REQUEST_METHOD'] 
                 if ($aj_id) {
                     $fields = array();
                     $vals = array();
-                    $allowed_f = array('title','listing_type','area_key','price_usd','price_idr','land_size_sqm','land_size_are','building_size_sqm','bedrooms','bathrooms','short_description','source_url','contact_whatsapp','agent_id','admin_notes');
+                    $allowed_f = array('title','listing_type','area_key','price_usd','price_idr','price_eur','price_aud','land_size_sqm','land_size_are','building_size_sqm','bedrooms','bathrooms','short_description','source_url','contact_whatsapp','agent_id','admin_notes');
                     foreach ($allowed_f as $f) {
                         if (isset($_POST[$f])) {
                             $fields[] = "`" . $f . "`=?";
@@ -546,6 +546,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $msg = 'Entry deleted.';
             }
         }
+        // --- CURRENCY RATES: save ---
+        elseif ($section === 'lookups' && $action === 'save_rates') {
+            $from_list = $_POST['from_currency'];
+            $to_list = $_POST['to_currency'];
+            $rate_list = $_POST['rate'];
+            if (is_array($from_list)) {
+                for ($ri = 0; $ri < count($from_list); $ri++) {
+                    $f = strtoupper(trim($from_list[$ri]));
+                    $t = strtoupper(trim($to_list[$ri]));
+                    $rv = (float)$rate_list[$ri];
+                    if ($f && $t && $rv > 0) {
+                        $db->prepare("INSERT INTO currency_rates (from_currency, to_currency, rate) VALUES (?,?,?) ON DUPLICATE KEY UPDATE rate=?")
+                           ->execute(array($f, $t, $rv, $rv));
+                    }
+                }
+            }
+            $msg = 'Currency rates updated.';
+            // Reload rates
+            try { $currency_rates = $db->query("SELECT * FROM currency_rates ORDER BY from_currency, to_currency")->fetchAll(); } catch (Exception $e) {}
+        }
+
         // --- CLAIMS: approve/reject ---
         elseif ($section === 'claims' && $action === 'review_claim') {
             $claim_id = (int)$_POST['claim_id'];
@@ -799,7 +820,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $lid = (int)$_POST['listing_id'];
             $fields = array();
             $vals = array();
-            $allowed = array('title','listing_type','area_key','price_usd','price_idr','land_size_sqm','land_size_are','building_size_sqm','bedrooms','bathrooms','short_description','source_url','contact_whatsapp','agent_id','admin_notes');
+            $allowed = array('title','listing_type','area_key','price_usd','price_idr','price_eur','price_aud','land_size_sqm','land_size_are','building_size_sqm','bedrooms','bathrooms','short_description','source_url','contact_whatsapp','agent_id','admin_notes');
             foreach ($allowed as $f) {
                 if (isset($_POST[$f])) {
                     $fields[] = "`" . $f . "`=?";
@@ -897,6 +918,7 @@ $groups_list = $db->query("SELECT * FROM `groups` ORDER BY sort_order")->fetchAl
 $cats_list = $db->query("SELECT * FROM categories ORDER BY group_key, sort_order")->fetchAll();
 $areas_list = $db->query("SELECT * FROM areas ORDER BY sort_order")->fetchAll();
 try { $regions_list = $db->query("SELECT * FROM area_regions ORDER BY sort_order")->fetchAll(); } catch (Exception $e) { $regions_list = []; }
+try { $currency_rates = $db->query("SELECT * FROM currency_rates ORDER BY from_currency, to_currency")->fetchAll(); } catch (Exception $e) { $currency_rates = []; }
 $ptypes_list = $db->query("SELECT * FROM project_types ORDER BY sort_order")->fetchAll();
 $pstatus_list = $db->query("SELECT * FROM project_statuses ORDER BY sort_order")->fetchAll();
 // Developer sidebar: only show categories that at least one developer uses
@@ -1068,6 +1090,7 @@ function toggleSidebarSub(e,id){
             <a href="?s=lookups#lookup-areas" style="padding-left:32px;font-size:12px;">Areas / Locations</a>
             <a href="?s=lookups#lookup-project_types" style="padding-left:32px;font-size:12px;">Project Types</a>
             <a href="?s=lookups#lookup-project_statuses" style="padding-left:32px;font-size:12px;">Project Statuses</a>
+            <a href="?s=lookups#lookup-currency_rates" style="padding-left:32px;font-size:12px;">Currency Rates</a>
         </div>
     </div>
     <h2>RAB Module</h2>
@@ -1860,6 +1883,32 @@ elseif ($section === 'lookups'):
 </div>
 <?php endforeach; ?>
 
+<!-- Currency Rates -->
+<div class="card lookup-section" id="lookup-currency_rates">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="margin:0;border:none">Currency Exchange Rates (<?= count($currency_rates) ?>)</h3>
+    </div>
+    <form method="POST" action="?s=lookups&a=save_rates">
+    <table style="margin-top:8px">
+        <tr><th>From</th><th>To</th><th>Rate</th></tr>
+        <?php foreach ($currency_rates as $cr): ?>
+        <tr>
+            <td>
+                <input type="hidden" name="from_currency[]" value="<?= htmlspecialchars($cr['from_currency']) ?>">
+                <code style="font-size:12px"><?= htmlspecialchars($cr['from_currency']) ?></code>
+            </td>
+            <td>
+                <input type="hidden" name="to_currency[]" value="<?= htmlspecialchars($cr['to_currency']) ?>">
+                <code style="font-size:12px"><?= htmlspecialchars($cr['to_currency']) ?></code>
+            </td>
+            <td><input type="text" name="rate[]" value="<?= $cr['rate'] ?>" style="width:140px;padding:4px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></td>
+        </tr>
+        <?php endforeach; ?>
+    </table>
+    <div style="margin-top:8px"><button class="btn btn-p btn-sm">Save Rates</button> <span style="font-size:11px;color:#94a3b8;margin-left:8px">Last updated: <?= !empty($currency_rates) ? $currency_rates[0]['updated_at'] : 'N/A' ?></span></div>
+    </form>
+</div>
+
 <?php
 // ═══════════════════════════════════════════════════════════════
 // USERS LIST + DETAIL EDIT
@@ -2433,8 +2482,10 @@ elseif ($section === 'listings'):
                             <?php foreach ($all_agents as $ag): ?><option value="<?= $ag['id'] ?>" <?= ((int)($lst['agent_id'] ?? 0))===(int)$ag['id']?'selected':'' ?>><?= htmlspecialchars($ag['display_name']) ?> (#<?= $ag['id'] ?>)</option><?php endforeach; ?>
                         </select>
                     </div>
-                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Price USD</label><input type="number" name="price_usd" value="<?= htmlspecialchars($lst['price_usd'] ?? '') ?>" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
-                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Price IDR</label><input type="number" name="price_idr" value="<?= htmlspecialchars($lst['price_idr'] ?? '') ?>" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
+                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Price USD</label><input type="number" name="price_usd" value="<?= htmlspecialchars($lst['price_usd'] ?? '') ?>" data-lst-id="<?= $lst['id'] ?>" data-currency="usd" onchange="lstPriceConvert(this)" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
+                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Price IDR</label><input type="number" name="price_idr" value="<?= htmlspecialchars($lst['price_idr'] ?? '') ?>" data-lst-id="<?= $lst['id'] ?>" data-currency="idr" onchange="lstPriceConvert(this)" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
+                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Price EUR</label><input type="number" name="price_eur" value="<?= htmlspecialchars($lst['price_eur'] ?? '') ?>" data-lst-id="<?= $lst['id'] ?>" data-currency="eur" onchange="lstPriceConvert(this)" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
+                    <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Price AUD</label><input type="number" name="price_aud" value="<?= htmlspecialchars($lst['price_aud'] ?? '') ?>" data-lst-id="<?= $lst['id'] ?>" data-currency="aud" onchange="lstPriceConvert(this)" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
                     <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Land (m²)</label><input type="number" name="land_size_sqm" value="<?= htmlspecialchars($lst['land_size_sqm'] ?? '') ?>" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
                     <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Land (are)</label><input type="number" name="land_size_are" value="<?= htmlspecialchars($lst['land_size_are'] ?? '') ?>" step="0.01" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
                     <div><label style="font-size:11px;display:block;margin-bottom:2px;color:#64748b">Building (m²)</label><input type="number" name="building_size_sqm" value="<?= htmlspecialchars($lst['building_size_sqm'] ?? '') ?>" style="width:100%;padding:5px 8px;border:1px solid #d0d0d0;border-radius:4px;font-size:12px"></div>
@@ -3194,6 +3245,42 @@ function ajaxListingEdit(id) {
             setTimeout(function() { row.style.background = ''; }, 1200);
         }
     });
+}
+
+/* ── Currency rates for admin auto-convert ── */
+var CURRENCY_RATES = <?php
+    $cr_map = array();
+    foreach ($currency_rates as $cr) {
+        $cr_map[$cr['from_currency'] . '_' . $cr['to_currency']] = (float)$cr['rate'];
+    }
+    echo json_encode($cr_map);
+?>;
+
+function lstPriceConvert(el) {
+    var src = (el.getAttribute('data-currency') || '').toUpperCase();
+    var val = parseFloat(el.value);
+    if (!val || val <= 0) return;
+    var editRow = el.closest('tr');
+    if (!editRow) return;
+    var currencies = ['USD','IDR','EUR','AUD'];
+    for (var ci = 0; ci < currencies.length; ci++) {
+        var tgt = currencies[ci];
+        if (tgt === src) continue;
+        var rateKey = src + '_' + tgt;
+        var rate = CURRENCY_RATES[rateKey];
+        if (!rate) continue;
+        var converted = Math.round(val * rate);
+        var inp = editRow.parentNode.querySelector('input[data-currency="' + tgt.toLowerCase() + '"]');
+        if (!inp) {
+            /* search in sibling rows for same listing */
+            var lstId = el.getAttribute('data-lst-id');
+            if (lstId) {
+                var editTr = document.getElementById('lst-edit-' + lstId);
+                if (editTr) inp = editTr.querySelector('input[data-currency="' + tgt.toLowerCase() + '"]');
+            }
+        }
+        if (inp) inp.value = converted;
+    }
 }
 
 /* Helper: escape HTML entities */

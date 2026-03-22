@@ -627,6 +627,15 @@ function handle_filters(): void {
     $land_certificate_types = [];
     try { $land_certificate_types = $db->query("SELECT `key`, label FROM land_certificate_types ORDER BY sort_order")->fetchAll(); } catch (Exception $e) {}
 
+    // Currency rates for frontend conversion
+    $currency_rates = [];
+    try {
+        $cr = $db->query("SELECT from_currency, to_currency, rate FROM currency_rates")->fetchAll();
+        foreach ($cr as $r) {
+            $currency_rates[$r['from_currency'] . '_' . $r['to_currency']] = (float)$r['rate'];
+        }
+    } catch (Exception $e) {}
+
     json_out([
         'groups' => $groups,
         'categories' => $categories,
@@ -636,6 +645,7 @@ function handle_filters(): void {
         'project_statuses' => $project_statuses,
         'listing_types' => $listing_types,
         'land_certificate_types' => $land_certificate_types,
+        'currency_rates' => $currency_rates,
     ]);
 }
 
@@ -743,7 +753,10 @@ function handle_listings_list(): void {
         $where[] = 'l.price_idr <= ?';
         $params[] = (int)$_GET['max_price_idr'];
     }
-    // Filter: size range
+    // Filter: size range — only match listings that HAVE a land size
+    if (!empty($_GET['min_size']) || !empty($_GET['max_size'])) {
+        $where[] = 'l.land_size_sqm IS NOT NULL AND l.land_size_sqm > 0';
+    }
     if (!empty($_GET['min_size'])) {
         $where[] = 'l.land_size_sqm >= ?';
         $params[] = (int)$_GET['min_size'];
@@ -795,7 +808,7 @@ function handle_listings_list(): void {
     // Fetch with joins
     $stmt = $db->prepare(
         "SELECT l.id, l.slug, l.title, l.short_description, l.listing_type_key, l.area_key,
-                l.price_usd, l.price_idr, l.price_idr_per_sqm, l.price_label,
+                l.price_usd, l.price_idr, l.price_eur, l.price_aud, l.price_idr_per_sqm, l.price_label,
                 l.land_size_sqm, l.land_size_are, l.building_size_sqm,
                 l.bedrooms, l.bathrooms,
                 l.certificate_type_key, l.is_featured, l.agent_id,
