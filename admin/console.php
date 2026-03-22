@@ -2301,12 +2301,14 @@ elseif ($section === 'listings'):
     $q = $_GET['q'] ?? '';
     $f_status = $_GET['fs'] ?? '';
     $f_approved = $_GET['fap'] ?? '';
+    $f_region = $_GET['frg'] ?? '';
     $f_area = $_GET['fa'] ?? '';
     $where = '1=1'; $params = [];
     if ($q) { $where .= " AND (pl.title LIKE ? OR pl.listing_type LIKE ?)"; $params[] = "%{$q}%"; $params[] = "%{$q}%"; }
     if ($f_status) { $where .= " AND pl.status=?"; $params[] = $f_status; }
     if ($f_approved === '1') { $where .= " AND pl.is_approved=1"; }
     elseif ($f_approved === '0') { $where .= " AND pl.is_approved=0"; }
+    if ($f_region) { $where .= " AND ar.region_key=?"; $params[] = $f_region; }
     if ($f_area) { $where .= " AND pl.area_key=?"; $params[] = $f_area; }
     $listings = [];
     try {
@@ -2354,12 +2356,16 @@ elseif ($section === 'listings'):
         <option value="1" <?= $f_approved==='1'?'selected':'' ?>>Approved: Yes</option>
         <option value="0" <?= $f_approved==='0'?'selected':'' ?>>Approved: No</option>
     </select>
-    <select name="fa">
+    <select name="frg" id="lst-frg" onchange="lstRegionChanged()">
+        <option value="">All Regions</option>
+        <?php foreach ($regions_list as $rg): ?><option value="<?= htmlspecialchars($rg['region_key']) ?>" <?= $f_region===$rg['region_key']?'selected':'' ?>><?= htmlspecialchars($rg['label']) ?></option><?php endforeach; ?>
+    </select>
+    <select name="fa" id="lst-fa">
         <option value="">All Areas</option>
-        <?php foreach ($areas_list as $a): ?><option value="<?= $a['key'] ?>" <?= $f_area===$a['key']?'selected':'' ?>><?= htmlspecialchars($a['label']) ?></option><?php endforeach; ?>
+        <?php foreach ($areas_list as $a): ?><option value="<?= $a['key'] ?>" data-region="<?= htmlspecialchars($a['region_key'] ?? '') ?>" <?= $f_area===$a['key']?'selected':'' ?>><?= htmlspecialchars($a['label']) ?></option><?php endforeach; ?>
     </select>
     <button class="btn btn-o">Filter</button>
-    <?php if ($q || $f_status || $f_approved !== '' || $f_area): ?><a href="?s=listings" class="btn btn-o">Clear</a><?php endif; ?>
+    <?php if ($q || $f_status || $f_approved !== '' || $f_region || $f_area): ?><a href="?s=listings" class="btn btn-o">Clear</a><?php endif; ?>
 </form>
 <div class="card" style="padding:0;overflow-x:auto">
 <table class="tbl" style="font-size:13px">
@@ -2457,6 +2463,21 @@ var toggleListingEdit = function(id) {
     var row = document.getElementById('lst-edit-' + id);
     if (row) row.style.display = row.style.display === 'none' ? '' : 'none';
 };
+var lstRegionChanged = function() {
+    var rgSel = document.getElementById('lst-frg');
+    var areaSel = document.getElementById('lst-fa');
+    var rg = rgSel.value;
+    var opts = areaSel.options;
+    areaSel.value = '';
+    for (var i = 1; i < opts.length; i++) {
+        if (!rg || opts[i].getAttribute('data-region') === rg) {
+            opts[i].style.display = '';
+        } else {
+            opts[i].style.display = 'none';
+        }
+    }
+};
+lstRegionChanged();
 </script>
 <?php if (empty($listings)): ?>
 <div class="card" style="text-align:center;color:#888">No listings found.</div>
