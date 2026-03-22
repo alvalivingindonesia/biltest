@@ -22,6 +22,44 @@ if (isset($_GET['logout'])) { session_destroy(); header('Location: console.php')
 if (empty($_SESSION['admin_auth'])) { show_login($auth_error); exit; }
 
 // ─── AJAX API ────────────────────────────────────────────────────────
+// ─── HELPER: Server-side currency conversion for listings ──────────
+function convert_listing_prices($db_conn, &$fields, &$vals) {
+    $currencies = array('usd', 'idr', 'eur', 'aud');
+    $prices = array();
+    foreach ($currencies as $c) {
+        $key = 'price_' . $c;
+        $prices[$c] = (isset($_POST[$key]) && trim($_POST[$key]) !== '') ? floatval($_POST[$key]) : null;
+    }
+    // Find the source currency (first non-empty)
+    $source = null;
+    foreach ($currencies as $c) {
+        if ($prices[$c] !== null && $prices[$c] > 0) { $source = $c; break; }
+    }
+    if (!$source) return;
+    // Load rates
+    $rates = array();
+    try {
+        $rs = $db_conn->query("SELECT from_currency, to_currency, rate FROM currency_rates");
+        foreach ($rs as $r) {
+            $rates[$r['from_currency'] . '_' . $r['to_currency']] = (float)$r['rate'];
+        }
+    } catch (Exception $e) { return; }
+    // Fill missing currencies
+    foreach ($currencies as $target) {
+        if ($target === $source) continue;
+        if ($prices[$target] !== null && $prices[$target] > 0) continue;
+        $rateKey = strtoupper($source) . '_' . strtoupper($target);
+        if (!isset($rates[$rateKey])) continue;
+        $converted = round($prices[$source] * $rates[$rateKey]);
+        $col = '`price_' . $target . '`=?';
+        $replaced = false;
+        for ($i = 0; $i < count($fields); $i++) {
+            if ($fields[$i] === $col) { $vals[$i] = $converted; $replaced = true; break; }
+        }
+        if (!$replaced) { $fields[] = $col; $vals[] = $converted; }
+    }
+}
+
 // All quick actions (delete, toggle, status change, approve/reject, edit)
 // return JSON when called with ?ajax=1
 if (isset($_GET['ajax']) && $_GET['ajax'] === '1' && $_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -110,6 +148,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1' && $_SERVER['REQUEST_METHOD'] 
                             $vals[] = ($v === '') ? null : $v;
                         }
                     }
+                    // Server-side currency conversion
+                    convert_listing_prices($db_ajax, $fields, $vals);
                     if (count($fields) > 0) {
                         $vals[] = $aj_id;
                         $db_ajax->prepare("UPDATE listings SET " . implode(',', $fields) . " WHERE id=?")->execute($vals);
@@ -828,6 +868,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $vals[] = ($v === '') ? null : $v;
                 }
             }
+            // Server-side currency conversion
+            convert_listing_prices($db, $fields, $vals);
             if (count($fields) > 0) {
                 $vals[] = $lid;
                 $db->prepare("UPDATE listings SET " . implode(',', $fields) . " WHERE id=?")->execute($vals);
