@@ -2394,14 +2394,40 @@ elseif ($section === 'listings'):
     $f_approved = $_GET['fap'] ?? '';
     $f_region = $_GET['frg'] ?? '';
     $f_area = $_GET['fa'] ?? '';
-    $where = '1=1'; $params = [];
+    $f_missing = $_GET['fm'] ?? ''; // missing data filter: no_price, no_size
+    $sort_col = $_GET['sc'] ?? 'created_at';
+    $sort_dir = $_GET['sd'] ?? 'desc';
+    $page_num = max(1, (int)($_GET['pg'] ?? 1));
+    $per_page = 50;
+    $offset = ($page_num - 1) * $per_page;
+
+    // Validate sort
+    $allowed_sorts = array('created_at', 'price_usd', 'land_size_sqm');
+    if (!in_array($sort_col, $allowed_sorts)) $sort_col = 'created_at';
+    $sort_dir = (strtolower($sort_dir) === 'asc') ? 'ASC' : 'DESC';
+
+    $where = '1=1'; $params = array();
     if ($q) { $where .= " AND (pl.title LIKE ? OR pl.listing_type LIKE ?)"; $params[] = "%{$q}%"; $params[] = "%{$q}%"; }
     if ($f_status) { $where .= " AND pl.status=?"; $params[] = $f_status; }
     if ($f_approved === '1') { $where .= " AND pl.is_approved=1"; }
     elseif ($f_approved === '0') { $where .= " AND pl.is_approved=0"; }
     if ($f_region) { $where .= " AND ar.region_key=?"; $params[] = $f_region; }
     if ($f_area) { $where .= " AND pl.area_key=?"; $params[] = $f_area; }
-    $listings = [];
+    if ($f_missing === 'no_price') { $where .= " AND (pl.price_usd IS NULL OR pl.price_usd = 0) AND (pl.price_idr IS NULL OR pl.price_idr = 0)"; }
+    if ($f_missing === 'no_size') { $where .= " AND (pl.land_size_sqm IS NULL OR pl.land_size_sqm = 0) AND (pl.land_size_are IS NULL OR pl.land_size_are = 0)"; }
+    if ($f_missing === 'no_both') { $where .= " AND ((pl.price_usd IS NULL OR pl.price_usd = 0) AND (pl.price_idr IS NULL OR pl.price_idr = 0)) AND ((pl.land_size_sqm IS NULL OR pl.land_size_sqm = 0) AND (pl.land_size_are IS NULL OR pl.land_size_are = 0))"; }
+
+    // Count total
+    $total_count = 0;
+    try {
+        $cnt = $db->prepare("SELECT COUNT(*) FROM listings pl LEFT JOIN areas ar ON ar.`key` = pl.area_key WHERE {$where}");
+        $cnt->execute($params);
+        $total_count = (int)$cnt->fetchColumn();
+    } catch (Exception $e) {}
+    $total_pages = max(1, ceil($total_count / $per_page));
+    if ($page_num > $total_pages) $page_num = $total_pages;
+
+    $listings = array();
     try {
         $stmt = $db->prepare("
             SELECT pl.*,
@@ -2412,29 +2438,33 @@ elseif ($section === 'listings'):
             LEFT JOIN agents a ON a.id = pl.agent_id
             LEFT JOIN areas ar ON ar.`key` = pl.area_key
             WHERE {$where}
-            ORDER BY pl.created_at DESC LIMIT 200");
+            ORDER BY pl.`{$sort_col}` {$sort_dir}
+            LIMIT {$per_page} OFFSET {$offset}");
         $stmt->execute($params);
         $listings = $stmt->fetchAll();
-    } catch (Exception $e) { $listings = []; }
+    } catch (Exception $e) { $listings = array(); }
+
     // Agents list for edit dropdown
     $all_agents = array();
     try { $all_agents = $db->query("SELECT id, display_name FROM agents ORDER BY display_name ASC")->fetchAll(); } catch (Exception $e) {}
-    // Status badge colour helper
-    $status_badge = array(
-        'draft'      => 'b-yellow',
-        'active'     => 'b-green',
-        'under_offer'=> 'b-blue',
-        'sold'       => 'b-red',
-        'expired'    => 'b-red',
-    );
+
+    // Build current query string helper (for sort links)
+    $qs_base = array('s' => 'listings');
+    if ($q) $qs_base['q'] = $q;
+    if ($f_status) $qs_base['fs'] = $f_status;
+    if ($f_approved !== '') $qs_base['fap'] = $f_approved;
+    if ($f_region) $qs_base['frg'] = $f_region;
+    if ($f_area) $qs_base['fa'] = $f_area;
+    if ($f_missing) $qs_base['fm'] = $f_missing;
 ?>
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-    <h1 style="margin:0">Listings (<?= count($listings) ?>)</h1>
+    <h1 style="margin:0">Listings (<?= $total_count ?>)</h1>
+    <span style="font-size:12px;color:#94a3b8">Page <?= $page_num ?> of <?= $total_pages ?></span>
 </div>
-<form class="search-bar" method="GET">
+<form class="search-bar" id="lst-filter-form" method="GET" style="flex-wrap:wrap;gap:6px">
     <input type="hidden" name="s" value="listings">
-    <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" placeholder="Search title or type..." style="flex:1;min-width:160px">
-    <select name="fs">
+    <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" placeholder="Search title or type..." style="flex:1;min-width:140px" onchange="this.form.submit()">
+    <select name="fs" onchange="this.form.submit()">
         <option value="">All Statuses</option>
         <option value="draft" <?= $f_status==='draft'?'selected':'' ?>>Draft</option>
         <option value="active" <?= $f_status==='active'?'selected':'' ?>>Active</option>
@@ -2442,29 +2472,71 @@ elseif ($section === 'listings'):
         <option value="sold" <?= $f_status==='sold'?'selected':'' ?>>Sold</option>
         <option value="expired" <?= $f_status==='expired'?'selected':'' ?>>Expired</option>
     </select>
-    <select name="fap">
+    <select name="fap" onchange="this.form.submit()">
         <option value="">Approved: All</option>
         <option value="1" <?= $f_approved==='1'?'selected':'' ?>>Approved: Yes</option>
         <option value="0" <?= $f_approved==='0'?'selected':'' ?>>Approved: No</option>
     </select>
-    <select name="frg" id="lst-frg" onchange="lstRegionChanged()">
+    <select name="frg" id="lst-frg" onchange="lstRegionChanged(); this.form.submit()">
         <option value="">All Regions</option>
         <?php foreach ($regions_list as $rg): ?><option value="<?= htmlspecialchars($rg['region_key']) ?>" <?= $f_region===$rg['region_key']?'selected':'' ?>><?= htmlspecialchars($rg['label']) ?></option><?php endforeach; ?>
     </select>
-    <select name="fa" id="lst-fa">
+    <select name="fa" id="lst-fa" onchange="this.form.submit()">
         <option value="">All Areas</option>
         <?php foreach ($areas_list as $a): ?><option value="<?= $a['key'] ?>" data-region="<?= htmlspecialchars($a['region_key'] ?? '') ?>" <?= $f_area===$a['key']?'selected':'' ?>><?= htmlspecialchars($a['label']) ?></option><?php endforeach; ?>
     </select>
-    <button class="btn btn-o">Filter</button>
-    <?php if ($q || $f_status || $f_approved !== '' || $f_region || $f_area): ?><a href="?s=listings" class="btn btn-o">Clear</a><?php endif; ?>
+    <select name="fm" onchange="this.form.submit()">
+        <option value="">All Data</option>
+        <option value="no_price" <?= $f_missing==='no_price'?'selected':'' ?>>Missing Price</option>
+        <option value="no_size" <?= $f_missing==='no_size'?'selected':'' ?>>Missing Size</option>
+        <option value="no_both" <?= $f_missing==='no_both'?'selected':'' ?>>Missing Both</option>
+    </select>
+    <?php if ($q || $f_status || $f_approved !== '' || $f_region || $f_area || $f_missing): ?><a href="?s=listings" class="btn btn-o" style="font-size:12px;padding:5px 12px">Clear</a><?php endif; ?>
 </form>
+<?php
+    // Sort link helper
+    function lst_sort_link($qs_base, $col, $current_col, $current_dir, $label) {
+        $new_dir = ($col === $current_col && $current_dir === 'DESC') ? 'asc' : 'desc';
+        $arrow = '';
+        if ($col === $current_col) $arrow = ($current_dir === 'ASC') ? ' ▲' : ' ▼';
+        $qs = $qs_base;
+        $qs['sc'] = $col;
+        $qs['sd'] = $new_dir;
+        $href = '?' . http_build_query($qs);
+        return '<a href="' . htmlspecialchars($href) . '" style="color:inherit;text-decoration:none;white-space:nowrap">' . $label . $arrow . '</a>';
+    }
+?>
 <div class="card" style="padding:0;overflow-x:auto">
 <table class="tbl" style="font-size:13px">
 <thead>
-    <tr><th style="width:36px"></th><th>Title / Source</th><th>Area</th><th>Agent</th><th>Land</th><th>Price</th><th>Status</th><th style="width:60px;text-align:center">Appr</th><th style="width:50px;text-align:center">Feat</th><th style="text-align:right">Actions</th></tr>
+    <tr>
+        <th style="width:36px"></th>
+        <th>Title / Source</th>
+        <th>Area</th>
+        <th>Agent</th>
+        <th><?= lst_sort_link($qs_base, 'land_size_sqm', $sort_col, $sort_dir, 'Land') ?></th>
+        <th><?= lst_sort_link($qs_base, 'price_usd', $sort_col, $sort_dir, 'Price') ?></th>
+        <th>Status</th>
+        <th style="width:50px;text-align:center">Appr</th>
+        <th style="width:40px;text-align:center">Feat</th>
+        <th style="text-align:right">Actions</th>
+    </tr>
 </thead>
 <tbody>
-    <?php foreach ($listings as $lst): ?>
+    <?php foreach ($listings as $lst):
+        // Determine which price to show
+        $show_price_val = '';
+        $show_price_cur = 'usd';
+        if ($lst['price_usd']) { $show_price_val = (int)$lst['price_usd']; $show_price_cur = 'usd'; }
+        elseif ($lst['price_idr']) { $show_price_val = (int)$lst['price_idr']; $show_price_cur = 'idr'; }
+        elseif ($lst['price_eur']) { $show_price_val = (int)$lst['price_eur']; $show_price_cur = 'eur'; }
+        elseif ($lst['price_aud']) { $show_price_val = (int)$lst['price_aud']; $show_price_cur = 'aud'; }
+        // Determine which land size to show
+        $show_land_val = '';
+        $show_land_unit = 'are';
+        if ($lst['land_size_are'] && (float)$lst['land_size_are'] > 0) { $show_land_val = (float)$lst['land_size_are']; $show_land_unit = 'are'; }
+        elseif ($lst['land_size_sqm'] && (int)$lst['land_size_sqm'] > 0) { $show_land_val = (int)$lst['land_size_sqm']; $show_land_unit = 'sqm'; }
+    ?>
     <tr id="lst-row-<?= $lst['id'] ?>">
         <td>
             <?php if (!empty($lst['primary_image'])): ?>
@@ -2475,37 +2547,56 @@ elseif ($section === 'listings'):
         </td>
         <td>
             <?php if (!empty($lst['source_url'])): ?>
-            <a href="<?= htmlspecialchars($lst['source_url']) ?>" target="_blank" rel="noopener" title="Open on <?= htmlspecialchars($lst['source_site'] ?? 'source') ?>" style="color:#0c7c84;text-decoration:none;font-weight:500"><?= htmlspecialchars(mb_strimwidth($lst['title'] ?? '-', 0, 50, '...')) ?></a>
+            <a href="<?= htmlspecialchars($lst['source_url']) ?>" target="_blank" rel="noopener" style="color:#0c7c84;text-decoration:none;font-weight:500"><?= htmlspecialchars(mb_strimwidth($lst['title'] ?? '-', 0, 45, '...')) ?></a>
             <?php else: ?>
-            <span style="font-weight:500"><?= htmlspecialchars(mb_strimwidth($lst['title'] ?? '-', 0, 50, '...')) ?></span>
+            <span style="font-weight:500"><?= htmlspecialchars(mb_strimwidth($lst['title'] ?? '-', 0, 45, '...')) ?></span>
             <?php endif; ?>
             <div style="font-size:11px;color:#94a3b8;margin-top:1px">#<?= $lst['id'] ?> · <?= htmlspecialchars($lst['listing_type'] ?? $lst['listing_type_key'] ?? '-') ?> · <?= isset($lst['created_at']) ? substr($lst['created_at'],0,10) : '' ?></div>
         </td>
         <td style="font-size:12px"><?= htmlspecialchars($lst['area_label'] ?? '-') ?></td>
         <td style="font-size:12px"><?= htmlspecialchars($lst['agent_name'] ?? 'Private Seller') ?></td>
-        <td style="font-size:12px;white-space:nowrap"><?= $lst['land_size_are'] ? number_format((float)$lst['land_size_are'],0) . ' are' : ($lst['land_size_sqm'] ? number_format((float)$lst['land_size_sqm']) . ' m²' : '-') ?></td>
-        <td style="font-size:12px;white-space:nowrap"><?= $lst['price_usd'] ? '$' . number_format((float)$lst['price_usd']) : ($lst['price_idr'] ? 'Rp ' . number_format((float)$lst['price_idr'],0,',','.') : '-') ?></td>
+        <td style="white-space:nowrap">
+            <div style="display:flex;gap:2px;align-items:center">
+                <input type="number" id="land-val-<?= $lst['id'] ?>" value="<?= htmlspecialchars($show_land_val) ?>" step="any" style="width:70px;padding:3px 5px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px;text-align:right">
+                <select id="land-unit-<?= $lst['id'] ?>" style="padding:3px 2px;font-size:11px;border:1px solid #d0d0d0;border-radius:4px">
+                    <option value="are" <?= $show_land_unit==='are'?'selected':'' ?>>are</option>
+                    <option value="sqm" <?= $show_land_unit==='sqm'?'selected':'' ?>>m²</option>
+                </select>
+            </div>
+        </td>
+        <td style="white-space:nowrap">
+            <div style="display:flex;gap:2px;align-items:center">
+                <input type="number" id="price-val-<?= $lst['id'] ?>" value="<?= htmlspecialchars($show_price_val) ?>" style="width:90px;padding:3px 5px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px;text-align:right">
+                <select id="price-cur-<?= $lst['id'] ?>" style="padding:3px 2px;font-size:11px;border:1px solid #d0d0d0;border-radius:4px">
+                    <option value="usd" <?= $show_price_cur==='usd'?'selected':'' ?>>USD</option>
+                    <option value="idr" <?= $show_price_cur==='idr'?'selected':'' ?>>IDR</option>
+                    <option value="eur" <?= $show_price_cur==='eur'?'selected':'' ?>>EUR</option>
+                    <option value="aud" <?= $show_price_cur==='aud'?'selected':'' ?>>AUD</option>
+                </select>
+            </div>
+        </td>
         <td>
             <select onchange="ajaxListingStatus(this,<?= $lst['id'] ?>)" style="padding:2px 4px;font-size:11px;border:1px solid #d0d0d0;border-radius:4px;cursor:pointer;background:<?= $lst['status']==='active'?'#dcfce7':($lst['status']==='sold'||$lst['status']==='expired'?'#fee2e2':'#fef9c3') ?>">
-                    <option value="draft" <?= $lst['status']==='draft'?'selected':'' ?>>draft</option>
-                    <option value="active" <?= $lst['status']==='active'?'selected':'' ?>>active</option>
-                    <option value="under_offer" <?= $lst['status']==='under_offer'?'selected':'' ?>>under_offer</option>
-                    <option value="sold" <?= $lst['status']==='sold'?'selected':'' ?>>sold</option>
-                    <option value="expired" <?= $lst['status']==='expired'?'selected':'' ?>>expired</option>
-                </select>
+                <option value="draft" <?= $lst['status']==='draft'?'selected':'' ?>>draft</option>
+                <option value="active" <?= $lst['status']==='active'?'selected':'' ?>>active</option>
+                <option value="under_offer" <?= $lst['status']==='under_offer'?'selected':'' ?>>under_offer</option>
+                <option value="sold" <?= $lst['status']==='sold'?'selected':'' ?>>sold</option>
+                <option value="expired" <?= $lst['status']==='expired'?'selected':'' ?>>expired</option>
+            </select>
         </td>
         <td style="text-align:center">
-            <button type="button" class="aj-appr-btn" onclick="ajaxListingApprove(<?= $lst['id'] ?>,<?= $lst['is_approved'] ? 'true' : 'false' ?>)" style="background:none;border:none;cursor:pointer;font-size:16px" title="<?= $lst['is_approved'] ? 'Click to reject' : 'Click to approve' ?>"><?= $lst['is_approved'] ? '✅' : '❌' ?></button>
+            <button type="button" onclick="ajaxListingApprove(<?= $lst['id'] ?>,<?= $lst['is_approved'] ? 'true' : 'false' ?>)" style="background:none;border:none;cursor:pointer;font-size:16px" title="<?= $lst['is_approved'] ? 'Reject' : 'Approve' ?>"><?= $lst['is_approved'] ? '✅' : '❌' ?></button>
         </td>
         <td style="text-align:center">
-            <button type="button" class="aj-feat-btn" onclick="ajaxListingFeatured(<?= $lst['id'] ?>)" style="background:none;border:none;cursor:pointer;font-size:16px" title="<?= !empty($lst['is_featured']) ? 'Unfeature' : 'Feature' ?>"><?= !empty($lst['is_featured']) ? '⭐' : '☆' ?></button>
+            <button type="button" onclick="ajaxListingFeatured(<?= $lst['id'] ?>)" style="background:none;border:none;cursor:pointer;font-size:16px"><?= !empty($lst['is_featured']) ? '⭐' : '☆' ?></button>
         </td>
         <td style="text-align:right;white-space:nowrap">
-            <button type="button" class="btn btn-o btn-sm" onclick="toggleListingEdit(<?= $lst['id'] ?>)" style="font-size:11px;padding:3px 10px">Edit</button>
-            <button type="button" class="btn btn-r btn-sm" onclick="ajaxListingDelete(<?= $lst['id'] ?>)" style="font-size:11px;padding:3px 8px">Del</button>
+            <button type="button" class="btn btn-p btn-sm" onclick="ajaxQuickSave(<?= $lst['id'] ?>)" style="font-size:11px;padding:3px 8px" title="Save land size & price">Save</button>
+            <button type="button" class="btn btn-o btn-sm" onclick="toggleListingEdit(<?= $lst['id'] ?>)" style="font-size:11px;padding:3px 8px">Edit</button>
+            <button type="button" class="btn btn-r btn-sm" onclick="ajaxListingDelete(<?= $lst['id'] ?>)" style="font-size:11px;padding:3px 6px">Del</button>
         </td>
     </tr>
-    <!-- Edit row -->
+    <!-- Full Edit row (hidden) -->
     <tr id="lst-edit-<?= $lst['id'] ?>" style="display:none;background:rgba(12,124,132,.04)">
         <td colspan="10">
             <div style="padding:12px 4px">
@@ -2551,6 +2642,34 @@ elseif ($section === 'listings'):
 </tbody>
 </table>
 </div>
+<?php if ($total_pages > 1): ?>
+<div style="display:flex;justify-content:center;gap:4px;margin-top:12px;flex-wrap:wrap">
+    <?php if ($page_num > 1): ?>
+    <a href="?<?= http_build_query(array_merge($qs_base, array('sc'=>$sort_col,'sd'=>strtolower($sort_dir),'pg'=>$page_num-1))) ?>" class="btn btn-o btn-sm" style="font-size:12px;padding:4px 10px">← Prev</a>
+    <?php endif; ?>
+    <?php
+    // Show page numbers with ellipsis
+    $show_pages = array();
+    $show_pages[] = 1;
+    for ($pi = max(2, $page_num - 2); $pi <= min($total_pages - 1, $page_num + 2); $pi++) $show_pages[] = $pi;
+    if ($total_pages > 1) $show_pages[] = $total_pages;
+    $show_pages = array_unique($show_pages);
+    sort($show_pages);
+    $prev = 0;
+    foreach ($show_pages as $pn):
+        if ($pn > $prev + 1): ?><span style="padding:4px 2px;font-size:12px;color:#94a3b8">…</span><?php endif;
+        if ($pn === $page_num): ?>
+            <span class="btn btn-p btn-sm" style="font-size:12px;padding:4px 10px"><?= $pn ?></span>
+        <?php else: ?>
+            <a href="?<?= http_build_query(array_merge($qs_base, array('sc'=>$sort_col,'sd'=>strtolower($sort_dir),'pg'=>$pn))) ?>" class="btn btn-o btn-sm" style="font-size:12px;padding:4px 10px"><?= $pn ?></a>
+        <?php endif;
+        $prev = $pn;
+    endforeach; ?>
+    <?php if ($page_num < $total_pages): ?>
+    <a href="?<?= http_build_query(array_merge($qs_base, array('sc'=>$sort_col,'sd'=>strtolower($sort_dir),'pg'=>$page_num+1))) ?>" class="btn btn-o btn-sm" style="font-size:12px;padding:4px 10px">Next →</a>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
 <script>
 var toggleListingEdit = function(id) {
     var row = document.getElementById('lst-edit-' + id);
@@ -2571,10 +2690,54 @@ var lstRegionChanged = function() {
     }
 };
 lstRegionChanged();
+
+/* Quick inline save — sends just land size + price from the list row */
+function ajaxQuickSave(id) {
+    var landVal = document.getElementById('land-val-' + id).value;
+    var landUnit = document.getElementById('land-unit-' + id).value;
+    var priceVal = document.getElementById('price-val-' + id).value;
+    var priceCur = document.getElementById('price-cur-' + id).value;
+
+    var params = {aj_action: 'listing_edit', aj_id: id};
+
+    /* Land size: set the chosen unit, clear the other */
+    if (landUnit === 'are') {
+        params['land_size_are'] = landVal || '';
+        params['land_size_sqm'] = landVal ? Math.round(parseFloat(landVal) * 100) : '';
+    } else {
+        params['land_size_sqm'] = landVal || '';
+        params['land_size_are'] = landVal ? (parseFloat(landVal) / 100).toFixed(2) : '';
+    }
+
+    /* Price: set the chosen currency, clear others so server converts */
+    params['price_usd'] = '';
+    params['price_idr'] = '';
+    params['price_eur'] = '';
+    params['price_aud'] = '';
+    if (priceCur && priceVal) {
+        params['price_' + priceCur] = priceVal;
+    }
+
+    var btn = document.querySelector('#lst-row-' + id + ' .btn-p');
+    if (btn) { btn.textContent = '...'; btn.disabled = true; }
+
+    ajaxAction(params, function(data) {
+        if (btn) { btn.textContent = 'Save'; btn.disabled = false; }
+        ajaxFlash(data.msg || 'Saved');
+        /* Flash the row green */
+        var row = document.getElementById('lst-row-' + id);
+        if (row) {
+            row.style.transition = 'background 0.3s';
+            row.style.background = '#dcfce7';
+            setTimeout(function() { row.style.background = ''; }, 1200);
+        }
+    });
+}
 </script>
 <?php if (empty($listings)): ?>
 <div class="card" style="text-align:center;color:#888">No listings found.</div>
 <?php endif; ?>
+
 
 <?php
 // ═══════════════════════════════════════════════════════════════
