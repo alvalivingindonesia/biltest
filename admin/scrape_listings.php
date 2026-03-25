@@ -1016,6 +1016,14 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_paste') {
             continue;
         }
 
+        // Cross-site duplicate check
+        $cross_dupe = check_cross_site_duplicate($db, $data, 'rumah123');
+        if ($cross_dupe) {
+            $skipped++;
+            $results[] = array('status' => 'cross_dupe', 'title' => $data['title'], 'msg' => 'Cross-site duplicate: ' . $cross_dupe['reason']);
+            continue;
+        }
+
         // Handle agent
         $agent_id = null;
         if (!empty($data['agent_name'])) {
@@ -1163,6 +1171,14 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_dotproperty') {
                 $skipped++;
                 $results[] = array('status' => 'exists', 'title' => $data['title'], 'msg' => 'Already in database');
             }
+            continue;
+        }
+
+        // Cross-site duplicate check
+        $cross_dupe = check_cross_site_duplicate($db, $data, 'dotproperty');
+        if ($cross_dupe) {
+            $skipped++;
+            $results[] = array('status' => 'cross_dupe', 'title' => $data['title'], 'msg' => 'Cross-site duplicate: ' . $cross_dupe['reason']);
             continue;
         }
 
@@ -1589,6 +1605,14 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_olx') {
             continue;
         }
 
+        // Cross-site duplicate check
+        $cross_dupe = check_cross_site_duplicate($db, $data, 'olx');
+        if ($cross_dupe) {
+            $skipped++;
+            $results[] = array('status' => 'cross_dupe', 'title' => $data['title'], 'msg' => 'Cross-site duplicate: ' . $cross_dupe['reason']);
+            continue;
+        }
+
         // OLX listings are private sellers — use a shared placeholder agent
         $agent_id = get_olx_private_seller_agent($db);
 
@@ -1712,6 +1736,669 @@ function insert_olx_listing($db, $data, $agent_id) {
     }
 }
 
+
+
+// ═══════════════════════════════════════════════════════════════════
+// CROSS-SITE DUPLICATE DETECTION
+// Checks if a listing already exists across ALL source sites by
+// comparing title similarity, land size, price range, and area.
+// ═══════════════════════════════════════════════════════════════════
+
+function check_cross_site_duplicate($db, $data, $current_source_site) {
+    // Skip check if we have no meaningful data to compare
+    if (empty($data['title'])) return null;
+
+    $title = strtolower(trim($data['title']));
+    $land_sqm = isset($data['land_size_sqm']) ? intval($data['land_size_sqm']) : 0;
+    $price_idr = isset($data['price_idr']) ? intval($data['price_idr']) : 0;
+    $area_key = isset($data['area_key']) ? $data['area_key'] : '';
+
+    // Build query: look for listings from OTHER source sites with similar attributes
+    $where = "source_site != ?";
+    $params = array($current_source_site);
+
+    // If we have land size, look for ±15% match
+    if ($land_sqm > 0) {
+        $size_low = intval($land_sqm * 0.85);
+        $size_high = intval($land_sqm * 1.15);
+        $where .= " AND land_size_sqm BETWEEN ? AND ?";
+        $params[] = $size_low;
+        $params[] = $size_high;
+    }
+
+    // If we have price, look for ±25% match
+    if ($price_idr > 0) {
+        $price_low = intval($price_idr * 0.75);
+        $price_high = intval($price_idr * 1.25);
+        $where .= " AND price_idr BETWEEN ? AND ?";
+        $params[] = $price_low;
+        $params[] = $price_high;
+    }
+
+    // If we have area, restrict to same area
+    if ($area_key) {
+        $where .= " AND area_key = ?";
+        $params[] = $area_key;
+    }
+
+    // Need at least land size OR price to do a meaningful cross-check
+    if ($land_sqm <= 0 && $price_idr <= 0) return null;
+
+    $sql = "SELECT id, title, source_site, source_listing_id, land_size_sqm, price_idr FROM listings WHERE {$where} LIMIT 10";
+
+    try {
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        $candidates = $stmt->fetchAll();
+    } catch (Exception $e) {
+        return null;
+    }
+
+    if (empty($candidates)) return null;
+
+    // Check title similarity using simple word overlap
+    $title_words = array_filter(explode(' ', preg_replace('/[^a-z0-9\s]/', '', $title)));
+
+    foreach ($candidates as $cand) {
+        $cand_title = strtolower(trim($cand['title']));
+        $cand_words = array_filter(explode(' ', preg_replace('/[^a-z0-9\s]/', '', $cand_title)));
+
+        // Count common words (excluding very short/common words)
+        $common = 0;
+        $meaningful_words = 0;
+        foreach ($title_words as $w) {
+            if (strlen($w) < 3) continue; // Skip "di", "m2", etc.
+            if (in_array($w, array('dijual', 'tanah', 'land', 'for', 'sale', 'lombok', 'tengah', 'barat', 'utara'))) continue;
+            $meaningful_words++;
+            if (in_array($w, $cand_words)) $common++;
+        }
+
+        // If both size and price match closely, even low title overlap counts
+        $size_match = ($land_sqm > 0 && intval($cand['land_size_sqm']) > 0);
+        $price_match = ($price_idr > 0 && intval($cand['price_idr']) > 0);
+
+        if ($size_match && $price_match) {
+            // Strong data match — likely same listing even with different title
+            return array(
+                'id' => $cand['id'],
+                'source_site' => $cand['source_site'],
+                'source_listing_id' => $cand['source_listing_id'],
+                'reason' => 'size+price match (' . $cand['source_site'] . ' #' . $cand['id'] . ')'
+            );
+        }
+
+        // If good title overlap + at least one data match
+        if ($meaningful_words > 0 && $common >= 2 && ($size_match || $price_match)) {
+            return array(
+                'id' => $cand['id'],
+                'source_site' => $cand['source_site'],
+                'source_listing_id' => $cand['source_listing_id'],
+                'reason' => 'title+data match (' . $cand['source_site'] . ' #' . $cand['id'] . ')'
+            );
+        }
+    }
+
+    return null;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// LAMUDI: EXTRACT LISTINGS FROM PASTED HTML
+// Cards are <div class="snippet js-snippet" data-idanuncio="UUID" data-alternateid="ALTID">
+// Also parses JSON-LD structured data for richer details.
+// ═══════════════════════════════════════════════════════════════════
+
+function extract_lamudi_listings($html_source) {
+    $listings = array();
+
+    // Strategy 1: Parse JSON-LD for structured listing data
+    $jsonld_items = array();
+    if (preg_match('/<script type="application\/ld\+json">(.*?)<\/script>/s', $html_source, $jm)) {
+        $json_data = json_decode($jm[1], true);
+        if ($json_data && is_array($json_data)) {
+            // Navigate: [0]['@graph'][0]['mainEntity'][0]['itemListElement']
+            $graph = null;
+            if (isset($json_data[0]['@graph'][0]['mainEntity'][0]['itemListElement'])) {
+                $graph = $json_data[0]['@graph'][0]['mainEntity'][0]['itemListElement'];
+            } elseif (isset($json_data['@graph'][0]['mainEntity'][0]['itemListElement'])) {
+                $graph = $json_data['@graph'][0]['mainEntity'][0]['itemListElement'];
+            }
+            if ($graph && is_array($graph)) {
+                foreach ($graph as $li) {
+                    if (isset($li['item']['@id'])) {
+                        // Extract alt ID from the URL path
+                        $url_path = str_replace('https://www.lamudi.co.id/properti/', '', $li['item']['@id']);
+                        $jsonld_items[$url_path] = $li['item'];
+                    }
+                }
+            }
+        }
+    }
+
+    // Strategy 2: Parse HTML snippet cards
+    if (!preg_match_all('/data-idanuncio="([^"]*)"[^>]*data-alternateid="([^"]*)"/', $html_source, $card_matches, PREG_SET_ORDER)) {
+        return $listings;
+    }
+
+    $seen_ids = array();
+    foreach ($card_matches as $cm) {
+        $uuid = $cm[1];
+        $alt_id = $cm[2];
+        if (in_array($uuid, $seen_ids)) continue;
+        $seen_ids[] = $uuid;
+
+        // Find the start of this card and extract ~5000 chars
+        $card_pos = strpos($html_source, $cm[0]);
+        if ($card_pos === false) continue;
+        $card_html = substr($html_source, $card_pos, 5000);
+
+        // Merge JSON-LD data if available
+        $jsonld = isset($jsonld_items[$alt_id]) ? $jsonld_items[$alt_id] : array();
+
+        $listings[] = array(
+            'uuid' => $uuid,
+            'alt_id' => $alt_id,
+            'html' => $card_html,
+            'jsonld' => $jsonld,
+        );
+    }
+
+    return $listings;
+}
+
+
+function parse_lamudi_listing($item) {
+    $data = array(
+        'source_url' => '',
+        'source_listing_id' => '',
+        'title' => '',
+        'price_display' => '',
+        'price_idr' => null,
+        'price_usd' => null,
+        'price_label' => '',
+        'price_idr_per_sqm' => null,
+        'listing_type_key' => 'land',
+        'land_size_sqm' => null,
+        'building_size_sqm' => null,
+        'bedrooms' => null,
+        'bathrooms' => null,
+        'certificate_type_key' => null,
+        'district' => '',
+        'description' => '',
+        'short_description' => '',
+        'location_detail' => '',
+        'area_key' => 'praya',
+        'photos' => array(),
+        'agent_name' => '',
+        'agent_photo_url' => '',
+        'agent_type' => '',
+        'agent_phone' => '',
+        'agent_profile_url' => '',
+        'agent_source_id' => '',
+        'agent_verified' => false,
+    );
+
+    $uuid = $item['uuid'];
+    $alt_id = $item['alt_id'];
+    $html = $item['html'];
+    $jsonld = $item['jsonld'];
+
+    $data['source_listing_id'] = $uuid;
+    $data['source_url'] = 'https://www.lamudi.co.id/properti/' . $alt_id;
+
+    // ─── Title ───────────────────────────────────────────
+    if (preg_match('/snippet__content__title"[^>]*>\s*\n?([^<]+)/', $html, $tm)) {
+        $data['title'] = trim($tm[1]);
+    }
+    // JSON-LD may have a better title
+    if (isset($jsonld['name']) && strlen($jsonld['name']) > strlen($data['title'])) {
+        $data['title'] = $jsonld['name'];
+    }
+    if (!$data['title']) return null;
+
+    // ─── Description ─────────────────────────────────────
+    if (preg_match('/data-itemdescription="true"\s*content="([^"]*)"/', $html, $dm)) {
+        $desc = html_entity_decode($dm[1], ENT_QUOTES, 'UTF-8');
+        $desc = preg_replace('/\s+/', ' ', trim($desc));
+        $data['description'] = $desc;
+    }
+    if (!$data['description'] && isset($jsonld['description'])) {
+        $data['description'] = preg_replace('/\s+/', ' ', trim($jsonld['description']));
+    }
+    $data['short_description'] = $data['description'] ? mb_substr($data['description'], 0, 200) : $data['title'];
+
+    // ─── Location ────────────────────────────────────────
+    if (preg_match('/snippet-content-location">\s*\n?([^<]+)/', $html, $lm)) {
+        $data['district'] = trim($lm[1]);
+    }
+    if (!$data['district'] && isset($jsonld['address']['streetAddress'])) {
+        $data['district'] = $jsonld['address']['streetAddress'];
+    }
+
+    // ─── Price ───────────────────────────────────────────
+    if (preg_match('/snippet__content__price">.*?<\/span>\s*\n?([^<]+)/s', $html, $pm)) {
+        $price_text = trim($pm[1]);
+        if ($price_text) {
+            $data['price_display'] = $price_text;
+            $data['price_idr'] = parse_lamudi_price($price_text);
+        }
+    }
+    if ($data['price_idr']) {
+        $data['price_usd'] = idr_to_usd($data['price_idr']);
+    }
+
+    // Determine if the price is per-are, per-m2, or total
+    $desc_lower = strtolower($data['description'] . ' ' . $data['price_display']);
+    if (strpos($desc_lower, '/are') !== false || strpos($desc_lower, 'per are') !== false) {
+        $data['price_label'] = 'Per Are';
+    } elseif (strpos($desc_lower, '/m') !== false || strpos($desc_lower, 'per m') !== false) {
+        $data['price_label'] = 'Per m²';
+    } else {
+        $data['price_label'] = 'Total';
+    }
+
+    // ─── Land Size ───────────────────────────────────────
+    if (preg_match('/data-test="area-value">\s*\n?([^<]+)/', $html, $am)) {
+        $size_text = trim($am[1]);
+        // Format: "11.400 m²" — dots are thousands separators
+        $size_clean = preg_replace('/[^0-9]/', '', preg_replace('/\s*m.*$/', '', $size_text));
+        if ($size_clean) {
+            $data['land_size_sqm'] = intval($size_clean);
+        }
+    }
+    // Fallback from JSON-LD
+    if (!$data['land_size_sqm'] && isset($jsonld['floorSize']['value'])) {
+        $data['land_size_sqm'] = intval($jsonld['floorSize']['value']);
+    }
+
+    // Price per sqm (calculate if total price and land size available)
+    if ($data['price_idr'] && $data['land_size_sqm'] && $data['land_size_sqm'] > 0 && $data['price_label'] === 'Total') {
+        $data['price_idr_per_sqm'] = intval($data['price_idr'] / $data['land_size_sqm']);
+    }
+
+    // ─── Bedrooms & Bathrooms ────────────────────────────
+    if (preg_match('/data-test="bed-value">\s*\n?([^<]+)/', $html, $bm)) {
+        $data['bedrooms'] = intval(trim($bm[1]));
+    }
+    if (preg_match('/data-test="bath-value">\s*\n?([^<]+)/', $html, $btm)) {
+        $data['bathrooms'] = intval(trim($btm[1]));
+    }
+
+    // ─── Certificate ─────────────────────────────────────
+    $data['certificate_type_key'] = detect_certificate($data['description']);
+
+    // ─── Property Type ───────────────────────────────────
+    $data['listing_type_key'] = detect_listing_type($data['title'], '');
+
+    // ─── Area & Location Detection ───────────────────────
+    $data['area_key'] = detect_area_key($data['district'], $data['title'], $data['description']);
+    $data['location_detail'] = detect_location_detail($data['district'], $data['title'], $data['description']);
+
+    // ─── Photos ──────────────────────────────────────────
+    $photos = array();
+    if (preg_match_all('/snippet__image.*?<img src="([^"]+)"/s', $html, $img_matches)) {
+        foreach ($img_matches[1] as $img_url) {
+            if (strpos($img_url, 'lamudi.com') !== false || strpos($img_url, 'proppit.com') !== false) {
+                $photos[] = $img_url;
+            }
+            if (count($photos) >= 3) break;
+        }
+    }
+    // JSON-LD image
+    if (empty($photos) && isset($jsonld['image'])) {
+        $photos[] = $jsonld['image'];
+    }
+    $data['photos'] = $photos;
+
+    // ─── Agent / Contact ─────────────────────────────────
+    // WhatsApp number from the card
+    if (preg_match('/whatsapp\.com\/send\?phone=([^&"]+)/', $html, $wm)) {
+        $data['agent_phone'] = urldecode($wm[1]);
+    }
+
+    // Agency initials or name
+    if (preg_match('/wl-agency-logo__initials">\s*\n?([^<]+)/', $html, $anm)) {
+        $data['agent_name'] = trim($anm[1]);
+    }
+
+    // Verified badge
+    if (strpos($html, 'verified-agent') !== false || strpos($html, 'Rekan Lamudi') !== false) {
+        $data['agent_verified'] = true;
+    }
+
+    return $data;
+}
+
+
+function parse_lamudi_price($price_text) {
+    // Lamudi Indonesian format:
+    // "Rp 65Jt" = 65 million (Juta)
+    // "Rp 5M" = 5 billion (Miliar)
+    // "Rp 2,52M" = 2.52 billion
+    // "Rp 905Jt" = 905 million
+    // "Rp 570Rb" = 570 thousand (Ribu)
+    // "Rp 1,50Jt" = 1.5 million
+    // "Rp 135,60M" = 135.6 billion
+    // "Rp 1.750.000" = 1,750,000 (literal)
+
+    $text = strtolower(trim($price_text));
+    $text = preg_replace('/^rp\s*/', '', $text);
+    $text = trim($text);
+
+    // Replace comma with dot for decimal parsing
+    $text = str_replace(',', '.', $text);
+
+    // Miliar (M) — billions
+    if (preg_match('/^([\d.]+)\s*m$/i', $text, $m)) {
+        $num = floatval($m[1]);
+        return intval($num * 1000000000);
+    }
+
+    // Juta (Jt) — millions
+    if (preg_match('/^([\d.]+)\s*jt$/i', $text, $m)) {
+        $num = floatval($m[1]);
+        return intval($num * 1000000);
+    }
+
+    // Ribu (Rb) — thousands
+    if (preg_match('/^([\d.]+)\s*rb$/i', $text, $m)) {
+        $num = floatval($m[1]);
+        return intval($num * 1000);
+    }
+
+    // Full Miliar text
+    if (preg_match('/^([\d.]+)\s*miliar/', $text, $m)) {
+        $num = floatval($m[1]);
+        return intval($num * 1000000000);
+    }
+
+    // Full Juta text
+    if (preg_match('/^([\d.]+)\s*juta/', $text, $m)) {
+        $num = floatval($m[1]);
+        return intval($num * 1000000);
+    }
+
+    // Plain number with dots as thousands separators: "1.750.000"
+    $clean = preg_replace('/[^0-9]/', '', $text);
+    if ($clean && strlen($clean) >= 6) {
+        return intval($clean);
+    }
+
+    return null;
+}
+
+
+function get_lamudi_agent($db, $data) {
+    // Try to find/create agent by WhatsApp number
+    $phone = isset($data['agent_phone']) ? $data['agent_phone'] : '';
+    $name = isset($data['agent_name']) ? $data['agent_name'] : '';
+
+    if (!$phone && !$name) {
+        return get_lamudi_private_seller_agent($db);
+    }
+
+    $source_id = $phone ? 'phone_' . preg_replace('/[^0-9]/', '', $phone) : 'name_' . md5(strtolower($name));
+
+    $stmt = $db->prepare("SELECT id FROM agents WHERE source_site = 'lamudi' AND source_agent_id = ?");
+    $stmt->execute(array($source_id));
+    $existing = $stmt->fetch();
+
+    if ($existing) return intval($existing['id']);
+
+    $display = $name ? $name : ('Lamudi Agent');
+    $slug = make_slug($display) . '-' . substr(md5($source_id), 0, 6);
+
+    $ins = $db->prepare(
+        "INSERT INTO agents (user_id, slug, display_name, agency_name, bio, profile_photo_url, phone, whatsapp_number, email, website_url,
+                             areas_served, languages, is_verified, is_active, source_site, source_agent_id, source_profile_url, is_trusted, agent_type)
+         VALUES (NULL, ?, ?, NULL, 'Agent listing from Lamudi Indonesia', NULL, ?, ?, NULL, NULL,
+                 'lombok_tengah', 'Bahasa, English', ?, 1, 'lamudi', ?, NULL, 0, NULL)"
+    );
+    $ins->execute(array(
+        $slug,
+        $display,
+        $phone ? $phone : null,
+        $phone ? $phone : null,
+        (isset($data['agent_verified']) && $data['agent_verified']) ? 1 : 0,
+        $source_id,
+    ));
+    return intval($db->lastInsertId());
+}
+
+
+function get_lamudi_private_seller_agent($db) {
+    $stmt = $db->prepare("SELECT id FROM agents WHERE source_site = 'lamudi' AND source_agent_id = 'lamudi_private_seller'");
+    $stmt->execute();
+    $existing = $stmt->fetch();
+    if ($existing) return intval($existing['id']);
+
+    $ins = $db->prepare(
+        "INSERT INTO agents (user_id, slug, display_name, agency_name, bio, profile_photo_url, phone, whatsapp_number, email, website_url,
+                             areas_served, languages, is_verified, is_active, source_site, source_agent_id, source_profile_url, is_trusted, agent_type)
+         VALUES (NULL, 'lamudi-private-seller', 'Private Seller (Lamudi)', NULL, 'Private seller listing from Lamudi Indonesia', NULL, NULL, NULL, NULL, NULL,
+                 'lombok_tengah', 'Bahasa, English', 0, 1, 'lamudi', 'lamudi_private_seller', NULL, 0, NULL)"
+    );
+    $ins->execute();
+    return intval($db->lastInsertId());
+}
+
+
+function insert_lamudi_listing($db, $data, $agent_id) {
+    $slug = make_slug($data['title']);
+
+    $slug_check = $db->prepare("SELECT COUNT(*) FROM listings WHERE slug = ?");
+    $slug_check->execute(array($slug));
+    if ($slug_check->fetchColumn() > 0) {
+        $slug = $slug . '-' . substr(md5($data['source_listing_id'] . time()), 0, 6);
+    }
+
+    $photo_urls_json = !empty($data['photos']) ? json_encode(array_values($data['photos'])) : null;
+
+    try {
+        $ins = $db->prepare(
+            "INSERT INTO listings (slug, agent_id, listing_type_key, status, title, short_description, description,
+                                   area_key, location_detail, price_idr, price_usd, price_label, price_idr_per_sqm,
+                                   land_size_sqm, land_size_are, certificate_type_key,
+                                   building_size_sqm, bedrooms, bathrooms,
+                                   is_featured, is_approved, source_site, source_url, source_listing_id, source_scraped_at,
+                                   photo_urls)
+             VALUES (?, ?, ?, 'active', ?, ?, ?,
+                     ?, ?, ?, ?, ?, ?,
+                     ?, ?, ?,
+                     ?, ?, ?,
+                     0, 1, 'lamudi', ?, ?, NOW(),
+                     ?)"
+        );
+
+        $land_size_are = $data['land_size_sqm'] ? round($data['land_size_sqm'] / 100, 2) : null;
+
+        $params = array(
+            $slug,
+            $agent_id,
+            $data['listing_type_key'],
+            $data['title'],
+            $data['short_description'],
+            $data['description'],
+            $data['area_key'],
+            $data['location_detail'],
+            $data['price_idr'],
+            $data['price_usd'],
+            $data['price_label'] ? $data['price_label'] : null,
+            $data['price_idr_per_sqm'],
+            $data['land_size_sqm'],
+            $land_size_are,
+            $data['certificate_type_key'],
+            $data['building_size_sqm'],
+            $data['bedrooms'],
+            $data['bathrooms'],
+            $data['source_url'],
+            $data['source_listing_id'],
+            $photo_urls_json,
+        );
+
+        $ins->execute($params);
+        return 'inserted';
+    } catch (PDOException $e) {
+        if (strpos($e->getMessage(), 'Duplicate') !== false) {
+            return 'duplicate';
+        }
+        return 'error: ' . $e->getMessage();
+    }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// HANDLE LAMUDI IMPORT REQUEST
+// ═══════════════════════════════════════════════════════════════════
+
+if (isset($_POST['action']) && $_POST['action'] === 'import_lamudi') {
+    header('Content-Type: application/json');
+
+    $source = isset($_POST['html_source']) ? $_POST['html_source'] : '';
+    $max_listings = max(1, min(200, intval(isset($_POST['max_listings']) ? $_POST['max_listings'] : 30)));
+    $search_type = isset($_POST['search_type']) ? $_POST['search_type'] : 'all';
+
+    if (strlen($source) < 100) {
+        echo json_encode(array('success' => false, 'error' => 'Pasted content is too short. Make sure you copy the full page source.'));
+        exit;
+    }
+
+    $raw_listings = extract_lamudi_listings($source);
+
+    if (empty($raw_listings)) {
+        echo json_encode(array('success' => false, 'error' => 'Could not find any Lamudi listings in the pasted content. Make sure you right-click the Lamudi search results page and choose "View Page Source", then Select All and Copy everything.'));
+        exit;
+    }
+
+    $db = get_db();
+    $results = array();
+    $imported = 0;
+    $updated = 0;
+    $skipped = 0;
+    $errors = 0;
+    $cross_dupes = 0;
+
+    foreach ($raw_listings as $item) {
+        if ($imported + $updated >= $max_listings) break;
+
+        $data = parse_lamudi_listing($item);
+        if (!$data) {
+            $skipped++;
+            continue;
+        }
+
+        // Filter by search type
+        if ($search_type === 'land' && !in_array($data['listing_type_key'], array('land'))) {
+            $skipped++;
+            $results[] = array('status' => 'skip_type', 'title' => $data['title'], 'msg' => 'Not land');
+            continue;
+        }
+        if ($search_type === 'houses' && !in_array($data['listing_type_key'], array('house', 'villa', 'apartment'))) {
+            $skipped++;
+            $results[] = array('status' => 'skip_type', 'title' => $data['title'], 'msg' => 'Not house/villa');
+            continue;
+        }
+
+        $source_id = $data['source_listing_id'];
+
+        // Check for existing Lamudi listing (same-site duplicate)
+        $existing = null;
+        if ($source_id) {
+            $stmt = $db->prepare("SELECT id, price_idr FROM listings WHERE source_site = 'lamudi' AND source_listing_id = ?");
+            $stmt->execute(array($source_id));
+            $existing = $stmt->fetch();
+        }
+
+        if ($existing) {
+            $new_price = $data['price_idr'];
+            $old_price = intval($existing['price_idr']);
+            if ($new_price && $old_price && $new_price < $old_price) {
+                $upd = $db->prepare("UPDATE listings SET price_idr = ?, price_usd = ?, price_idr_per_sqm = ?, updated_at = NOW() WHERE id = ?");
+                $upd->execute(array($new_price, idr_to_usd($new_price), $data['price_idr_per_sqm'], $existing['id']));
+                $updated++;
+                $results[] = array('status' => 'updated', 'title' => $data['title'], 'msg' => 'Price updated (lower)');
+            } else {
+                $skipped++;
+                $results[] = array('status' => 'exists', 'title' => $data['title'], 'msg' => 'Already in database');
+            }
+            continue;
+        }
+
+        // Cross-site duplicate check (OLX, Rumah123, DotProperty)
+        $cross_dupe = check_cross_site_duplicate($db, $data, 'lamudi');
+        if ($cross_dupe) {
+            $cross_dupes++;
+            $skipped++;
+            $results[] = array('status' => 'cross_dupe', 'title' => $data['title'], 'msg' => 'Cross-site duplicate: ' . $cross_dupe['reason']);
+            continue;
+        }
+
+        // Get or create agent
+        $agent_id = get_lamudi_agent($db, $data);
+
+        $result = insert_lamudi_listing($db, $data, $agent_id);
+        if ($result === 'inserted') {
+            $imported++;
+            $results[] = array(
+                'status' => 'imported',
+                'title' => $data['title'],
+                'price' => $data['price_display'],
+                'location' => $data['location_detail'],
+                'size' => $data['land_size_sqm'] ? number_format($data['land_size_sqm']) . ' m2' : '-',
+                'type' => $data['listing_type_key'],
+                'agent' => $data['agent_name'] ? $data['agent_name'] : 'Private',
+                'photos' => count($data['photos']),
+                'msg' => 'Imported'
+            );
+        } elseif ($result === 'duplicate') {
+            $skipped++;
+            $results[] = array('status' => 'exists', 'title' => $data['title'], 'msg' => 'Duplicate');
+        } else {
+            $errors++;
+            $results[] = array('status' => 'error', 'title' => $data['title'], 'msg' => $result);
+        }
+    }
+
+    echo json_encode(array(
+        'success' => true,
+        'imported' => $imported,
+        'updated' => $updated,
+        'skipped' => $skipped,
+        'cross_dupes' => $cross_dupes,
+        'errors' => $errors,
+        'total_in_page' => count($raw_listings),
+        'results' => $results
+    ));
+    exit;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// HANDLE CLEAR LAMUDI DATA REQUEST
+// ═══════════════════════════════════════════════════════════════════
+
+if (isset($_POST['action']) && $_POST['action'] === 'clear_lamudi') {
+    header('Content-Type: application/json');
+    $db = get_db();
+    $stmt = $db->prepare("DELETE FROM listings WHERE source_site = 'lamudi'");
+    $stmt->execute();
+    $deleted = $stmt->rowCount();
+    echo json_encode(array('success' => true, 'deleted' => $deleted));
+    exit;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// HANDLE LAMUDI COUNT REQUEST
+// ═══════════════════════════════════════════════════════════════════
+
+if (isset($_POST['action']) && $_POST['action'] === 'get_lamudi_counts') {
+    header('Content-Type: application/json');
+    $db = get_db();
+    $stmt = $db->query("SELECT COUNT(*) as cnt FROM listings WHERE source_site = 'lamudi'");
+    $row = $stmt->fetch();
+    echo json_encode(array('success' => true, 'count' => intval($row['cnt'])));
+    exit;
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // HANDLE CLEAR OLX DATA REQUEST
@@ -1868,7 +2555,7 @@ textarea.paste-area.drag-over{border-color:#22d3ee;background:#0c1825}
 <div class="container">
 
     <!-- Current DB count -->
-    <div class="db-count">Rumah123: <strong id="dbCount">...</strong> &nbsp;|&nbsp; DotProperty: <strong id="dbCountDP">...</strong> &nbsp;|&nbsp; OLX: <strong id="dbCountOLX">...</strong></div>
+    <div class="db-count">Rumah123: <strong id="dbCount">...</strong> &nbsp;|&nbsp; DotProperty: <strong id="dbCountDP">...</strong> &nbsp;|&nbsp; OLX: <strong id="dbCountOLX">...</strong> &nbsp;|&nbsp; Lamudi: <strong id="dbCountLamudi">...</strong></div>
 
     <!-- ═══ Rumah123 ═══ -->
     <div class="card">
@@ -2116,17 +2803,87 @@ textarea.paste-area.drag-over{border-color:#22d3ee;background:#0c1825}
         </div>
     </div>
 
+        <!-- ═══ Lamudi ═══ -->
+    <div class="card">
+        <h2><span class="icon" style="background:#3366cc;">LMD</span> Lamudi.co.id</h2>
+
+        <div class="site-card">
+            <div class="site-logo" style="background:#3366cc;">LMD</div>
+            <div class="site-info">
+                <h3>Paste & Import from Lamudi</h3>
+                <p>Copy page source from Lamudi.co.id search results and paste below to import listings. Lamudi is owned by the same group as OLX — <strong>cross-site duplicate detection</strong> is active across all sources.</p>
+            </div>
+        </div>
+
+        <div class="steps">
+            <div class="step">
+                <div class="step-num">1</div>
+                <div class="step-text">Open one of these search pages in your browser:
+                    <div class="url-links">
+                        <a href="https://www.lamudi.co.id/jual/nusa-tenggara-barat/lombok-tengah/tanah/" target="_blank" class="url-link">&#127965; Lombok Tengah - Tanah</a>
+                        <a href="https://www.lamudi.co.id/jual/nusa-tenggara-barat/lombok-barat/tanah/" target="_blank" class="url-link">&#127965; Lombok Barat - Tanah</a>
+                        <a href="https://www.lamudi.co.id/jual/nusa-tenggara-barat/lombok-utara/tanah/" target="_blank" class="url-link">&#127965; Lombok Utara - Tanah</a>
+                        <a href="https://www.lamudi.co.id/jual/nusa-tenggara-barat/lombok-tengah/rumah/" target="_blank" class="url-link">&#127968; Lombok Tengah - Rumah</a>
+                        <a href="https://www.lamudi.co.id/jual/nusa-tenggara-barat/lombok-tengah/tanah/?page=2" target="_blank" class="url-link">&#128196; Page 2</a>
+                        <a href="https://www.lamudi.co.id/jual/nusa-tenggara-barat/lombok-tengah/tanah/?page=3" target="_blank" class="url-link">&#128196; Page 3</a>
+                    </div>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <div class="step-text">Right-click the page → <strong>View Page Source</strong> (or press Ctrl+U)</div>
+            </div>
+            <div class="step">
+                <div class="step-num">3</div>
+                <div class="step-text">Press <strong>Ctrl+A</strong> to select all, then <strong>Ctrl+C</strong> to copy</div>
+            </div>
+            <div class="step">
+                <div class="step-num">4</div>
+                <div class="step-text">Paste below and click Import</div>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>Search Type Filter</label>
+                <select id="lamudiSearchType">
+                    <option value="all">All Types</option>
+                    <option value="land">Land Only</option>
+                    <option value="houses">Houses & Villas</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Max Listings Per Paste</label>
+                <input type="number" id="lamudiMaxListings" value="30" min="1" max="200">
+            </div>
+        </div>
+
+        <textarea class="paste-area" id="lamudiPasteArea" placeholder="Paste the full Lamudi page source here...&#10;&#10;Right-click the Lamudi search results page &#8594; View Page Source &#8594; Select All &#8594; Copy &#8594; Paste here"></textarea>
+
+        <div class="form-row" style="margin-top:12px;">
+            <button class="btn btn-primary" id="lamudiImportBtn" onclick="doLamudiImport()">&#128229; Import Lamudi Listings</button>
+            <button class="btn btn-danger btn-sm" id="lamudiClearBtn" onclick="doLamudiClear()" style="margin-left:auto;">&#128465; Clear All Lamudi Data</button>
+        </div>
+
+        <!-- Results area -->
+        <div class="import-status" id="lamudiImportStatus">
+            <div class="progress-bar"><div class="fill" id="lamudiProgressFill"></div></div>
+            <div id="lamudiStatusText" style="font-size:.8rem;color:#94a3b8;margin:8px 0;"></div>
+
+            <div class="stats-bar" id="lamudiStatsBar" style="display:none;">
+                <div class="stat imported"><div class="num" id="lamudiStatImported">0</div><div class="label">Imported</div></div>
+                <div class="stat updated"><div class="num" id="lamudiStatUpdated">0</div><div class="label">Updated</div></div>
+                <div class="stat skipped"><div class="num" id="lamudiStatSkipped">0</div><div class="label">Skipped</div></div>
+                <div class="stat errors"><div class="num" id="lamudiStatErrors">0</div><div class="label">Errors</div></div>
+            </div>
+
+            <div class="result-list" id="lamudiResultList"></div>
+        </div>
+    </div>
+
         <!-- ═══ Future sites ═══ -->
     <div class="card">
         <h2><span class="icon" style="background:#334155;">🌐</span> Other Sources</h2>
-
-        <div class="site-card future-site">
-            <div class="site-logo" style="background:#3b82f6;">OLX</div>
-            <div class="site-info">
-                <h3>OLX.co.id</h3>
-                <p>Marketplace listings — Land and property in Lombok area.</p>
-            </div>
-        </div>
 
         <div class="site-card future-site">
             <div class="site-logo" style="background:#1877f2;">FB</div>
@@ -2165,6 +2922,7 @@ function badgeClass(status) {
     if (status === 'imported') return 'badge-imported';
     if (status === 'updated') return 'badge-updated';
     if (status === 'exists') return 'badge-exists';
+    if (status === 'cross_dupe') return 'badge-exists';
     if (status === 'error') return 'badge-error';
     return 'badge-skip';
 }
@@ -2643,6 +3401,162 @@ pa.addEventListener('drop', function(e) {
     var text = e.dataTransfer.getData('text');
     if (text) {
         pa.value = text;
+    }
+});
+
+
+/* ═══════════════════════════════════════════════════════════════ */
+/* LAMUDI                                                         */
+/* ═══════════════════════════════════════════════════════════════ */
+
+/* Load Lamudi DB count on page load */
+function loadLamudiCount() {
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', 'scrape_listings.php', true);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhr.onload = function() {
+        try {
+            var res = JSON.parse(xhr.responseText);
+            if (res.success) {
+                $('dbCountLamudi').textContent = res.count;
+            }
+        } catch(e) {}
+    };
+    xhr.send('action=get_lamudi_counts');
+}
+loadLamudiCount();
+
+/* Lamudi Import */
+function doLamudiImport() {
+    if (importRunning) return;
+
+    var source = $('lamudiPasteArea').value.trim();
+    if (!source) {
+        showToast('Please paste the Lamudi page source first.', true);
+        return;
+    }
+
+    if (source.indexOf('lamudi') === -1 && source.indexOf('snippet') === -1 && source.indexOf('idanuncio') === -1) {
+        if (!confirm('This does not look like Lamudi page source. Continue anyway?')) return;
+    }
+
+    importRunning = true;
+    $('lamudiImportBtn').disabled = true;
+    $('lamudiImportBtn').innerHTML = '<span class="spinner"></span> Importing...';
+
+    var statusEl = $('lamudiImportStatus');
+    statusEl.className = 'import-status active';
+    $('lamudiStatusText').textContent = 'Parsing Lamudi page source and extracting listings...';
+    $('lamudiProgressFill').style.width = '30%';
+    $('lamudiStatsBar').style.display = 'none';
+    $('lamudiResultList').innerHTML = '';
+
+    var formData = new FormData();
+    formData.append('action', 'import_lamudi');
+    formData.append('html_source', source);
+    formData.append('max_listings', $('lamudiMaxListings').value);
+    formData.append('search_type', $('lamudiSearchType').value);
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', 'scrape_listings.php', true);
+    xhr.onload = function() {
+        importRunning = false;
+        $('lamudiImportBtn').disabled = false;
+        $('lamudiImportBtn').innerHTML = '&#128229; Import Lamudi Listings';
+        $('lamudiProgressFill').style.width = '100%';
+
+        try {
+            var res = JSON.parse(xhr.responseText);
+
+            if (!res.success) {
+                $('lamudiStatusText').innerHTML = '<span style="color:#ef4444;">Error: ' + res.error + '</span>';
+                showToast('Lamudi import failed', true);
+                return;
+            }
+
+            $('lamudiStatsBar').style.display = 'flex';
+            $('lamudiStatImported').textContent = res.imported;
+            $('lamudiStatUpdated').textContent = res.updated;
+            $('lamudiStatSkipped').textContent = res.skipped;
+            $('lamudiStatErrors').textContent = res.errors;
+
+            var crossMsg = res.cross_dupes > 0 ? ' (' + res.cross_dupes + ' cross-site duplicates)' : '';
+            $('lamudiStatusText').innerHTML = 'Done! Found <strong>' + res.total_in_page + '</strong> listings in this page.' + crossMsg;
+
+            var html = '';
+            for (var i = 0; i < res.results.length; i++) {
+                var r = res.results[i];
+                html += '<div class="result-item">'
+                    + '<span class="badge ' + badgeClass(r.status) + '">' + r.status + '</span> '
+                    + '<strong>' + (r.title || '-').substring(0, 50) + '</strong>'
+                    + (r.price ? ' &middot; ' + r.price : '')
+                    + (r.size ? ' &middot; ' + r.size : '')
+                    + (r.location ? ' &middot; ' + r.location : '')
+                    + ' <span style="color:#94a3b8;font-size:.75rem">' + r.msg + '</span>'
+                    + '</div>';
+            }
+            $('lamudiResultList').innerHTML = html;
+
+            if (res.imported > 0) {
+                showToast(res.imported + ' Lamudi listing(s) imported!', false);
+            } else {
+                showToast('No new Lamudi listings to import.', false);
+            }
+
+            loadLamudiCount();
+            $('lamudiPasteArea').value = '';
+
+        } catch(e) {
+            $('lamudiStatusText').innerHTML = '<span style="color:#ef4444;">Error parsing response: ' + e.message + '</span>';
+            showToast('Lamudi import failed', true);
+        }
+    };
+    xhr.onerror = function() {
+        importRunning = false;
+        $('lamudiImportBtn').disabled = false;
+        $('lamudiImportBtn').innerHTML = '&#128229; Import Lamudi Listings';
+        $('lamudiStatusText').innerHTML = '<span style="color:#ef4444;">Network error. Please try again.</span>';
+        showToast('Network error', true);
+    };
+    xhr.send(formData);
+}
+
+/* Clear all Lamudi data */
+function doLamudiClear() {
+    if (!confirm('Are you sure you want to DELETE ALL Lamudi listings from the database? This cannot be undone.')) return;
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', 'scrape_listings.php', true);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhr.onload = function() {
+        try {
+            var res = JSON.parse(xhr.responseText);
+            if (res.success) {
+                showToast(res.deleted + ' Lamudi listing(s) deleted.', false);
+                loadLamudiCount();
+            }
+        } catch(e) {
+            showToast('Error deleting Lamudi data.', true);
+        }
+    };
+    xhr.send('action=clear_lamudi');
+}
+
+/* Drag-drop support for Lamudi textarea */
+var lmpa = $('lamudiPasteArea');
+lmpa.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    lmpa.className = 'paste-area drag-over';
+});
+lmpa.addEventListener('dragleave', function() {
+    lmpa.className = 'paste-area';
+});
+lmpa.addEventListener('drop', function(e) {
+    e.preventDefault();
+    lmpa.className = 'paste-area';
+    var text = e.dataTransfer.getData('text');
+    if (text) {
+        lmpa.value = text;
     }
 });
 </script>
