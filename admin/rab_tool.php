@@ -434,7 +434,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action && in_array($action, $ajaxA
             $sq_row = $sq->fetch();
             $totals = recalculate_rab($db, $sq_row['rab_id']);
 
-            $result = ['ok' => true, 'item_id' => $item_id, 'total' => $total, 'totals' => $totals, 'msg' => 'Saved.'];
+            // Fetch unit code for client-side row injection
+            $uc_q = $db->prepare("SELECT code FROM rab_units WHERE id=?");
+            $uc_q->execute([$unit_id]);
+            $unit_code = (string)($uc_q->fetchColumn() ?: '');
+
+            $result = ['ok' => true, 'item_id' => $item_id, 'total' => $total, 'totals' => $totals, 'unit_code' => $unit_code, 'unit_id' => (int)$unit_id, 'quantity' => $quantity, 'rate' => $rate, 'name' => $name, 'msg' => 'Saved.'];
         }
 
         // ── delete_item ──
@@ -2087,6 +2092,28 @@ function fmtIdr(val) {
     return 'Rp ' + Math.round(val).toLocaleString('id-ID');
 }
 
+// Escape string for safe HTML attribute + JS single-quoted string (onclick='...')
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escHtmlJs(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+}
+
+// Recalculate and update section subtotal display from current DOM item totals
+function updateSectTotal(sectId) {
+    var tbody = document.getElementById('items-body-' + sectId);
+    var el    = document.getElementById('sect-total-' + sectId);
+    if (!tbody || !el) return;
+    var total = 0;
+    var cells = tbody.querySelectorAll('[id^="item-total-"]');
+    for (var i = 0; i < cells.length; i++) {
+        var txt = cells[i].textContent.replace(/[^0-9]/g, '');
+        total += parseInt(txt, 10) || 0;
+    }
+    el.textContent = fmtIdr(total);
+}
+
 // ── Update totals display ──────────────────────────────────────────────────
 function updateTotalsBar(totals) {
     if (!totals) return;
@@ -2249,8 +2276,36 @@ function saveNewItem(sectId) {
         tpl_id: tplId
     }, function(res) {
         if (res.ok) {
-            // Refresh the page to show the new item
-            window.location.reload();
+            var tbody = document.getElementById('items-body-' + sectId);
+            if (tbody) {
+                var qtyNum  = parseFloat(qty) || 0;
+                var qtyFmt  = qtyNum.toFixed(3).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                var nameEsc = escHtmlJs(name);
+                var tr = document.createElement('tr');
+                tr.id = 'item-row-' + res.item_id;
+                tr.innerHTML =
+                    '<td>' + escHtml(name) + '</td>' +
+                    '<td>' + escHtml(res.unit_code || '') + '</td>' +
+                    '<td class="num">' + qtyFmt + '</td>' +
+                    '<td class="num">' + fmtIdr(rate) + '</td>' +
+                    '<td class="num" id="item-total-' + res.item_id + '">' + fmtIdr(res.total) + '</td>' +
+                    '<td><div class="actions">' +
+                    '<button class="btn btn-o btn-xs" onclick="editItem(' + res.item_id + ',' + sectId + ',\'' + nameEsc + '\',' + res.unit_id + ',' + qty + ',' + rate + ')">Edit</button> ' +
+                    '<button class="btn btn-r btn-xs" onclick="deleteItem(' + res.item_id + ')">Del</button>' +
+                    '</div></td>';
+                tbody.appendChild(tr);
+            }
+            updateSectTotal(sectId);
+            updateTotalsBar(res.totals);
+            // Reset form fields
+            document.getElementById('add-name-' + sectId).value = '';
+            document.getElementById('add-qty-' + sectId).value  = '1';
+            document.getElementById('add-rate-' + sectId).value = '0';
+            var tplEl = document.getElementById('tpl-select-' + sectId);
+            if (tplEl) tplEl.value = '';
+            var matEl = document.getElementById('mat-select-' + sectId);
+            if (matEl) matEl.value = '';
+            hideAddItem(sectId);
         } else {
             alert(res.msg || 'Error saving item.');
         }
