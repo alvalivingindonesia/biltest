@@ -15,6 +15,9 @@
  *   GET  ?action=estimate&id=X     — get single estimate detail
  *   GET  ?action=check_feature&key=X — check if current user can access a feature
  *   GET  ?action=feature_list      — list all features with access per tier
+ *   GET  ?action=build_templates       — list build templates (RCC, Steel, Wood, etc.)
+ *   GET  ?action=build_template_detail&id=X — get sections + items for a build template
+ *   GET  ?action=materials_filtered&group_type=X&tier=Y — filtered materials list
  */
 
 session_start();
@@ -157,6 +160,10 @@ switch ($action) {
     case 'update_area':     handle_update_area(); break;
     case 'recalculate':     handle_recalculate(); break;
     case 'export_excel':    handle_export_excel(); break;
+    // ── Build Templates & Filtered Materials ──
+    case 'build_templates':       handle_build_templates(); break;
+    case 'build_template_detail': handle_build_template_detail(); break;
+    case 'materials_filtered':    handle_materials_filtered(); break;
     default:                json_error(400, 'Unknown action');
 }
 
@@ -1027,4 +1034,100 @@ function handle_export_excel() {
 
     echo '</table></body></html>';
     exit;
+}
+
+// =================================================================
+// BUILD TEMPLATES — list all active build templates
+// GET ?action=build_templates
+// =================================================================
+function handle_build_templates() {
+    $db = get_db();
+    $rows = $db->query("SELECT id, name, code, description, default_tier, sort_order FROM rab_build_templates WHERE is_active=1 ORDER BY sort_order, name")->fetchAll();
+    json_out(array('ok' => true, 'templates' => $rows));
+}
+
+// =================================================================
+// BUILD TEMPLATE DETAIL — get sections + items for a build template
+// GET ?action=build_template_detail&id=X
+// =================================================================
+function handle_build_template_detail() {
+    $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+    if (!$id) json_error(400, 'Missing template id');
+    $db = get_db();
+
+    $tpl = $db->prepare("SELECT * FROM rab_build_templates WHERE id=? AND is_active=1");
+    $tpl->execute(array($id));
+    $tpl_row = $tpl->fetch();
+    if (!$tpl_row) json_error(404, 'Build template not found');
+
+    $sects = $db->prepare("
+        SELECT bts.id, bts.discipline_id, bts.section_name, bts.order_index,
+               d.code AS disc_code, d.name AS disc_name
+        FROM rab_build_template_sections bts
+        JOIN rab_disciplines d ON d.id = bts.discipline_id
+        WHERE bts.build_template_id = ?
+        ORDER BY d.id, bts.order_index
+    ");
+    $sects->execute(array($id));
+    $sect_rows = $sects->fetchAll();
+
+    $sections = array();
+    foreach ($sect_rows as $s) {
+        $items_q = $db->prepare("
+            SELECT bti.id, bti.name, bti.unit_id, bti.default_quantity, bti.default_rate, bti.order_index,
+                   u.code AS unit_code, bti.item_template_id
+            FROM rab_build_template_items bti
+            JOIN rab_units u ON u.id = bti.unit_id
+            WHERE bti.build_template_section_id = ?
+            ORDER BY bti.order_index
+        ");
+        $items_q->execute(array($s['id']));
+        $s['items'] = $items_q->fetchAll();
+        $sections[] = $s;
+    }
+
+    json_out(array('ok' => true, 'template' => $tpl_row, 'sections' => $sections));
+}
+
+// =================================================================
+// MATERIALS FILTERED — get materials with optional group_type/tier filter
+// GET ?action=materials_filtered&group_type=Ceilings&tier=standard
+// =================================================================
+function handle_materials_filtered() {
+    $db = get_db();
+    $group_type = isset($_GET['group_type']) ? trim($_GET['group_type']) : '';
+    $tier       = isset($_GET['tier']) ? trim($_GET['tier']) : '';
+    $category   = isset($_GET['category']) ? trim($_GET['category']) : '';
+
+    $where = '1=1';
+    $params = array();
+
+    if ($group_type !== '') {
+        $where .= ' AND m.group_type = ?';
+        $params[] = $group_type;
+    }
+    if ($tier !== '' && in_array($tier, array('economy', 'standard', 'premium'))) {
+        $where .= ' AND m.tier = ?';
+        $params[] = $tier;
+    }
+    if ($category !== '') {
+        $where .= ' AND m.category = ?';
+        $params[] = $category;
+    }
+
+    $sql = "SELECT m.id, m.name, m.default_rate, m.currency, m.category, m.tier, m.group_type,
+                   u.code AS unit_code, m.unit_id
+            FROM rab_materials m
+            LEFT JOIN rab_units u ON u.id = m.unit_id
+            WHERE {$where}
+            ORDER BY m.group_type, m.tier, m.name
+            LIMIT 500";
+    $stmt = $db->prepare($sql);
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll();
+
+    // Also return distinct group_types for filter dropdown
+    $gt_rows = $db->query("SELECT DISTINCT group_type FROM rab_materials WHERE group_type IS NOT NULL AND group_type != '' ORDER BY group_type")->fetchAll(PDO::FETCH_COLUMN);
+
+    json_out(array('ok' => true, 'materials' => $rows, 'group_types' => $gt_rows));
 }

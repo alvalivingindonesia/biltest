@@ -65,14 +65,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $currency     = trim($_POST['currency'] ?? 'IDR');
             $category     = trim($_POST['category'] ?? '');
             $is_composite = isset($_POST['is_composite']) ? 1 : 0;
+            $tier         = trim($_POST['tier'] ?? '');
+            $group_type   = trim($_POST['group_type'] ?? '');
 
             if ($id) {
-                $db->prepare("UPDATE rab_materials SET name=?, unit_id=?, default_rate=?, currency=?, category=?, is_composite=? WHERE id=?")
-                   ->execute([$name, $unit_id, $default_rate, $currency, $category ?: null, $is_composite, $id]);
+                $db->prepare("UPDATE rab_materials SET name=?, unit_id=?, default_rate=?, currency=?, category=?, is_composite=?, tier=?, group_type=? WHERE id=?")
+                   ->execute([$name, $unit_id, $default_rate, $currency, $category ?: null, $is_composite, $tier ?: null, $group_type ?: null, $id]);
                 $_SESSION['flash'] = 'Material updated successfully.';
             } else {
-                $db->prepare("INSERT INTO rab_materials (name, unit_id, default_rate, currency, category, is_composite) VALUES (?,?,?,?,?,?)")
-                   ->execute([$name, $unit_id, $default_rate, $currency, $category ?: null, $is_composite]);
+                $db->prepare("INSERT INTO rab_materials (name, unit_id, default_rate, currency, category, is_composite, tier, group_type) VALUES (?,?,?,?,?,?,?,?)")
+                   ->execute([$name, $unit_id, $default_rate, $currency, $category ?: null, $is_composite, $tier ?: null, $group_type ?: null]);
                 $_SESSION['flash'] = 'Material created successfully.';
             }
             header('Location: rab.php?s=materials');
@@ -152,14 +154,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $description     = trim($_POST['description'] ?? '');
             $default_unit_id = (int)($_POST['default_unit_id'] ?? 0);
             $is_active       = isset($_POST['is_active']) ? 1 : 0;
+            $tier            = trim($_POST['tier'] ?? '');
+            $group_type      = trim($_POST['group_type'] ?? '');
 
             if ($id) {
-                $db->prepare("UPDATE rab_item_templates SET discipline_id=?, section_name=?, name=?, description=?, default_unit_id=?, is_active=? WHERE id=?")
-                   ->execute([$discipline_id, $section_name, $name, $description ?: null, $default_unit_id, $is_active, $id]);
+                $db->prepare("UPDATE rab_item_templates SET discipline_id=?, section_name=?, name=?, description=?, default_unit_id=?, is_active=?, tier=?, group_type=? WHERE id=?")
+                   ->execute([$discipline_id, $section_name, $name, $description ?: null, $default_unit_id, $is_active, $tier ?: null, $group_type ?: null, $id]);
                 $_SESSION['flash'] = 'Template updated successfully.';
             } else {
-                $db->prepare("INSERT INTO rab_item_templates (discipline_id, section_name, name, description, default_unit_id, is_active) VALUES (?,?,?,?,?,?)")
-                   ->execute([$discipline_id, $section_name, $name, $description ?: null, $default_unit_id, $is_active]);
+                $db->prepare("INSERT INTO rab_item_templates (discipline_id, section_name, name, description, default_unit_id, is_active, tier, group_type) VALUES (?,?,?,?,?,?,?,?)")
+                   ->execute([$discipline_id, $section_name, $name, $description ?: null, $default_unit_id, $is_active, $tier ?: null, $group_type ?: null]);
                 $_SESSION['flash'] = 'Template created successfully.';
             }
             header('Location: rab.php?s=templates');
@@ -249,6 +253,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
+        // ══════════════════════════════════════════════════════════════
+        // BUILD TEMPLATES
+        // ══════════════════════════════════════════════════════════════
+        if ($section === 'build_templates' && $action === 'save') {
+            $name         = trim($_POST['name'] ?? '');
+            $code         = trim($_POST['code'] ?? '');
+            $description  = trim($_POST['description'] ?? '');
+            $default_tier = trim($_POST['default_tier'] ?? 'standard');
+            $is_active    = isset($_POST['is_active']) ? 1 : 0;
+            $sort_order   = (int)($_POST['sort_order'] ?? 0);
+
+            if ($id) {
+                $db->prepare("UPDATE rab_build_templates SET name=?, code=?, description=?, default_tier=?, is_active=?, sort_order=? WHERE id=?")
+                   ->execute([$name, $code, $description ?: null, $default_tier, $is_active, $sort_order, $id]);
+                $_SESSION['flash'] = 'Build template updated successfully.';
+            } else {
+                $db->prepare("INSERT INTO rab_build_templates (name, code, description, default_tier, is_active, sort_order) VALUES (?,?,?,?,?,?)")
+                   ->execute([$name, $code, $description ?: null, $default_tier, $is_active, $sort_order]);
+                $_SESSION['flash'] = 'Build template created successfully.';
+            }
+            header('Location: rab.php?s=build_templates');
+            exit;
+        }
+
+        if ($section === 'build_templates' && $action === 'delete') {
+            $del_id = (int)($_POST['del_id'] ?? 0);
+            $db->prepare("DELETE FROM rab_build_templates WHERE id=?")->execute([$del_id]);
+            $_SESSION['flash'] = 'Build template deleted.';
+            header('Location: rab.php?s=build_templates');
+            exit;
+        }
+
     } catch (Exception $e) {
         $msg = 'Error: ' . $e->getMessage();
     }
@@ -264,12 +300,13 @@ if (isset($_SESSION['flash'])) {
 $db = get_db();
 
 // Counts for nav badges
-$mat_count = 0; $tpl_count = 0; $preset_count = 0; $unit_count = 0;
+$mat_count = 0; $tpl_count = 0; $preset_count = 0; $unit_count = 0; $btpl_count = 0;
 try {
     $mat_count    = $db->query("SELECT COUNT(*) FROM rab_materials")->fetchColumn();
     $tpl_count    = $db->query("SELECT COUNT(*) FROM rab_item_templates")->fetchColumn();
     $preset_count = $db->query("SELECT COUNT(*) FROM rab_calculator_presets")->fetchColumn();
     $unit_count   = $db->query("SELECT COUNT(*) FROM rab_units")->fetchColumn();
+    $btpl_count   = $db->query("SELECT COUNT(*) FROM rab_build_templates")->fetchColumn();
 } catch (Exception $e) { /* tables may not exist yet */ }
 
 // Units list (used in dropdowns across sections)
@@ -438,6 +475,9 @@ select option{background:#1e293b}
         <a href="?s=presets" class="<?= $section === 'presets' ? 'active' : '' ?>">
             Presets <span class="nav-badge"><?= $preset_count ?></span>
         </a>
+        <a href="?s=build_templates" class="<?= $section === 'build_templates' ? 'active' : '' ?>">
+            Build Tpl <span class="nav-badge"><?= $btpl_count ?></span>
+        </a>
     </nav>
     <div class="header-right">
         <a href="console.php" class="logout-link">← Console</a>
@@ -604,6 +644,8 @@ elseif ($section === 'materials' && $action === 'list'):
 
     // Get distinct categories for filter
     $cats = $db->query("SELECT DISTINCT category FROM rab_materials WHERE category IS NOT NULL ORDER BY category")->fetchAll(PDO::FETCH_COLUMN);
+    // Group types for reference
+    $group_types_list = $db->query("SELECT DISTINCT group_type FROM rab_materials WHERE group_type IS NOT NULL AND group_type != '' ORDER BY group_type")->fetchAll(PDO::FETCH_COLUMN);
 ?>
 
 <div class="page-header">
@@ -632,6 +674,8 @@ elseif ($section === 'materials' && $action === 'list'):
             <th>Unit</th>
             <th>Default Rate</th>
             <th>Category</th>
+            <th>Tier</th>
+            <th>Group</th>
             <th>Type</th>
             <th style="width:120px">Actions</th>
         </tr>
@@ -643,6 +687,18 @@ elseif ($section === 'materials' && $action === 'list'):
         <td><code style="color:#94a3b8;font-size:12px"><?= htmlspecialchars($r['unit_code'] ?? '—') ?></code></td>
         <td class="idr"><?= fmt_idr($r['default_rate']) ?></td>
         <td><?= $r['category'] ? htmlspecialchars($r['category']) : '<span style="color:#475569">—</span>' ?></td>
+        <td>
+            <?php if (!empty($r['tier'])): ?>
+                <?php
+                $tier_colors = array('economy' => '#22c55e', 'standard' => '#3b82f6', 'premium' => '#a855f7');
+                $tc = isset($tier_colors[$r['tier']]) ? $tier_colors[$r['tier']] : '#64748b';
+                ?>
+                <span class="badge" style="background:<?= $tc ?>20;color:<?= $tc ?>;border:1px solid <?= $tc ?>40"><?= ucfirst($r['tier']) ?></span>
+            <?php else: ?>
+                <span style="color:#475569">—</span>
+            <?php endif; ?>
+        </td>
+        <td style="font-size:12px;color:#94a3b8"><?= !empty($r['group_type']) ? htmlspecialchars($r['group_type']) : '<span style="color:#475569">—</span>' ?></td>
         <td>
             <?php if ($r['is_composite']): ?>
                 <span class="badge b-blue">Composite</span>
@@ -662,7 +718,7 @@ elseif ($section === 'materials' && $action === 'list'):
     </tr>
     <?php endforeach; ?>
     <?php if (empty($rows)): ?>
-    <tr><td colspan="6" style="text-align:center;color:#475569;padding:24px">No materials found.</td></tr>
+    <tr><td colspan="8" style="text-align:center;color:#475569;padding:24px">No materials found.</td></tr>
     <?php endif; ?>
     </tbody>
 </table>
@@ -673,7 +729,8 @@ elseif ($section === 'materials' && $action === 'list'):
 // MATERIALS — CREATE / EDIT FORM
 // ═══════════════════════════════════════════════════════════════════════
 elseif ($section === 'materials' && $action === 'edit'):
-    $row = ['id' => 0, 'name' => '', 'unit_id' => '', 'default_rate' => '', 'currency' => 'IDR', 'category' => '', 'is_composite' => 0];
+    $row = ['id' => 0, 'name' => '', 'unit_id' => '', 'default_rate' => '', 'currency' => 'IDR', 'category' => '', 'is_composite' => 0, 'tier' => '', 'group_type' => ''];
+    $group_types_list = $db->query("SELECT DISTINCT group_type FROM rab_materials WHERE group_type IS NOT NULL AND group_type != '' ORDER BY group_type")->fetchAll(PDO::FETCH_COLUMN);
     if ($id) {
         $stmt = $db->prepare("SELECT * FROM rab_materials WHERE id=?");
         $stmt->execute([$id]);
@@ -725,6 +782,27 @@ elseif ($section === 'materials' && $action === 'edit'):
                     <option value="USD" <?= $row['currency'] === 'USD' ? 'selected' : '' ?>>USD — US Dollar</option>
                     <option value="AUD" <?= $row['currency'] === 'AUD' ? 'selected' : '' ?>>AUD — Australian Dollar</option>
                 </select>
+            </div>
+
+            <div class="fg">
+                <label>Tier</label>
+                <select name="tier">
+                    <option value="" <?= empty($row['tier']) ? 'selected' : '' ?>>— No tier —</option>
+                    <option value="economy" <?= ($row['tier'] ?? '') === 'economy' ? 'selected' : '' ?>>Economy</option>
+                    <option value="standard" <?= ($row['tier'] ?? '') === 'standard' ? 'selected' : '' ?>>Standard</option>
+                    <option value="premium" <?= ($row['tier'] ?? '') === 'premium' ? 'selected' : '' ?>>Premium</option>
+                </select>
+            </div>
+
+            <div class="fg">
+                <label>Group Type</label>
+                <input type="text" name="group_type" value="<?= htmlspecialchars($row['group_type'] ?? '') ?>" placeholder="e.g. Ceilings, Floors, Walls, Roof…" list="group-types-dl">
+                <datalist id="group-types-dl">
+                    <?php foreach ($group_types_list as $gt): ?>
+                    <option value="<?= htmlspecialchars($gt) ?>">
+                    <?php endforeach; ?>
+                </datalist>
+                <small style="color:#64748b;font-size:11px;margin-top:3px">Determines which section this material appears in when adding items</small>
             </div>
 
             <div class="fg span2">
@@ -971,7 +1049,8 @@ elseif ($section === 'templates' && $action === 'list'):
 // TEMPLATES — CREATE / EDIT FORM
 // ═══════════════════════════════════════════════════════════════════════
 elseif ($section === 'templates' && $action === 'edit'):
-    $row = ['id' => 0, 'discipline_id' => '', 'section_name' => '', 'name' => '', 'description' => '', 'default_unit_id' => '', 'is_active' => 1];
+    $row = ['id' => 0, 'discipline_id' => '', 'section_name' => '', 'name' => '', 'description' => '', 'default_unit_id' => '', 'is_active' => 1, 'tier' => '', 'group_type' => ''];
+    $group_types_list = $db->query("SELECT DISTINCT group_type FROM rab_item_templates WHERE group_type IS NOT NULL AND group_type != '' ORDER BY group_type")->fetchAll(PDO::FETCH_COLUMN);
     if ($id) {
         $stmt = $db->prepare("SELECT * FROM rab_item_templates WHERE id=?");
         $stmt->execute([$id]);
@@ -1026,6 +1105,27 @@ elseif ($section === 'templates' && $action === 'edit'):
                         </option>
                     <?php endforeach; ?>
                 </select>
+            </div>
+
+            <div class="fg">
+                <label>Tier</label>
+                <select name="tier">
+                    <option value="" <?= empty($row['tier']) ? 'selected' : '' ?>>— No tier —</option>
+                    <option value="economy" <?= ($row['tier'] ?? '') === 'economy' ? 'selected' : '' ?>>Economy</option>
+                    <option value="standard" <?= ($row['tier'] ?? '') === 'standard' ? 'selected' : '' ?>>Standard</option>
+                    <option value="premium" <?= ($row['tier'] ?? '') === 'premium' ? 'selected' : '' ?>>Premium</option>
+                </select>
+            </div>
+
+            <div class="fg">
+                <label>Group Type</label>
+                <input type="text" name="group_type" value="<?= htmlspecialchars($row['group_type'] ?? '') ?>" placeholder="e.g. Ceilings, Floors, Walls…" list="tpl-group-types-dl">
+                <datalist id="tpl-group-types-dl">
+                    <?php foreach ($group_types_list as $gt): ?>
+                    <option value="<?= htmlspecialchars($gt) ?>">
+                    <?php endforeach; ?>
+                </datalist>
+                <small style="color:#64748b;font-size:11px;margin-top:3px">Used for context-aware material filtering in RAB Tool</small>
             </div>
 
             <div class="fg">
@@ -1240,6 +1340,139 @@ elseif ($section === 'presets' && $action === 'edit'):
         <div style="display:flex;gap:10px">
             <button type="submit" class="btn btn-p"><?= $is_edit ? 'Save Changes' : 'Create Preset' ?></button>
             <a href="?s=presets" class="btn btn-o">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<?php
+// ═══════════════════════════════════════════════════════════════════════
+// BUILD TEMPLATES — LIST
+// ═══════════════════════════════════════════════════════════════════════
+elseif ($section === 'build_templates' && $action === 'list'):
+    $rows = $db->query("SELECT * FROM rab_build_templates ORDER BY sort_order, name")->fetchAll();
+?>
+
+<div class="page-header">
+    <h1>Build Templates <span style="color:#64748b;font-size:1rem;font-weight:400">(<?= count($rows) ?>)</span></h1>
+    <a href="?s=build_templates&a=edit" class="btn btn-p">+ Add Template</a>
+</div>
+
+<p style="color:#94a3b8;font-size:13px;margin-bottom:16px">Build templates pre-populate a new RAB with sections and items for specific construction methods (RCC, Steel, Timber, etc.).</p>
+
+<div class="card" style="padding:0;overflow:hidden">
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Code</th>
+            <th>Default Tier</th>
+            <th>Order</th>
+            <th>Status</th>
+            <th style="width:120px">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    <?php foreach ($rows as $r): ?>
+    <tr>
+        <td>
+            <strong><?= htmlspecialchars($r['name']) ?></strong>
+            <?php if ($r['description']): ?>
+            <br><small style="color:#64748b;font-size:11px"><?= htmlspecialchars(substr($r['description'], 0, 120)) ?><?= strlen($r['description']) > 120 ? '…' : '' ?></small>
+            <?php endif; ?>
+        </td>
+        <td><code style="color:#94a3b8;font-size:12px"><?= htmlspecialchars($r['code']) ?></code></td>
+        <td>
+            <?php
+            $tier_colors = array('economy' => '#22c55e', 'standard' => '#3b82f6', 'premium' => '#a855f7');
+            $tc = isset($tier_colors[$r['default_tier']]) ? $tier_colors[$r['default_tier']] : '#64748b';
+            ?>
+            <span class="badge" style="background:<?= $tc ?>20;color:<?= $tc ?>;border:1px solid <?= $tc ?>40"><?= ucfirst($r['default_tier']) ?></span>
+        </td>
+        <td style="color:#64748b"><?= $r['sort_order'] ?></td>
+        <td>
+            <?php if ($r['is_active']): ?>
+                <span class="badge" style="background:#22c55e20;color:#22c55e;border:1px solid #22c55e40">Active</span>
+            <?php else: ?>
+                <span class="badge" style="background:#1e293b;color:#64748b;border:1px solid rgba(255,255,255,.1)">Inactive</span>
+            <?php endif; ?>
+        </td>
+        <td>
+            <div class="actions">
+                <a href="?s=build_templates&a=edit&id=<?= $r['id'] ?>" class="btn btn-o btn-sm">Edit</a>
+                <form method="POST" action="?s=build_templates&a=delete" style="display:inline" onsubmit="return confirm('Delete template: <?= htmlspecialchars(addslashes($r['name'])) ?>?')">
+                    <input type="hidden" name="del_id" value="<?= $r['id'] ?>">
+                    <button type="submit" class="btn btn-r btn-sm">Del</button>
+                </form>
+            </div>
+        </td>
+    </tr>
+    <?php endforeach; ?>
+    <?php if (empty($rows)): ?>
+    <tr><td colspan="6" style="text-align:center;color:#475569;padding:24px">No build templates yet. Run the migration SQL to seed default templates.</td></tr>
+    <?php endif; ?>
+    </tbody>
+</table>
+</div>
+
+<?php
+// ═══════════════════════════════════════════════════════════════════════
+// BUILD TEMPLATES — CREATE / EDIT
+// ═══════════════════════════════════════════════════════════════════════
+elseif ($section === 'build_templates' && $action === 'edit'):
+    $row = ['id' => 0, 'name' => '', 'code' => '', 'description' => '', 'default_tier' => 'standard', 'is_active' => 1, 'sort_order' => 0];
+    if ($id) {
+        $stmt = $db->prepare("SELECT * FROM rab_build_templates WHERE id=?");
+        $stmt->execute([$id]);
+        $found = $stmt->fetch();
+        if ($found) $row = $found;
+    }
+    $is_edit = (bool)$row['id'];
+?>
+
+<a href="?s=build_templates" class="back-link">← Back to Build Templates</a>
+<div class="page-header">
+    <h1><?= $is_edit ? 'Edit Build Template' : 'New Build Template' ?></h1>
+</div>
+
+<div class="card" style="max-width:740px">
+    <form method="POST" action="?s=build_templates&a=save<?= $is_edit ? '&id=' . $id : '' ?>">
+        <div class="form-grid">
+            <div class="fg span2">
+                <label>Template Name *</label>
+                <input type="text" name="name" value="<?= htmlspecialchars($row['name']) ?>" required placeholder="e.g. Re-enforced Concrete (RCC) — Standard">
+            </div>
+            <div class="fg">
+                <label>Code *</label>
+                <input type="text" name="code" value="<?= htmlspecialchars($row['code']) ?>" required placeholder="e.g. rcc_standard">
+                <small style="color:#64748b;font-size:11px;margin-top:3px">Unique identifier (lowercase, underscores)</small>
+            </div>
+            <div class="fg">
+                <label>Default Tier</label>
+                <select name="default_tier">
+                    <option value="economy" <?= $row['default_tier'] === 'economy' ? 'selected' : '' ?>>Economy</option>
+                    <option value="standard" <?= $row['default_tier'] === 'standard' ? 'selected' : '' ?>>Standard</option>
+                    <option value="premium" <?= $row['default_tier'] === 'premium' ? 'selected' : '' ?>>Premium</option>
+                </select>
+            </div>
+            <div class="fg span2">
+                <label>Description</label>
+                <textarea name="description" rows="3" placeholder="Brief description of this construction method…"><?= htmlspecialchars($row['description'] ?? '') ?></textarea>
+            </div>
+            <div class="fg">
+                <label>Sort Order</label>
+                <input type="number" name="sort_order" value="<?= (int)$row['sort_order'] ?>" min="0" step="1">
+            </div>
+            <div class="fg">
+                <label>Status</label>
+                <label class="ck">
+                    <input type="checkbox" name="is_active" value="1" <?= $row['is_active'] ? 'checked' : '' ?>>
+                    <span>Active (available for selection in RAB Tool)</span>
+                </label>
+            </div>
+        </div>
+        <div style="margin-top:20px;display:flex;gap:10px">
+            <button type="submit" class="btn btn-p"><?= $is_edit ? 'Save Changes' : 'Create Template' ?></button>
+            <a href="?s=build_templates" class="btn btn-o">Cancel</a>
         </div>
     </form>
 </div>

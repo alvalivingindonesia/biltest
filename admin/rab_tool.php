@@ -123,6 +123,68 @@ function create_default_sections($db, $rab_id) {
     }
 }
 
+// ─── POPULATE FROM BUILD TEMPLATE ────────────────────────────────────
+function populate_from_build_template($db, $rab_id, $build_template_id) {
+    // First create default sections (as a baseline)
+    create_default_sections($db, $rab_id);
+
+    // Check if the build template has defined sections with items
+    $bt_sections = $db->prepare("
+        SELECT bts.*, d.code AS disc_code
+        FROM rab_build_template_sections bts
+        JOIN rab_disciplines d ON d.id = bts.discipline_id
+        WHERE bts.build_template_id = ?
+        ORDER BY d.id, bts.order_index
+    ");
+    $bt_sections->execute(array($build_template_id));
+    $bt_sect_rows = $bt_sections->fetchAll();
+
+    if (empty($bt_sect_rows)) {
+        return; // No template sections defined yet, just use defaults
+    }
+
+    // For each template section, find matching section in the RAB and add items
+    foreach ($bt_sect_rows as $bts) {
+        // Find existing section matching discipline + name
+        $sect_q = $db->prepare("
+            SELECT s.id FROM rab_sections s
+            WHERE s.rab_id = ? AND s.discipline_id = ? AND s.name = ?
+            LIMIT 1
+        ");
+        $sect_q->execute(array($rab_id, $bts['discipline_id'], $bts['section_name']));
+        $sect_row = $sect_q->fetch();
+        $sect_id = $sect_row ? (int)$sect_row['id'] : 0;
+
+        // If no matching section found, create one
+        if (!$sect_id) {
+            $max_oi = $db->prepare("SELECT COALESCE(MAX(order_index),0)+1 FROM rab_sections WHERE rab_id=? AND discipline_id=?");
+            $max_oi->execute(array($rab_id, $bts['discipline_id']));
+            $oidx = (int)$max_oi->fetchColumn();
+            $db->prepare("INSERT INTO rab_sections (rab_id, discipline_id, name, order_index) VALUES (?,?,?,?)")
+               ->execute(array($rab_id, $bts['discipline_id'], $bts['section_name'], $oidx));
+            $sect_id = (int)$db->lastInsertId();
+        }
+
+        // Add items from template
+        $items_q = $db->prepare("
+            SELECT bti.* FROM rab_build_template_items bti
+            WHERE bti.build_template_section_id = ?
+            ORDER BY bti.order_index
+        ");
+        $items_q->execute(array($bts['id']));
+        $items = $items_q->fetchAll();
+
+        $ins_item = $db->prepare("INSERT INTO rab_items (section_id, item_template_id, name, unit_id, quantity, rate, total, order_index) VALUES (?,?,?,?,?,?,?,?)");
+        foreach ($items as $it) {
+            $total = (float)$it['default_quantity'] * (float)$it['default_rate'];
+            $ins_item->execute(array(
+                $sect_id, $it['item_template_id'], $it['name'], $it['unit_id'],
+                $it['default_quantity'], $it['default_rate'], $total, $it['order_index']
+            ));
+        }
+    }
+}
+
 // ─── CLONE RAB ───────────────────────────────────────────────────────
 function clone_rab($db, $rab_id) {
     $src = $db->prepare("SELECT * FROM rab_rabs WHERE id=?");
@@ -184,6 +246,37 @@ $view   = $_GET['v']      ?? 'projects';
 $id     = (int)($_GET['id'] ?? 0);
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 $msg    = '';
+
+// ─── MATERIALS JSON (early exit for AJAX) ─────────────────────────────
+if ($view === 'materials_json') {
+    header('Content-Type: application/json; charset=utf-8');
+    $db = get_db();
+    $group_type = trim($_GET['group_type'] ?? '');
+    $tier       = trim($_GET['tier'] ?? '');
+
+    $where = '1=1';
+    $params = [];
+    if ($group_type !== '') {
+        $where .= ' AND m.group_type = ?';
+        $params[] = $group_type;
+    }
+    if ($tier !== '' && in_array($tier, ['economy', 'standard', 'premium'])) {
+        $where .= ' AND m.tier = ?';
+        $params[] = $tier;
+    }
+
+    $sql = "SELECT m.id, m.name, m.default_rate, m.category, m.tier, m.group_type, m.unit_id, u.code AS unit_code
+            FROM rab_materials m LEFT JOIN rab_units u ON u.id = m.unit_id
+            WHERE {$where} ORDER BY m.group_type, m.tier, m.name LIMIT 300";
+    $stmt = $db->prepare($sql);
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll();
+
+    $gt_rows = $db->query("SELECT DISTINCT group_type FROM rab_materials WHERE group_type IS NOT NULL AND group_type != '' ORDER BY group_type")->fetchAll(PDO::FETCH_COLUMN);
+
+    echo json_encode(['ok' => true, 'materials' => $rows, 'group_types' => $gt_rows]);
+    exit;
+}
 
 // ─── EXCEL EXPORT (early exit) ────────────────────────────────────────
 if ($action === 'export_excel' && $id > 0) {
@@ -300,9 +393,7 @@ if ($action === 'export_excel' && $id > 0) {
 }
 
 // ─── AJAX / POST ACTIONS ─────────────────────────────────────────────
-$ajaxActions = ['save_item','delete_item','save_section','delete_section','recalculate','get_sections','update_area'];
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($action, $ajaxActions)) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action) {
     header('Content-Type: application/json; charset=utf-8');
     $db = get_db();
     $result = ['ok' => false, 'msg' => ''];
@@ -453,7 +544,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($action, $ajaxActions)) {
 // ─── REGULAR POST ACTIONS (non-AJAX) ─────────────────────────────────
 $db = get_db();
 
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         // ── Create/Edit Project ──
@@ -492,8 +582,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // ── Create RAB ──
         if ($action === 'create_rab') {
-            $proj_id  = (int)($_POST['proj_id'] ?? 0);
-            $rab_name = trim($_POST['rab_name'] ?? '');
+            $proj_id           = (int)($_POST['proj_id'] ?? 0);
+            $rab_name          = trim($_POST['rab_name'] ?? '');
+            $build_template_id = (int)($_POST['build_template_id'] ?? 0);
             if (!$proj_id) throw new Exception('No project specified.');
             $vq = $db->prepare("SELECT COALESCE(MAX(version),0)+1 FROM rab_rabs WHERE project_id=?");
             $vq->execute([$proj_id]);
@@ -502,7 +593,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->prepare("INSERT INTO rab_rabs (project_id, version, name) VALUES (?,?,?)")
                ->execute([$proj_id, $version, $rab_name]);
             $new_rab_id = (int)$db->lastInsertId();
-            create_default_sections($db, $new_rab_id);
+
+            if ($build_template_id) {
+                // Populate from build template
+                populate_from_build_template($db, $new_rab_id, $build_template_id);
+            } else {
+                create_default_sections($db, $new_rab_id);
+            }
+
             // Initialise totals row
             $db->prepare("INSERT INTO rab_totals (rab_id, house_area_m2) VALUES (?, (SELECT gross_floor_area_m2 FROM rab_projects WHERE id=?))")
                ->execute([$new_rab_id, $proj_id]);
@@ -1130,6 +1228,13 @@ elseif ($view === 'project' && $id > 0):
 <?php endif; ?>
 
 <!-- New RAB Modal -->
+<?php
+// Fetch build templates for the dropdown
+$build_templates = [];
+try {
+    $build_templates = $db->query("SELECT id, name, code, description, default_tier FROM rab_build_templates WHERE is_active=1 ORDER BY sort_order, name")->fetchAll();
+} catch (Exception $e) { /* table may not exist yet */ }
+?>
 <div class="modal-bg" id="modal-new-rab">
 <div class="modal">
     <button class="modal-close" onclick="closeModal('modal-new-rab')">&times;</button>
@@ -1142,6 +1247,23 @@ elseif ($view === 'project' && $id > 0):
             <input type="text" name="rab_name" placeholder="e.g. Version 1 — Schematic Design">
             <span class="form-note">Leave blank to auto-name (Version 1, Version 2, ...)</span>
         </div>
+        <?php if (!empty($build_templates)): ?>
+        <div class="fg" style="margin-bottom:16px">
+            <label>Build Template <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#64748b">(optional)</span></label>
+            <select name="build_template_id" id="build-tpl-select" onchange="showBuildTplInfo(this)">
+                <option value="">— Blank RAB (default sections only) —</option>
+                <?php foreach ($build_templates as $bt): ?>
+                <option value="<?= $bt['id'] ?>" data-desc="<?= he($bt['description'] ?? '') ?>" data-tier="<?= he($bt['default_tier']) ?>">
+                    <?= he($bt['name']) ?>
+                </option>
+                <?php endforeach; ?>
+            </select>
+            <div id="build-tpl-info" style="display:none;margin-top:8px;padding:10px 12px;background:rgba(12,124,132,.08);border:1px solid rgba(12,124,132,.2);border-radius:6px;font-size:12px;color:#94a3b8">
+                <span id="build-tpl-desc"></span>
+                <div style="margin-top:6px"><span style="font-weight:600;color:#e2e8f0">Default Tier:</span> <span id="build-tpl-tier"></span></div>
+            </div>
+        </div>
+        <?php endif; ?>
         <div style="display:flex;gap:8px">
             <button type="submit" class="btn btn-p">Create RAB</button>
             <button type="button" class="btn btn-o" onclick="closeModal('modal-new-rab')">Cancel</button>
@@ -1335,7 +1457,7 @@ elseif ($view === 'rab' && $id > 0):
 
             <!-- Add Item Area -->
             <div class="add-item-area" id="add-area-<?= $sect['id'] ?>">
-                <button class="btn btn-p btn-sm" onclick="showAddItem(<?= $sect['id'] ?>, <?= $disc['id'] ?>)">+ Add Item</button>
+                <button class="btn btn-p btn-sm" onclick="showAddItem(<?= $sect['id'] ?>, <?= $disc['id'] ?>, '<?= addslashes(he($sect['name'])) ?>')">+ Add Item</button>
                 <div id="add-form-<?= $sect['id'] ?>" style="display:none;margin-top:10px">
                     <div class="item-edit-form">
                         <div style="margin-bottom:8px">
@@ -1345,6 +1467,25 @@ elseif ($view === 'rab' && $id > 0):
                                 <?php foreach ($disc_templates as $tmpl): ?>
                                 <option value="<?= $tmpl['id'] ?>" data-name="<?= he($tmpl['name']) ?>" data-unit="<?= $tmpl['default_unit_id'] ?>"><?= he($tmpl['section_name']) ?> › <?= he($tmpl['name']) ?></option>
                                 <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <!-- Material Picker (context-aware) -->
+                        <div style="margin-bottom:8px">
+                            <label style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px">Material / Item Reference</label>
+                            <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+                                <select id="mat-tier-<?= $sect['id'] ?>" onchange="loadMaterials(<?= $sect['id'] ?>)" style="min-width:120px">
+                                    <option value="">All Tiers</option>
+                                    <option value="economy">Economy</option>
+                                    <option value="standard">Standard</option>
+                                    <option value="premium">Premium</option>
+                                </select>
+                                <select id="mat-group-<?= $sect['id'] ?>" onchange="loadMaterials(<?= $sect['id'] ?>)" style="min-width:140px">
+                                    <option value="">All Groups</option>
+                                </select>
+                                <button class="btn btn-o btn-xs" onclick="loadMaterials(<?= $sect['id'] ?>)" title="Refresh">↻</button>
+                            </div>
+                            <select id="mat-select-<?= $sect['id'] ?>" onchange="applyMaterial(<?= $sect['id'] ?>)" style="width:100%">
+                                <option value="">— Select material to auto-fill rate —</option>
                             </select>
                         </div>
                         <div class="edit-grid">
@@ -1959,13 +2100,121 @@ function updateTotalsBar(totals) {
 var _editItemId   = 0;
 var _editSectId   = 0;
 
-function showAddItem(sectId, discId) {
+// ── Section name map for context-aware material loading ──
+var _sectionNames = {};
+
+function showAddItem(sectId, discId, sectionName) {
     var form = document.getElementById('add-form-' + sectId);
     if (form) form.style.display = 'block';
+    _sectionNames[sectId] = sectionName || '';
+    // Auto-load materials filtered by the section name (group_type)
+    loadMaterials(sectId);
 }
 function hideAddItem(sectId) {
     var form = document.getElementById('add-form-' + sectId);
     if (form) form.style.display = 'none';
+}
+
+// ── Build Template info display ──
+function showBuildTplInfo(sel) {
+    var info = document.getElementById('build-tpl-info');
+    var desc = document.getElementById('build-tpl-desc');
+    var tier = document.getElementById('build-tpl-tier');
+    if (!info || !sel) return;
+    var opt = sel.options[sel.selectedIndex];
+    if (!opt || !sel.value) { info.style.display = 'none'; return; }
+    var d = opt.getAttribute('data-desc') || '';
+    var t = opt.getAttribute('data-tier') || 'standard';
+    if (desc) desc.textContent = d;
+    if (tier) {
+        var colors = {economy: '#22c55e', standard: '#3b82f6', premium: '#a855f7'};
+        tier.innerHTML = '<span style="color:' + (colors[t] || '#3b82f6') + ';font-weight:700">' + t.charAt(0).toUpperCase() + t.slice(1) + '</span>';
+    }
+    info.style.display = 'block';
+}
+
+// ── Context-aware material loading ──
+var _materialsCache = {};
+
+function loadMaterials(sectId) {
+    var tierSel  = document.getElementById('mat-tier-' + sectId);
+    var groupSel = document.getElementById('mat-group-' + sectId);
+    var matSel   = document.getElementById('mat-select-' + sectId);
+    if (!matSel) return;
+
+    var tier  = tierSel ? tierSel.value : '';
+    var group = groupSel ? groupSel.value : '';
+
+    // If group is empty and section name maps to a known group, auto-select it
+    var sn = _sectionNames[sectId] || '';
+    // Only auto-filter if it's NOT a custom/user-defined section
+    var isCustom = true;
+    var knownSections = ['Site Works','Walls','Floors','Ceilings','Doors & Windows','Roof','Finishes','Waterproofing','External Works','Electrical','Lighting','Plumbing & Sanitary','HVAC','Fire Fighting','Excavation','Foundations','Columns & Beams','Slabs','Stairs','Retaining Walls','Roof Structure'];
+    for (var i = 0; i < knownSections.length; i++) {
+        if (knownSections[i] === sn) { isCustom = false; break; }
+    }
+    // For known sections and first load, set group_type = section name
+    if (!isCustom && group === '' && !groupSel._loaded) {
+        group = sn;
+    }
+
+    var url = 'rab_tool.php?v=materials_json&group_type=' + encodeURIComponent(group) + '&tier=' + encodeURIComponent(tier);
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.onreadystatechange = function() {
+        if (xhr.readyState !== 4) return;
+        if (xhr.status !== 200) return;
+        try {
+            var data = JSON.parse(xhr.responseText);
+            // Update group dropdown
+            if (groupSel && data.group_types && !groupSel._loaded) {
+                var prev = group;
+                groupSel.innerHTML = '<option value="">All Groups</option>';
+                for (var g = 0; g < data.group_types.length; g++) {
+                    var gt = data.group_types[g];
+                    var selAttr = (gt === prev) ? ' selected' : '';
+                    groupSel.innerHTML += '<option value="' + gt + '"' + selAttr + '>' + gt + '</option>';
+                }
+                groupSel._loaded = true;
+            }
+            // Update materials dropdown
+            matSel.innerHTML = '<option value="">\u2014 Select material to auto-fill rate \u2014</option>';
+            if (data.materials) {
+                for (var m = 0; m < data.materials.length; m++) {
+                    var mat = data.materials[m];
+                    var tierLabel = mat.tier ? ' [' + mat.tier.charAt(0).toUpperCase() + mat.tier.slice(1) + ']' : '';
+                    var priceLabel = mat.default_rate ? ' \u2014 ' + fmtIdr(mat.default_rate) + '/' + (mat.unit_code || '') : '';
+                    var groupLabel = mat.group_type ? ' (' + mat.group_type + ')' : '';
+                    matSel.innerHTML += '<option value="' + mat.id + '"' +
+                        ' data-rate="' + mat.default_rate + '"' +
+                        ' data-name="' + mat.name.replace(/"/g, '&quot;') + '"' +
+                        ' data-unit="' + (mat.unit_id || '') + '"' +
+                        '>' + mat.name + tierLabel + priceLabel + groupLabel + '</option>';
+                }
+            }
+        } catch (e) { /* ignore parse errors */ }
+    };
+    xhr.send();
+}
+
+function applyMaterial(sectId) {
+    var matSel = document.getElementById('mat-select-' + sectId);
+    if (!matSel || !matSel.value) return;
+    var opt = matSel.options[matSel.selectedIndex];
+    if (!opt) return;
+
+    var nameEl = document.getElementById('add-name-' + sectId);
+    var rateEl = document.getElementById('add-rate-' + sectId);
+    var unitEl = document.getElementById('add-unit-' + sectId);
+
+    var matName = opt.getAttribute('data-name') || '';
+    var matRate = opt.getAttribute('data-rate') || '0';
+    var matUnit = opt.getAttribute('data-unit') || '';
+
+    if (nameEl && !nameEl.value) nameEl.value = matName;
+    if (rateEl) rateEl.value = matRate;
+    if (unitEl && matUnit) unitEl.value = matUnit;
 }
 
 function applyTemplate(sectId, tplId) {
