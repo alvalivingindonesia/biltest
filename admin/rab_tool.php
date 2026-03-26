@@ -393,7 +393,8 @@ if ($action === 'export_excel' && $id > 0) {
 }
 
 // ─── AJAX / POST ACTIONS ─────────────────────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action) {
+$ajaxActions = ['saveitem','deleteitem','savesection','deletesection','recalculate','getsections','updatearea'];
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action && in_array($action, $ajaxActions)) {
     header('Content-Type: application/json; charset=utf-8');
     $db = get_db();
     $result = ['ok' => false, 'msg' => ''];
