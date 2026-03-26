@@ -285,6 +285,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
+        // ── BUILD TEMPLATE CONTENT — AJAX ──
+        if ($section === 'build_templates' && $action === 'bt_ajax') {
+            header('Content-Type: application/json; charset=utf-8');
+            $bt_action = $_POST['bt_action'] ?? '';
+            $result = ['ok' => false, 'msg' => ''];
+
+            if ($bt_action === 'save_section') {
+                $bt_id   = (int)($_POST['bt_id']   ?? 0);
+                $sect_id = (int)($_POST['sect_id'] ?? 0);
+                $disc_id = (int)($_POST['disc_id'] ?? 0);
+                $name    = trim($_POST['name']      ?? '');
+                if (!$name) { echo json_encode(['ok'=>false,'msg'=>'Section name required.']); exit; }
+                if ($sect_id) {
+                    $db->prepare("UPDATE rab_build_template_sections SET section_name=? WHERE id=?")->execute([$name, $sect_id]);
+                    $result = ['ok' => true, 'sect_id' => $sect_id, 'msg' => 'Renamed.'];
+                } else {
+                    if (!$bt_id || !$disc_id) { echo json_encode(['ok'=>false,'msg'=>'Missing bt_id or disc_id.']); exit; }
+                    $max_oi = $db->prepare("SELECT COALESCE(MAX(order_index),0)+1 FROM rab_build_template_sections WHERE build_template_id=? AND discipline_id=?");
+                    $max_oi->execute([$bt_id, $disc_id]);
+                    $oidx = (int)$max_oi->fetchColumn();
+                    $db->prepare("INSERT INTO rab_build_template_sections (build_template_id, discipline_id, section_name, order_index) VALUES (?,?,?,?)")
+                       ->execute([$bt_id, $disc_id, $name, $oidx]);
+                    $sect_id = (int)$db->lastInsertId();
+                    $result = ['ok' => true, 'sect_id' => $sect_id, 'name' => $name, 'msg' => 'Section created.'];
+                }
+            }
+
+            elseif ($bt_action === 'delete_section') {
+                $sect_id = (int)($_POST['sect_id'] ?? 0);
+                $db->prepare("DELETE FROM rab_build_template_items WHERE build_template_section_id=?")->execute([$sect_id]);
+                $db->prepare("DELETE FROM rab_build_template_sections WHERE id=?")->execute([$sect_id]);
+                $result = ['ok' => true, 'msg' => 'Deleted.'];
+            }
+
+            elseif ($bt_action === 'save_item') {
+                $sect_id = (int)($_POST['sect_id']  ?? 0);
+                $item_id = (int)($_POST['item_id']  ?? 0);
+                $name    = trim($_POST['name']       ?? '');
+                $unit_id = (int)($_POST['unit_id']  ?? 0);
+                $qty     = (float)($_POST['quantity'] ?? 1);
+                $rate    = (float)($_POST['rate']    ?? 0);
+                $tpl_id  = (int)($_POST['tpl_id']   ?? 0) ?: null;
+                if (!$name || !$sect_id) { echo json_encode(['ok'=>false,'msg'=>'Name and section required.']); exit; }
+                if ($item_id) {
+                    $db->prepare("UPDATE rab_build_template_items SET name=?, unit_id=?, default_quantity=?, default_rate=?, item_template_id=? WHERE id=?")
+                       ->execute([$name, $unit_id, $qty, $rate, $tpl_id, $item_id]);
+                } else {
+                    $max_oi = $db->prepare("SELECT COALESCE(MAX(order_index),0)+1 FROM rab_build_template_items WHERE build_template_section_id=?");
+                    $max_oi->execute([$sect_id]);
+                    $oidx = (int)$max_oi->fetchColumn();
+                    $db->prepare("INSERT INTO rab_build_template_items (build_template_section_id, item_template_id, name, unit_id, default_quantity, default_rate, order_index) VALUES (?,?,?,?,?,?,?)")
+                       ->execute([$sect_id, $tpl_id, $name, $unit_id, $qty, $rate, $oidx]);
+                    $item_id = (int)$db->lastInsertId();
+                }
+                $uc_q = $db->prepare("SELECT code FROM rab_units WHERE id=?");
+                $uc_q->execute([$unit_id]);
+                $unit_code = (string)($uc_q->fetchColumn() ?: '');
+                $result = ['ok' => true, 'item_id' => $item_id, 'unit_code' => $unit_code, 'unit_id' => $unit_id, 'name' => $name, 'quantity' => $qty, 'rate' => $rate, 'msg' => 'Saved.'];
+            }
+
+            elseif ($bt_action === 'delete_item') {
+                $item_id = (int)($_POST['item_id'] ?? 0);
+                $db->prepare("DELETE FROM rab_build_template_items WHERE id=?")->execute([$item_id]);
+                $result = ['ok' => true, 'msg' => 'Deleted.'];
+            }
+
+            else { $result['msg'] = 'Unknown action.'; }
+
+            echo json_encode($result);
+            exit;
+        }
+
     } catch (Exception $e) {
         $msg = 'Error: ' . $e->getMessage();
     }
@@ -1427,7 +1499,44 @@ elseif ($section === 'build_templates' && $action === 'edit'):
         if ($found) $row = $found;
     }
     $is_edit = (bool)$row['id'];
+
+    // Load sections + items grouped by discipline (only if editing existing template)
+    $bt_sections_by_disc = [];
+    if ($is_edit) {
+        foreach ($disciplines_list as $d) {
+            $sq = $db->prepare("SELECT * FROM rab_build_template_sections WHERE build_template_id=? AND discipline_id=? ORDER BY order_index");
+            $sq->execute([$id, $d['id']]);
+            $sects = $sq->fetchAll();
+            foreach ($sects as &$s) {
+                $iq = $db->prepare("SELECT bti.*, u.code AS unit_code FROM rab_build_template_items bti LEFT JOIN rab_units u ON u.id=bti.unit_id WHERE bti.build_template_section_id=? ORDER BY bti.order_index");
+                $iq->execute([$s['id']]);
+                $s['items'] = $iq->fetchAll();
+            }
+            unset($s);
+            $bt_sections_by_disc[$d['id']] = $sects;
+        }
+    }
 ?>
+
+<style>
+.bt-tabs{display:flex;gap:0;border-bottom:2px solid rgba(255,255,255,.08);margin-bottom:20px}
+.bt-tab{padding:9px 20px;font-size:13px;font-weight:600;color:#64748b;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:color .15s,border-color .15s;user-select:none}
+.bt-tab:hover{color:#e2e8f0}
+.bt-tab.active{color:#0c7c84;border-bottom-color:#0c7c84}
+.bt-panel{display:none}.bt-panel.active{display:block}
+.bt-sect{background:#0f172a;border:1px solid rgba(255,255,255,.07);border-radius:8px;margin-bottom:12px;overflow:hidden}
+.bt-sect-hdr{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#162032;cursor:pointer}
+.bt-sect-title{font-weight:600;font-size:13px;color:#e2e8f0;flex:1}
+.bt-sect-body{padding:14px}
+.bt-item-table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px}
+.bt-item-table th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#64748b;background:#0a1628;padding:7px 10px;text-align:left}
+.bt-item-table td{padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.04)}
+.bt-item-table tbody tr:hover{background:rgba(255,255,255,.02)}
+.bt-add-area{margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,.08)}
+.bt-add-form{background:#0a1628;border:1px solid rgba(255,255,255,.08);border-radius:7px;padding:14px;margin-top:8px}
+.bt-edit-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px}
+.num-right{text-align:right}
+</style>
 
 <a href="?s=build_templates" class="back-link">← Back to Build Templates</a>
 <div class="page-header">
@@ -1476,6 +1585,360 @@ elseif ($section === 'build_templates' && $action === 'edit'):
         </div>
     </form>
 </div>
+
+<?php if ($is_edit): ?>
+
+<div style="margin-top:28px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <h2 style="margin-bottom:0">Template Content</h2>
+        <span style="font-size:12px;color:#64748b">Sections and items that will be pre-populated when a user creates a RAB using this template.</span>
+    </div>
+
+    <!-- Discipline tabs -->
+    <div class="bt-tabs">
+        <?php foreach ($disciplines_list as $i => $d): ?>
+        <div class="bt-tab<?= $i === 0 ? ' active' : '' ?>" onclick="btSwitchTab('<?= htmlspecialchars($d['code']) ?>')" id="bt-tabnav-<?= htmlspecialchars($d['code']) ?>">
+            <?= htmlspecialchars($d['name']) ?>
+            <span style="color:#475569;font-weight:400;font-size:11px;margin-left:4px">(<?= count($bt_sections_by_disc[$d['id']] ?? []) ?>)</span>
+        </div>
+        <?php endforeach; ?>
+    </div>
+
+    <?php foreach ($disciplines_list as $i => $d):
+        $disc_sects = $bt_sections_by_disc[$d['id']] ?? [];
+    ?>
+    <div class="bt-panel<?= $i === 0 ? ' active' : '' ?>" id="bt-panel-<?= htmlspecialchars($d['code']) ?>">
+
+        <?php foreach ($disc_sects as $sect): ?>
+        <div class="bt-sect" id="bt-sect-<?= $sect['id'] ?>">
+            <div class="bt-sect-hdr" onclick="btToggleSect(<?= $sect['id'] ?>)">
+                <span class="bt-sect-title" id="bt-sect-title-<?= $sect['id'] ?>"><?= htmlspecialchars($sect['section_name']) ?></span>
+                <div class="actions" onclick="event.stopPropagation()">
+                    <button class="btn btn-o btn-xs" onclick="btRenameSection(<?= $sect['id'] ?>, '<?= htmlspecialchars(addslashes($sect['section_name'])) ?>')">Rename</button>
+                    <button class="btn btn-r btn-xs" onclick="btDeleteSection(<?= $sect['id'] ?>, '<?= htmlspecialchars(addslashes($sect['section_name'])) ?>')">Delete</button>
+                </div>
+                <span id="bt-sect-toggle-<?= $sect['id'] ?>" style="color:#475569;font-size:11px;margin-left:6px">▼</span>
+            </div>
+            <div class="bt-sect-body" id="bt-sect-body-<?= $sect['id'] ?>">
+                <table class="bt-item-table">
+                    <thead>
+                        <tr>
+                            <th style="width:40%">Description</th>
+                            <th>Unit</th>
+                            <th class="num-right">Qty</th>
+                            <th class="num-right">Rate (IDR)</th>
+                            <th style="width:110px">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bt-items-body-<?= $sect['id'] ?>">
+                    <?php foreach ($sect['items'] as $it): ?>
+                    <tr id="bt-item-row-<?= $it['id'] ?>">
+                        <td><?= htmlspecialchars($it['name']) ?></td>
+                        <td><?= htmlspecialchars($it['unit_code'] ?? '') ?></td>
+                        <td class="num-right"><?= number_format((float)$it['default_quantity'], 3, '.', ',') ?></td>
+                        <td class="num-right" style="font-variant-numeric:tabular-nums"><?= fmt_idr($it['default_rate']) ?></td>
+                        <td>
+                            <div class="actions">
+                                <button class="btn btn-o btn-xs" onclick="btEditItem(<?= $it['id'] ?>, <?= $sect['id'] ?>, '<?= htmlspecialchars(addslashes($it['name'])) ?>', <?= (int)$it['unit_id'] ?>, <?= (float)$it['default_quantity'] ?>, <?= (float)$it['default_rate'] ?>)">Edit</button>
+                                <button class="btn btn-r btn-xs" onclick="btDeleteItem(<?= $it['id'] ?>)">Del</button>
+                            </div>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                    <?php if (empty($sect['items'])): ?>
+                    <tr id="bt-empty-<?= $sect['id'] ?>"><td colspan="5" style="color:#475569;font-size:12px;text-align:center;padding:12px">No items yet — add one below.</td></tr>
+                    <?php endif; ?>
+                    </tbody>
+                </table>
+
+                <!-- Add item area -->
+                <div class="bt-add-area" id="bt-add-area-<?= $sect['id'] ?>">
+                    <button class="btn btn-p btn-sm" onclick="btShowAddItem(<?= $sect['id'] ?>)">+ Add Item</button>
+                    <div id="bt-add-form-<?= $sect['id'] ?>" style="display:none">
+                        <div class="bt-add-form">
+                            <div class="bt-edit-grid">
+                                <div class="fg">
+                                    <label>Description *</label>
+                                    <input type="text" id="bt-add-name-<?= $sect['id'] ?>" placeholder="Item description">
+                                </div>
+                                <div class="fg">
+                                    <label>Unit *</label>
+                                    <select id="bt-add-unit-<?= $sect['id'] ?>">
+                                        <?php foreach ($units_list as $u): ?>
+                                        <option value="<?= $u['id'] ?>"><?= htmlspecialchars($u['code']) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div class="fg">
+                                    <label>Qty</label>
+                                    <input type="number" id="bt-add-qty-<?= $sect['id'] ?>" value="1" min="0" step="0.001">
+                                </div>
+                                <div class="fg">
+                                    <label>Rate (IDR)</label>
+                                    <input type="number" id="bt-add-rate-<?= $sect['id'] ?>" value="0" min="0" step="1000">
+                                </div>
+                            </div>
+                            <div style="display:flex;gap:8px">
+                                <button class="btn btn-p btn-sm" onclick="btSaveNewItem(<?= $sect['id'] ?>, <?= $id ?>)">Save Item</button>
+                                <button class="btn btn-o btn-sm" onclick="btHideAddItem(<?= $sect['id'] ?>)">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php endforeach; ?>
+
+        <!-- Add section -->
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+            <input type="text" id="bt-new-sect-<?= htmlspecialchars($d['code']) ?>" placeholder="New section name…" style="max-width:280px">
+            <button class="btn btn-o btn-sm" onclick="btAddSection(<?= $id ?>, <?= $d['id'] ?>, '<?= htmlspecialchars($d['code']) ?>')">+ Add Section</button>
+        </div>
+
+    </div><!-- .bt-panel -->
+    <?php endforeach; ?>
+</div>
+
+<script>
+// ── Tab switching ──
+function btSwitchTab(code) {
+    document.querySelectorAll('.bt-tab').forEach(function(t) { t.classList.remove('active'); });
+    document.querySelectorAll('.bt-panel').forEach(function(p) { p.classList.remove('active'); });
+    var tab = document.getElementById('bt-tabnav-' + code);
+    var panel = document.getElementById('bt-panel-' + code);
+    if (tab) tab.classList.add('active');
+    if (panel) panel.classList.add('active');
+}
+
+// ── Section collapse ──
+function btToggleSect(sectId) {
+    var body = document.getElementById('bt-sect-body-' + sectId);
+    var tog  = document.getElementById('bt-sect-toggle-' + sectId);
+    if (!body) return;
+    var hidden = body.style.display === 'none';
+    body.style.display = hidden ? '' : 'none';
+    if (tog) tog.textContent = hidden ? '▼' : '▶';
+}
+
+// ── AJAX helper ──
+function btAjax(data, callback) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', 'rab.php?s=build_templates&a=bt_ajax', true);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    var params = [];
+    for (var k in data) { if (Object.prototype.hasOwnProperty.call(data, k)) params.push(encodeURIComponent(k) + '=' + encodeURIComponent(data[k])); }
+    xhr.onload = function() {
+        try { callback(JSON.parse(xhr.responseText)); } catch(e) { callback({ok:false,msg:'Invalid server response.'}); }
+    };
+    xhr.onerror = function() { callback({ok:false,msg:'Network error.'}); };
+    xhr.send(params.join('&'));
+}
+
+// ── Escape helpers ──
+function btEscHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function btEscHtmlJs(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+}
+function btFmtIdr(val) {
+    val = parseFloat(val) || 0;
+    return 'Rp ' + Math.round(val).toLocaleString('id-ID');
+}
+
+// ── Add item ──
+function btShowAddItem(sectId) {
+    var f = document.getElementById('bt-add-form-' + sectId);
+    if (f) f.style.display = 'block';
+}
+function btHideAddItem(sectId) {
+    var f = document.getElementById('bt-add-form-' + sectId);
+    if (f) f.style.display = 'none';
+}
+function btSaveNewItem(sectId, btId) {
+    var name   = document.getElementById('bt-add-name-' + sectId).value.trim();
+    var unitId = document.getElementById('bt-add-unit-' + sectId).value;
+    var qty    = document.getElementById('bt-add-qty-' + sectId).value;
+    var rate   = document.getElementById('bt-add-rate-' + sectId).value;
+    if (!name || !unitId) { alert('Description and unit are required.'); return; }
+    btAjax({bt_action:'save_item', sect_id:sectId, name:name, unit_id:unitId, quantity:qty, rate:rate}, function(res) {
+        if (res.ok) {
+            // Remove empty-row placeholder if present
+            var emptyRow = document.getElementById('bt-empty-' + sectId);
+            if (emptyRow) emptyRow.remove();
+            var tbody = document.getElementById('bt-items-body-' + sectId);
+            if (tbody) {
+                var tr = document.createElement('tr');
+                tr.id = 'bt-item-row-' + res.item_id;
+                var qtyFmt = (parseFloat(qty)||0).toFixed(3).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+                tr.innerHTML =
+                    '<td>' + btEscHtml(name) + '</td>' +
+                    '<td>' + btEscHtml(res.unit_code || '') + '</td>' +
+                    '<td class="num-right">' + qtyFmt + '</td>' +
+                    '<td class="num-right" style="font-variant-numeric:tabular-nums">' + btFmtIdr(rate) + '</td>' +
+                    '<td><div class="actions">' +
+                    '<button class="btn btn-o btn-xs" onclick="btEditItem(' + res.item_id + ',' + sectId + ',\'' + btEscHtmlJs(name) + '\',' + res.unit_id + ',' + qty + ',' + rate + ')">Edit</button> ' +
+                    '<button class="btn btn-r btn-xs" onclick="btDeleteItem(' + res.item_id + ')">Del</button>' +
+                    '</div></td>';
+                tbody.appendChild(tr);
+            }
+            // Reset form
+            document.getElementById('bt-add-name-' + sectId).value = '';
+            document.getElementById('bt-add-qty-'  + sectId).value = '1';
+            document.getElementById('bt-add-rate-' + sectId).value = '0';
+            btHideAddItem(sectId);
+        } else { alert(res.msg || 'Error saving item.'); }
+    });
+}
+
+// ── Edit item (inline) ──
+var _btEditOrig = {};
+function btEditItem(itemId, sectId, name, unitId, qty, rate) {
+    var row = document.getElementById('bt-item-row-' + itemId);
+    if (!row) return;
+    _btEditOrig[itemId] = row.innerHTML;
+    var unitOpts = <?php
+        $uo = [];
+        foreach ($units_list as $u) { $uo[] = ['id' => (int)$u['id'], 'code' => $u['code']]; }
+        echo json_encode($uo);
+    ?>;
+    var optHtml = '';
+    for (var i = 0; i < unitOpts.length; i++) {
+        var sel = (unitOpts[i].id == unitId) ? ' selected' : '';
+        optHtml += '<option value="' + unitOpts[i].id + '"' + sel + '>' + btEscHtml(unitOpts[i].code) + '</option>';
+    }
+    row.innerHTML =
+        '<td colspan="5"><div class="bt-add-form" style="margin:0">' +
+        '<div class="bt-edit-grid">' +
+        '<div class="fg"><label>Description</label><input type="text" id="bt-ei-name" value="' + name.replace(/"/g,'&quot;') + '"></div>' +
+        '<div class="fg"><label>Unit</label><select id="bt-ei-unit">' + optHtml + '</select></div>' +
+        '<div class="fg"><label>Qty</label><input type="number" id="bt-ei-qty" value="' + qty + '" step="0.001"></div>' +
+        '<div class="fg"><label>Rate (IDR)</label><input type="number" id="bt-ei-rate" value="' + rate + '" step="1000"></div>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;margin-top:8px">' +
+        '<button class="btn btn-p btn-sm" onclick="btSaveEditItem(' + itemId + ',' + sectId + ')">Save</button>' +
+        '<button class="btn btn-o btn-sm" onclick="btCancelEditItem(' + itemId + ')">Cancel</button>' +
+        '</div></div></td>';
+}
+function btSaveEditItem(itemId, sectId) {
+    var name   = document.getElementById('bt-ei-name').value.trim();
+    var unitId = document.getElementById('bt-ei-unit').value;
+    var qty    = document.getElementById('bt-ei-qty').value;
+    var rate   = document.getElementById('bt-ei-rate').value;
+    if (!name || !unitId) { alert('Description and unit are required.'); return; }
+    btAjax({bt_action:'save_item', item_id:itemId, sect_id:sectId, name:name, unit_id:unitId, quantity:qty, rate:rate}, function(res) {
+        if (res.ok) {
+            var row = document.getElementById('bt-item-row-' + itemId);
+            if (row) {
+                var qtyFmt = (parseFloat(qty)||0).toFixed(3).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+                row.innerHTML =
+                    '<td>' + btEscHtml(name) + '</td>' +
+                    '<td>' + btEscHtml(res.unit_code || '') + '</td>' +
+                    '<td class="num-right">' + qtyFmt + '</td>' +
+                    '<td class="num-right" style="font-variant-numeric:tabular-nums">' + btFmtIdr(rate) + '</td>' +
+                    '<td><div class="actions">' +
+                    '<button class="btn btn-o btn-xs" onclick="btEditItem(' + itemId + ',' + sectId + ',\'' + btEscHtmlJs(name) + '\',' + res.unit_id + ',' + qty + ',' + rate + ')">Edit</button> ' +
+                    '<button class="btn btn-r btn-xs" onclick="btDeleteItem(' + itemId + ')">Del</button>' +
+                    '</div></td>';
+            }
+            delete _btEditOrig[itemId];
+        } else { alert(res.msg || 'Error saving.'); }
+    });
+}
+function btCancelEditItem(itemId) {
+    var row = document.getElementById('bt-item-row-' + itemId);
+    if (row && _btEditOrig[itemId]) { row.innerHTML = _btEditOrig[itemId]; delete _btEditOrig[itemId]; }
+}
+
+// ── Delete item ──
+function btDeleteItem(itemId) {
+    if (!confirm('Delete this item?')) return;
+    btAjax({bt_action:'delete_item', item_id:itemId}, function(res) {
+        if (res.ok) {
+            var row = document.getElementById('bt-item-row-' + itemId);
+            if (row) row.remove();
+        } else { alert(res.msg || 'Error deleting.'); }
+    });
+}
+
+// ── Sections ──
+function btAddSection(btId, discId, discCode) {
+    var inp = document.getElementById('bt-new-sect-' + discCode);
+    if (!inp) return;
+    var name = inp.value.trim();
+    if (!name) { inp.focus(); return; }
+    btAjax({bt_action:'save_section', bt_id:btId, disc_id:discId, name:name}, function(res) {
+        if (res.ok) {
+            inp.value = '';
+            var panel = document.getElementById('bt-panel-' + discCode);
+            var addRow = inp.parentElement;
+            if (panel && addRow) {
+                var sectHtml = document.createElement('div');
+                sectHtml.id  = 'bt-sect-' + res.sect_id;
+                sectHtml.className = 'bt-sect';
+                sectHtml.innerHTML =
+                    '<div class="bt-sect-hdr" onclick="btToggleSect(' + res.sect_id + ')">' +
+                    '<span class="bt-sect-title" id="bt-sect-title-' + res.sect_id + '">' + btEscHtml(res.name) + '</span>' +
+                    '<div class="actions" onclick="event.stopPropagation()">' +
+                    '<button class="btn btn-o btn-xs" onclick="btRenameSection(' + res.sect_id + ',\'' + btEscHtmlJs(res.name) + '\')">Rename</button> ' +
+                    '<button class="btn btn-r btn-xs" onclick="btDeleteSection(' + res.sect_id + ',\'' + btEscHtmlJs(res.name) + '\')">Delete</button>' +
+                    '</div>' +
+                    '<span id="bt-sect-toggle-' + res.sect_id + '" style="color:#475569;font-size:11px;margin-left:6px">▼</span>' +
+                    '</div>' +
+                    '<div class="bt-sect-body" id="bt-sect-body-' + res.sect_id + '">' +
+                    '<table class="bt-item-table"><thead><tr><th style="width:40%">Description</th><th>Unit</th><th class="num-right">Qty</th><th class="num-right">Rate (IDR)</th><th style="width:110px">Actions</th></tr></thead>' +
+                    '<tbody id="bt-items-body-' + res.sect_id + '"><tr id="bt-empty-' + res.sect_id + '"><td colspan="5" style="color:#475569;font-size:12px;text-align:center;padding:12px">No items yet — add one below.</td></tr></tbody></table>' +
+                    '<div class="bt-add-area" id="bt-add-area-' + res.sect_id + '">' +
+                    '<button class="btn btn-p btn-sm" onclick="btShowAddItem(' + res.sect_id + ')">+ Add Item</button>' +
+                    '<div id="bt-add-form-' + res.sect_id + '" style="display:none"><div class="bt-add-form">' +
+                    '<div class="bt-edit-grid">' +
+                    '<div class="fg"><label>Description *</label><input type="text" id="bt-add-name-' + res.sect_id + '" placeholder="Item description"></div>' +
+                    '<div class="fg"><label>Unit *</label><select id="bt-add-unit-' + res.sect_id + '">' + _btUnitOptions + '</select></div>' +
+                    '<div class="fg"><label>Qty</label><input type="number" id="bt-add-qty-' + res.sect_id + '" value="1" min="0" step="0.001"></div>' +
+                    '<div class="fg"><label>Rate (IDR)</label><input type="number" id="bt-add-rate-' + res.sect_id + '" value="0" min="0" step="1000"></div>' +
+                    '</div>' +
+                    '<div style="display:flex;gap:8px"><button class="btn btn-p btn-sm" onclick="btSaveNewItem(' + res.sect_id + ',' + btId + ')">Save Item</button> <button class="btn btn-o btn-sm" onclick="btHideAddItem(' + res.sect_id + ')">Cancel</button></div>' +
+                    '</div></div></div>' +
+                    '</div>';
+                panel.insertBefore(sectHtml, addRow);
+            }
+        } else { alert(res.msg || 'Error creating section.'); }
+    });
+}
+function btRenameSection(sectId, currentName) {
+    var newName = prompt('New section name:', currentName);
+    if (!newName || !newName.trim()) return;
+    btAjax({bt_action:'save_section', sect_id:sectId, name:newName.trim()}, function(res) {
+        if (res.ok) {
+            var t = document.getElementById('bt-sect-title-' + sectId);
+            if (t) t.textContent = newName.trim();
+        } else { alert(res.msg || 'Error renaming.'); }
+    });
+}
+function btDeleteSection(sectId, name) {
+    if (!confirm('Delete section "' + name + '" and all its items?')) return;
+    btAjax({bt_action:'delete_section', sect_id:sectId}, function(res) {
+        if (res.ok) {
+            var el = document.getElementById('bt-sect-' + sectId);
+            if (el) el.remove();
+        } else { alert(res.msg || 'Error deleting.'); }
+    });
+}
+
+// Pre-built unit options HTML for dynamically created sections
+var _btUnitOptions = (function() {
+    var units = <?php
+        $uo2 = [];
+        foreach ($units_list as $u) { $uo2[] = ['id' => (int)$u['id'], 'code' => htmlspecialchars($u['code'], ENT_QUOTES)]; }
+        echo json_encode($uo2);
+    ?>;
+    var html = '';
+    for (var i = 0; i < units.length; i++) { html += '<option value="' + units[i].id + '">' + units[i].code + '</option>'; }
+    return html;
+})();
+</script>
+
+<?php endif; ?>
 
 <?php
 // ═══════════════════════════════════════════════════════════════════════
