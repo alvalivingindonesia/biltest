@@ -405,7 +405,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action && in_array($action, $ajaxA
             $item_id    = (int)($_POST['item_id']   ?? 0);
             $section_id = (int)($_POST['section_id']  ?? 0);
             $name       = trim($_POST['name']         ?? '');
-            $unit_id    = (int)($_POST['unit_id']     ?? '');
+            $unit_id    = trim($_POST['unit_id']     ?? '');
             $quantity   = (float)($_POST['quantity']  ?? 0);
             $rate       = (float)($_POST['rate']      ?? 0);
             $tpl_id     = (int)($_POST['tpl_id']      ?? 0) ?: null;
