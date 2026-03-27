@@ -197,42 +197,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // ══════════════════════════════════════════════════════════════
-        // TEMPLATES
+        // GROUPS
         // ══════════════════════════════════════════════════════════════
-        if ($section === 'templates' && $action === 'save') {
-            $discipline_id   = (int)($_POST['discipline_id'] ?? 0);
-            $section_name    = trim($_POST['section_name'] ?? '');
-            $name            = trim($_POST['name'] ?? '');
-            $description     = trim($_POST['description'] ?? '');
-            $default_unit_id = (int)($_POST['default_unit_id'] ?? 0);
-            $is_active       = isset($_POST['is_active']) ? 1 : 0;
-            $tier            = trim($_POST['tier'] ?? '');
-            $group_type      = trim($_POST['group_type'] ?? '');
-
-            if ($id) {
-                $db->prepare("UPDATE rab_item_templates SET discipline_id=?, section_name=?, name=?, description=?, default_unit_id=?, is_active=?, tier=?, group_type=? WHERE id=?")
-                   ->execute([$discipline_id, $section_name, $name, $description ?: null, $default_unit_id, $is_active, $tier ?: null, $group_type ?: null, $id]);
-                $_SESSION['flash'] = 'Template updated successfully.';
-            } else {
-                $db->prepare("INSERT INTO rab_item_templates (discipline_id, section_name, name, description, default_unit_id, is_active, tier, group_type) VALUES (?,?,?,?,?,?,?,?)")
-                   ->execute([$discipline_id, $section_name, $name, $description ?: null, $default_unit_id, $is_active, $tier ?: null, $group_type ?: null]);
-                $_SESSION['flash'] = 'Template created successfully.';
+        if ($section === 'groups' && $action === 'save') {
+            $name       = trim($_POST['name'] ?? '');
+            $old_name   = trim($_POST['old_name'] ?? '');
+            $sort_order = (int)($_POST['sort_order'] ?? 0);
+            if (!$name) {
+                $_SESSION['flash'] = 'Error: Group name is required.';
+                header('Location: rab.php?s=groups');
+                exit;
             }
-            header('Location: rab.php?s=templates');
+            if ($id && $old_name) {
+                // Rename: update table and all materials using old name
+                $db->prepare("UPDATE rab_groups SET name=?, sort_order=? WHERE id=?")->execute([$name, $sort_order, $id]);
+                $db->prepare("UPDATE rab_materials SET group_type=? WHERE group_type=?")->execute([$name, $old_name]);
+                $_SESSION['flash'] = 'Group renamed successfully.';
+            } else {
+                $db->prepare("INSERT IGNORE INTO rab_groups (name, sort_order) VALUES (?,?)")->execute([$name, $sort_order]);
+                $_SESSION['flash'] = 'Group added.';
+            }
+            header('Location: rab.php?s=groups');
             exit;
         }
 
-        if ($section === 'templates' && $action === 'delete') {
-            $del_id = (int)($_POST['del_id'] ?? 0);
-            $used = $db->prepare("SELECT COUNT(*) FROM rab_items WHERE item_template_id=?");
-            $used->execute([$del_id]);
-            if ($used->fetchColumn() > 0) {
-                $_SESSION['flash'] = 'Error: Cannot delete — template is in use by RAB items.';
-            } else {
-                $db->prepare("DELETE FROM rab_item_templates WHERE id=?")->execute([$del_id]);
-                $_SESSION['flash'] = 'Template deleted.';
-            }
-            header('Location: rab.php?s=templates');
+        if ($section === 'groups' && $action === 'delete') {
+            $del_id   = (int)($_POST['del_id']   ?? 0);
+            $del_name = trim($_POST['del_name']   ?? '');
+            $db->prepare("UPDATE rab_materials SET group_type=NULL WHERE group_type=?")->execute([$del_name]);
+            $db->prepare("DELETE FROM rab_groups WHERE id=?")->execute([$del_id]);
+            $_SESSION['flash'] = 'Group deleted and removed from all materials.';
+            header('Location: rab.php?s=groups');
             exit;
         }
 
@@ -423,11 +418,22 @@ if (isset($_SESSION['flash'])) {
 // ─── PRE-FETCH COMMON DATA ────────────────────────────────────────────
 $db = get_db();
 
+// Ensure rab_groups table exists and is seeded from materials
+try {
+    $db->exec("CREATE TABLE IF NOT EXISTS rab_groups (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        sort_order INT NOT NULL DEFAULT 0,
+        UNIQUE KEY uq_rab_group_name (name)
+    )");
+    $db->exec("INSERT IGNORE INTO rab_groups (name) SELECT DISTINCT group_type FROM rab_materials WHERE group_type IS NOT NULL AND group_type != ''");
+} catch (Exception $e) {}
+
 // Counts for nav badges
-$mat_count = 0; $tpl_count = 0; $preset_count = 0; $unit_count = 0; $btpl_count = 0;
+$mat_count = 0; $grp_count = 0; $preset_count = 0; $unit_count = 0; $btpl_count = 0;
 try {
     $mat_count    = $db->query("SELECT COUNT(*) FROM rab_materials")->fetchColumn();
-    $tpl_count    = $db->query("SELECT COUNT(*) FROM rab_item_templates")->fetchColumn();
+    $grp_count    = $db->query("SELECT COUNT(*) FROM rab_groups")->fetchColumn();
     $preset_count = $db->query("SELECT COUNT(*) FROM rab_calculator_presets")->fetchColumn();
     $unit_count   = $db->query("SELECT COUNT(*) FROM rab_units")->fetchColumn();
     $btpl_count   = $db->query("SELECT COUNT(*) FROM rab_build_templates")->fetchColumn();
@@ -593,8 +599,8 @@ select option{background:#1e293b}
         <a href="?s=units" class="<?= $section === 'units' ? 'active' : '' ?>">
             Units <span class="nav-badge"><?= $unit_count ?></span>
         </a>
-        <a href="?s=templates" class="<?= $section === 'templates' ? 'active' : '' ?>">
-            Templates <span class="nav-badge"><?= $tpl_count ?></span>
+        <a href="?s=groups" class="<?= $section === 'groups' ? 'active' : '' ?>">
+            Groups <span class="nav-badge"><?= $grp_count ?></span>
         </a>
         <a href="?s=presets" class="<?= $section === 'presets' ? 'active' : '' ?>">
             Presets <span class="nav-badge"><?= $preset_count ?></span>
@@ -638,9 +644,9 @@ if ($section === 'dashboard'):
         </a>
     </div>
     <div class="stat">
-        <a href="?s=templates">
-            <div class="stat-n"><?= $tpl_count ?></div>
-            <div class="stat-l">Item Templates</div>
+        <a href="?s=groups">
+            <div class="stat-n"><?= $grp_count ?></div>
+            <div class="stat-l">Groups</div>
         </a>
     </div>
     <div class="stat">
@@ -731,10 +737,10 @@ try {
             <div class="ql-label">Add Unit</div>
             <div class="ql-sub">m², kg, pcs…</div>
         </a>
-        <a href="?s=templates&a=edit" class="ql">
-            <div class="ql-icon">📋</div>
-            <div class="ql-label">Add Template</div>
-            <div class="ql-sub">Line item template</div>
+        <a href="?s=groups" class="ql">
+            <div class="ql-icon">🗂️</div>
+            <div class="ql-label">Manage Groups</div>
+            <div class="ql-sub">Material groups</div>
         </a>
         <a href="?s=presets&a=edit" class="ql">
             <div class="ql-icon">⚙️</div>
@@ -1165,223 +1171,120 @@ elseif ($section === 'units' && $action === 'edit'):
 
 <?php
 // ═══════════════════════════════════════════════════════════════════════
-// TEMPLATES — LIST
+// GROUPS — LIST / MANAGE
 // ═══════════════════════════════════════════════════════════════════════
-elseif ($section === 'templates' && $action === 'list'):
-    $f_disc = trim($_GET['fd'] ?? '');
-    $q      = trim($_GET['q'] ?? '');
-
-    $where = '1=1'; $params = [];
-    if ($f_disc) {
-        $where .= ' AND t.discipline_id = ?';
-        $params[] = (int)$f_disc;
-    }
-    if ($q) {
-        $where .= ' AND (t.name LIKE ? OR t.section_name LIKE ?)';
-        $params[] = "%{$q}%";
-        $params[] = "%{$q}%";
-    }
-
-    $stmt = $db->prepare("
-        SELECT t.*, d.name AS discipline_name, d.code AS disc_code, u.code AS unit_code
-        FROM rab_item_templates t
-        LEFT JOIN rab_disciplines d ON d.id = t.discipline_id
-        LEFT JOIN rab_units u ON u.id = t.default_unit_id
-        WHERE {$where}
-        ORDER BY d.name, t.section_name, t.name
-    ");
-    $stmt->execute($params);
-    $rows = $stmt->fetchAll();
-
-    // Group by discipline + section
-    $grouped = [];
-    foreach ($rows as $r) {
-        $disc_key = $r['disc_code'] . '—' . $r['discipline_name'];
-        $sec_key  = $r['section_name'];
-        $grouped[$disc_key][$sec_key][] = $r;
-    }
+elseif ($section === 'groups'):
+    $groups_rows = $db->query("
+        SELECT g.*, COUNT(m.id) AS mat_count
+        FROM rab_groups g
+        LEFT JOIN rab_materials m ON m.group_type = g.name
+        GROUP BY g.id
+        ORDER BY g.sort_order, g.name
+    ")->fetchAll();
 ?>
 
 <div class="page-header">
-    <h1>Item Templates <span style="color:#64748b;font-size:1rem;font-weight:400">(<?= count($rows) ?>)</span></h1>
-    <a href="?s=templates&a=edit" class="btn btn-p">+ Add Template</a>
+    <h1>Material Groups <span style="color:#64748b;font-size:1rem;font-weight:400">(<?= count($groups_rows) ?>)</span></h1>
 </div>
 
-<form class="search-bar" method="GET">
-    <input type="hidden" name="s" value="templates">
-    <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" placeholder="Search name / section…" style="max-width:260px">
-    <select name="fd" style="min-width:160px">
-        <option value="">All Disciplines</option>
-        <?php foreach ($disciplines_list as $d): ?>
-            <option value="<?= $d['id'] ?>" <?= (string)$f_disc === (string)$d['id'] ? 'selected' : '' ?>><?= htmlspecialchars($d['name']) ?></option>
-        <?php endforeach; ?>
-    </select>
-    <button class="btn btn-o" type="submit">Filter</button>
-    <?php if ($q || $f_disc): ?><a href="?s=templates" class="btn btn-o">Clear</a><?php endif; ?>
-</form>
+<p style="color:#94a3b8;font-size:13px;margin-bottom:18px">Groups organise materials into categories used when adding items to a RAB. Renaming a group automatically updates all materials assigned to it.</p>
+
+<!-- Add group form -->
+<div class="card" style="max-width:520px;margin-bottom:20px">
+    <h3 style="margin-bottom:14px">Add New Group</h3>
+    <form method="POST" action="?s=groups&a=save" style="display:flex;gap:8px;align-items:flex-end">
+        <div class="fg" style="flex:1">
+            <label>Group Name *</label>
+            <input type="text" name="name" required placeholder="e.g. Flooring, Roofing, Labour…">
+        </div>
+        <div class="fg" style="width:90px">
+            <label>Sort Order</label>
+            <input type="number" name="sort_order" value="0" min="0" step="1">
+        </div>
+        <button type="submit" class="btn btn-p" style="flex-shrink:0;margin-bottom:1px">+ Add</button>
+    </form>
+</div>
 
 <div class="card" style="padding:0;overflow:hidden">
 <table>
     <thead>
         <tr>
-            <th>Discipline / Section</th>
-            <th>Name</th>
-            <th>Default Unit</th>
-            <th>Status</th>
-            <th style="width:120px">Actions</th>
+            <th>Group Name</th>
+            <th>Materials</th>
+            <th>Sort Order</th>
+            <th style="width:200px">Actions</th>
         </tr>
     </thead>
     <tbody>
-    <?php if (empty($rows)): ?>
-        <tr><td colspan="5" style="text-align:center;color:#475569;padding:24px">No templates found.</td></tr>
-    <?php else: ?>
-    <?php foreach ($grouped as $disc_key => $sections): ?>
-        <?php
-        $disc_parts = explode('—', $disc_key, 2);
-        $disc_code  = $disc_parts[0];
-        $disc_name  = $disc_parts[1] ?? $disc_key;
-        ?>
-        <tr>
-            <td colspan="5" class="disc-header"><?= htmlspecialchars($disc_code) ?> — <?= htmlspecialchars($disc_name) ?></td>
-        </tr>
-        <?php foreach ($sections as $sec_name => $items): ?>
-        <?php $first_in_sec = true; ?>
-        <?php foreach ($items as $r): ?>
-        <tr>
-            <td style="color:#64748b;font-size:12px;padding-left:20px">
-                <?php if ($first_in_sec): ?>
-                    <?= htmlspecialchars($sec_name) ?>
-                <?php else: ?>
-                    &nbsp;
-                <?php endif; ?>
-                <?php $first_in_sec = false; ?>
-            </td>
-            <td><?= htmlspecialchars($r['name']) ?></td>
-            <td><code style="color:#94a3b8;font-size:12px"><?= htmlspecialchars($r['unit_code'] ?? '—') ?></code></td>
-            <td>
-                <?php if ($r['is_active']): ?>
-                    <span class="badge b-green">Active</span>
-                <?php else: ?>
-                    <span class="badge b-red">Inactive</span>
-                <?php endif; ?>
-            </td>
-            <td>
-                <div class="actions">
-                    <a href="?s=templates&a=edit&id=<?= $r['id'] ?>" class="btn btn-o btn-sm">Edit</a>
-                    <form method="POST" action="?s=templates&a=delete" style="display:inline" onsubmit="return confirm('Delete template: <?= htmlspecialchars(addslashes($r['name'])) ?>?')">
-                        <input type="hidden" name="del_id" value="<?= $r['id'] ?>">
-                        <button type="submit" class="btn btn-r btn-sm">Del</button>
-                    </form>
-                </div>
-            </td>
-        </tr>
-        <?php endforeach; ?>
-        <?php endforeach; ?>
+    <?php foreach ($groups_rows as $g): ?>
+    <tr id="grp-row-<?= $g['id'] ?>">
+        <td id="grp-name-<?= $g['id'] ?>"><strong><?= htmlspecialchars($g['name']) ?></strong></td>
+        <td>
+            <a href="?s=materials&fc=<?= urlencode($g['name']) ?>" style="color:#0c7c84;font-size:12px">
+                <?= (int)$g['mat_count'] ?> material<?= $g['mat_count'] != 1 ? 's' : '' ?> →
+            </a>
+        </td>
+        <td style="color:#64748b"><?= (int)$g['sort_order'] ?></td>
+        <td>
+            <div class="actions">
+                <button class="btn btn-o btn-sm" onclick="grpStartEdit(<?= $g['id'] ?>, '<?= htmlspecialchars(addslashes($g['name'])) ?>', <?= (int)$g['sort_order'] ?>)">Edit</button>
+                <form method="POST" action="?s=groups&a=delete" style="display:inline"
+                      onsubmit="return confirm('Delete group \'<?= htmlspecialchars(addslashes($g['name'])) ?>\'? This will un-assign it from <?= (int)$g['mat_count'] ?> material(s).')">
+                    <input type="hidden" name="del_id"   value="<?= $g['id'] ?>">
+                    <input type="hidden" name="del_name" value="<?= htmlspecialchars($g['name']) ?>">
+                    <button type="submit" class="btn btn-r btn-sm">Delete</button>
+                </form>
+            </div>
+        </td>
+    </tr>
     <?php endforeach; ?>
+    <?php if (empty($groups_rows)): ?>
+    <tr><td colspan="4" style="text-align:center;color:#475569;padding:24px">No groups yet. Add your first group above.</td></tr>
     <?php endif; ?>
     </tbody>
 </table>
 </div>
 
-<?php
-// ═══════════════════════════════════════════════════════════════════════
-// TEMPLATES — CREATE / EDIT FORM
-// ═══════════════════════════════════════════════════════════════════════
-elseif ($section === 'templates' && $action === 'edit'):
-    $row = ['id' => 0, 'discipline_id' => '', 'section_name' => '', 'name' => '', 'description' => '', 'default_unit_id' => '', 'is_active' => 1, 'tier' => '', 'group_type' => ''];
-    $group_types_list = $db->query("SELECT DISTINCT group_type FROM rab_item_templates WHERE group_type IS NOT NULL AND group_type != '' ORDER BY group_type")->fetchAll(PDO::FETCH_COLUMN);
-    if ($id) {
-        $stmt = $db->prepare("SELECT * FROM rab_item_templates WHERE id=?");
-        $stmt->execute([$id]);
-        $found = $stmt->fetch();
-        if ($found) $row = $found;
-    }
-    $is_edit = (bool)$row['id'];
-?>
-
-<a href="?s=templates" class="back-link">← Back to Templates</a>
-<div class="page-header">
-    <h1><?= $is_edit ? 'Edit Template' : 'New Item Template' ?></h1>
+<!-- Inline edit modal (hidden) -->
+<div id="grp-edit-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:none;align-items:center;justify-content:center">
+    <div style="background:#1e293b;border-radius:10px;padding:28px;width:420px;border:1px solid rgba(255,255,255,.1)">
+        <h3 style="margin-bottom:18px">Edit Group</h3>
+        <form method="POST" id="grp-edit-form">
+            <input type="hidden" name="old_name" id="grp-edit-old-name">
+            <div class="form-grid" style="margin-bottom:16px">
+                <div class="fg span2">
+                    <label>Group Name *</label>
+                    <input type="text" name="name" id="grp-edit-name" required>
+                </div>
+                <div class="fg">
+                    <label>Sort Order</label>
+                    <input type="number" name="sort_order" id="grp-edit-sort" min="0" step="1">
+                </div>
+            </div>
+            <div style="display:flex;gap:8px">
+                <button type="submit" class="btn btn-p">Save Changes</button>
+                <button type="button" class="btn btn-o" onclick="grpCloseEdit()">Cancel</button>
+            </div>
+        </form>
+    </div>
 </div>
 
-<div class="card" style="max-width:740px">
-    <form method="POST" action="?s=templates&a=save<?= $is_edit ? '&id=' . $id : '' ?>">
-        <div class="form-grid">
-            <div class="fg">
-                <label>Discipline *</label>
-                <select name="discipline_id" required>
-                    <option value="">— Select discipline —</option>
-                    <?php foreach ($disciplines_list as $d): ?>
-                        <option value="<?= $d['id'] ?>" <?= (string)$row['discipline_id'] === (string)$d['id'] ? 'selected' : '' ?>>
-                            <?= htmlspecialchars($d['code']) ?> — <?= htmlspecialchars($d['name']) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-
-            <div class="fg">
-                <label>Section Name *</label>
-                <input type="text" name="section_name" value="<?= htmlspecialchars($row['section_name']) ?>" required placeholder="e.g. Foundations, Walls, Floors…">
-            </div>
-
-            <div class="fg span2">
-                <label>Template Name *</label>
-                <input type="text" name="name" value="<?= htmlspecialchars($row['name']) ?>" required placeholder="e.g. Reinforced Concrete Columns">
-            </div>
-
-            <div class="fg span2">
-                <label>Description</label>
-                <textarea name="description" placeholder="Optional notes or specification details…"><?= htmlspecialchars($row['description'] ?? '') ?></textarea>
-            </div>
-
-            <div class="fg">
-                <label>Default Unit *</label>
-                <select name="default_unit_id" required>
-                    <option value="">— Select unit —</option>
-                    <?php foreach ($units_list as $u): ?>
-                        <option value="<?= $u['id'] ?>" <?= (string)$row['default_unit_id'] === (string)$u['id'] ? 'selected' : '' ?>>
-                            <?= htmlspecialchars($u['code']) ?> — <?= htmlspecialchars($u['name']) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-
-            <div class="fg">
-                <label>Tier</label>
-                <select name="tier">
-                    <option value="" <?= empty($row['tier']) ? 'selected' : '' ?>>— No tier —</option>
-                    <option value="economy" <?= ($row['tier'] ?? '') === 'economy' ? 'selected' : '' ?>>Economy</option>
-                    <option value="standard" <?= ($row['tier'] ?? '') === 'standard' ? 'selected' : '' ?>>Standard</option>
-                    <option value="premium" <?= ($row['tier'] ?? '') === 'premium' ? 'selected' : '' ?>>Premium</option>
-                </select>
-            </div>
-
-            <div class="fg">
-                <label>Group Type</label>
-                <input type="text" name="group_type" value="<?= htmlspecialchars($row['group_type'] ?? '') ?>" placeholder="e.g. Ceilings, Floors, Walls…" list="tpl-group-types-dl">
-                <datalist id="tpl-group-types-dl">
-                    <?php foreach ($group_types_list as $gt): ?>
-                    <option value="<?= htmlspecialchars($gt) ?>">
-                    <?php endforeach; ?>
-                </datalist>
-                <small style="color:#64748b;font-size:11px;margin-top:3px">Used for context-aware material filtering in RAB Tool</small>
-            </div>
-
-            <div class="fg">
-                <label>Status</label>
-                <label class="ck" style="margin-top:10px">
-                    <input type="checkbox" name="is_active" value="1" <?= $row['is_active'] ? 'checked' : '' ?>>
-                    <span>Active (visible when building RABs)</span>
-                </label>
-            </div>
-        </div>
-
-        <div style="margin-top:20px;display:flex;gap:10px">
-            <button type="submit" class="btn btn-p"><?= $is_edit ? 'Save Changes' : 'Create Template' ?></button>
-            <a href="?s=templates" class="btn btn-o">Cancel</a>
-        </div>
-    </form>
-</div>
+<script>
+function grpStartEdit(id, name, sort) {
+    document.getElementById('grp-edit-old-name').value = name;
+    document.getElementById('grp-edit-name').value     = name;
+    document.getElementById('grp-edit-sort').value     = sort;
+    document.getElementById('grp-edit-form').action    = '?s=groups&a=save&id=' + id;
+    var ov = document.getElementById('grp-edit-overlay');
+    ov.style.display = 'flex';
+}
+function grpCloseEdit() {
+    document.getElementById('grp-edit-overlay').style.display = 'none';
+}
+document.getElementById('grp-edit-overlay').addEventListener('click', function(e) {
+    if (e.target === this) grpCloseEdit();
+});
+</script>
 
 <?php
 // ═══════════════════════════════════════════════════════════════════════

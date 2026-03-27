@@ -1329,7 +1329,6 @@ elseif ($view === 'rab' && $id > 0):
     $rab_row = null;
     $proj_row = null;
     $totals_row = null;
-    $templates_by_disc = [];
     try {
         $rq = $db->prepare("SELECT r.*, p.name AS project_name, p.id AS project_id FROM rab_rabs r JOIN rab_projects p ON p.id=r.project_id WHERE r.id=?");
         $rq->execute([$id]);
@@ -1339,11 +1338,6 @@ elseif ($view === 'rab' && $id > 0):
             $tq->execute([$id]);
             $totals_row = $tq->fetch();
 
-            // Templates for add-item dropdown
-            $tmpl_q = $db->query("SELECT t.*, d.code AS disc_code, u.code AS unit_code FROM rab_item_templates t JOIN rab_disciplines d ON d.id=t.discipline_id JOIN rab_units u ON u.id=t.default_unit_id WHERE t.is_active=1 ORDER BY d.code, t.section_name, t.name");
-            foreach ($tmpl_q->fetchAll() as $tmpl) {
-                $templates_by_disc[$tmpl['disc_code']][] = $tmpl;
-            }
         }
     } catch (Exception $e) { $msg = 'Error: ' . $e->getMessage(); }
 
@@ -1409,7 +1403,6 @@ elseif ($view === 'rab' && $id > 0):
     $sects_q = $db->prepare("SELECT s.* FROM rab_sections s WHERE s.rab_id=? AND s.discipline_id=? ORDER BY s.order_index");
     $sects_q->execute([$id, $disc['id']]);
     $sections = $sects_q->fetchAll();
-    $disc_templates = $templates_by_disc[$disc['code']] ?? [];
 ?>
 <div class="tab-panel<?= $first_disc ? ' active' : '' ?>" id="tab-<?= $disc['code'] ?>">
 
@@ -1466,15 +1459,6 @@ elseif ($view === 'rab' && $id > 0):
                 <button class="btn btn-p btn-sm" onclick="showAddItem(<?= $sect['id'] ?>, <?= $disc['id'] ?>, '<?= addslashes(he($sect['name'])) ?>')">+ Add Item</button>
                 <div id="add-form-<?= $sect['id'] ?>" style="display:none;margin-top:10px">
                     <div class="item-edit-form">
-                        <div style="margin-bottom:8px">
-                            <label style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px">From Template</label>
-                            <select id="tpl-select-<?= $sect['id'] ?>" onchange="applyTemplate(<?= $sect['id'] ?>, this.value)" style="margin-bottom:8px">
-                                <option value="">— Custom (no template) —</option>
-                                <?php foreach ($disc_templates as $tmpl): ?>
-                                <option value="<?= $tmpl['id'] ?>" data-name="<?= he($tmpl['name']) ?>" data-unit="<?= $tmpl['default_unit_id'] ?>"><?= he($tmpl['section_name']) ?> › <?= he($tmpl['name']) ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
                         <!-- Material Picker (context-aware) -->
                         <div style="margin-bottom:8px">
                             <label style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px">Material / Item Reference</label>
@@ -2245,25 +2229,11 @@ function applyMaterial(sectId) {
     if (unitEl && matUnit) unitEl.value = matUnit;
 }
 
-function applyTemplate(sectId, tplId) {
-    if (!tplId) return;
-    var sel  = document.getElementById('tpl-select-' + sectId);
-    var opt  = sel ? sel.options[sel.selectedIndex] : null;
-    if (!opt) return;
-    var nameEl = document.getElementById('add-name-' + sectId);
-    var unitEl = document.getElementById('add-unit-' + sectId);
-    if (nameEl) nameEl.value = opt.getAttribute('data-name') || '';
-    if (unitEl) unitEl.value = opt.getAttribute('data-unit') || '';
-}
-
 function saveNewItem(sectId) {
     var name   = document.getElementById('add-name-' + sectId).value.trim();
     var unitId = document.getElementById('add-unit-' + sectId).value;
     var qty    = document.getElementById('add-qty-' + sectId).value;
     var rate   = document.getElementById('add-rate-' + sectId).value;
-    var tplSel = document.getElementById('tpl-select-' + sectId);
-    var tplId  = tplSel ? tplSel.value : '';
-
     if (!name || !unitId) { alert('Name and unit are required.'); return; }
 
     ajaxPost({
@@ -2272,8 +2242,7 @@ function saveNewItem(sectId) {
         name: name,
         unit_id: unitId,
         quantity: qty,
-        rate: rate,
-        tpl_id: tplId
+        rate: rate
     }, function(res) {
         if (res.ok) {
             var tbody = document.getElementById('items-body-' + sectId);
@@ -2301,8 +2270,6 @@ function saveNewItem(sectId) {
             document.getElementById('add-name-' + sectId).value = '';
             document.getElementById('add-qty-' + sectId).value  = '1';
             document.getElementById('add-rate-' + sectId).value = '0';
-            var tplEl = document.getElementById('tpl-select-' + sectId);
-            if (tplEl) tplEl.value = '';
             var matEl = document.getElementById('mat-select-' + sectId);
             if (matEl) matEl.value = '';
             hideAddItem(sectId);
