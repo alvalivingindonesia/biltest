@@ -1422,24 +1422,36 @@
 .card-wa-btn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md);
+  gap: 5px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--radius-full);
   color: #25d366;
   background: color-mix(in oklab, #25d366 8%, transparent);
-  border: none;
+  border: 1px solid color-mix(in oklab, #25d366 20%, transparent);
   cursor: pointer;
   text-decoration: none;
   margin-left: auto;
-  transition: background var(--transition-interactive);
+  transition: background var(--transition-interactive), border-color var(--transition-interactive);
   flex-shrink: 0;
+  white-space: nowrap;
 }
 .card-wa-btn:hover {
   background: color-mix(in oklab, #25d366 15%, transparent);
+  border-color: color-mix(in oklab, #25d366 35%, transparent);
+  text-decoration: none;
 }
 .card-wa-btn:active {
   background: color-mix(in oklab, #25d366 22%, transparent);
+}
+.card-wa-btn svg {
+  flex-shrink: 0;
+}
+.card-wa-num {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
 }
 
 /* Project-specific: status indicator */
