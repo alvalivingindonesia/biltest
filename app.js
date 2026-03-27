@@ -759,8 +759,14 @@ async function renderHome(el) {
 // =====================================================
 
 function renderProviderCard(b, index = 0) {
-  const waBtn = b.whatsapp_number
-    ? `<a href="https://wa.me/${b.whatsapp_number}" target="_blank" rel="noopener noreferrer" class="card-wa-btn" aria-label="WhatsApp ${b.name}">${iconWhatsApp()}</a>`
+  // Use whatsapp_number if available, otherwise fall back to phone
+  const rawWa  = b.whatsapp_number || b.phone || '';
+  const waNum  = formatWhatsAppNumber(rawWa);                            // normalised: +62xxxxxxxxxx
+  const waHref = waNum ? 'https://wa.me/' + waNum.replace(/[^0-9]/g, '') : '';
+  // Display format: +62 8xxxxxxxxx  (readable, still international)
+  const waDisp = waNum.startsWith('+62') ? '+62\u00a0' + waNum.slice(3) : waNum;
+  const waBtn  = waHref
+    ? `<a href="${waHref}" target="_blank" rel="noopener noreferrer" class="card-wa-btn" aria-label="WhatsApp ${b.name}">${iconWhatsApp()}<span class="card-wa-num">${waDisp}</span></a>`
     : '';
 
   const badge = b.badge
