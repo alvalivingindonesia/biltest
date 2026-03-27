@@ -117,6 +117,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
+        if ($section === 'materials' && $action === 'copy') {
+            $src_id = (int)($_POST['src_id'] ?? 0);
+            $src = $db->prepare("SELECT * FROM rab_materials WHERE id=?");
+            $src->execute([$src_id]);
+            $orig = $src->fetch();
+            if ($orig) {
+                $db->prepare("INSERT INTO rab_materials (name, unit_id, default_rate, currency, category, is_composite, tier, group_type) VALUES (?,?,?,?,?,?,?,?)")
+                   ->execute(['Copy of ' . $orig['name'], $orig['unit_id'], $orig['default_rate'], $orig['currency'], $orig['category'], $orig['is_composite'], $orig['tier'], $orig['group_type']]);
+                $new_id = $db->lastInsertId();
+                header('Location: rab.php?s=materials&a=edit&id=' . $new_id);
+                exit;
+            }
+            header('Location: rab.php?s=materials');
+            exit;
+        }
+
         if ($section === 'materials' && $action === 'delete') {
             $del_id = (int)($_POST['del_id'] ?? 0);
             // Safety check: not used in rab_item_materials or rab_item_template_materials
@@ -747,18 +763,16 @@ elseif ($section === 'materials' && $action === 'list'):
 .mat-sort-th{cursor:pointer;user-select:none;white-space:nowrap}
 .mat-sort-th:hover{color:#e2e8f0}
 .mat-sort-ind{font-size:10px;color:#0c7c84;margin-left:3px}
-.mat-filter-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
-.mat-filter-bar input[type=text]{max-width:240px}
-.mat-filter-bar select{min-width:140px}
+.mat-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:nowrap}
+.mat-toolbar h1{margin:0;flex-shrink:0}
+.mat-toolbar input[type=text]{width:180px;flex-shrink:0}
+.mat-toolbar select{width:130px;flex-shrink:0}
 </style>
 
-<div class="page-header">
+<div class="mat-toolbar">
     <h1>Materials <span id="mat-count" style="color:#64748b;font-size:1rem;font-weight:400">(<?= count($rows) ?>)</span></h1>
-    <a href="?s=materials&a=edit" class="btn btn-p">+ Add Material</a>
-</div>
-
-<div class="mat-filter-bar">
-    <input type="text"  id="mat-q"  placeholder="Search by name…"   oninput="matDebounceFetch()">
+    <div style="flex:1"></div>
+    <input type="text" id="mat-q" placeholder="Search name…" oninput="matDebounceFetch()">
     <select id="mat-fc" onchange="matFetch()">
         <option value="">All Categories</option>
         <?php foreach ($cats as $c): ?><option value="<?= htmlspecialchars($c) ?>"><?= htmlspecialchars($c) ?></option><?php endforeach; ?>
@@ -774,7 +788,8 @@ elseif ($section === 'materials' && $action === 'list'):
         <?php foreach ($groups as $g): ?><option value="<?= htmlspecialchars($g) ?>"><?= htmlspecialchars($g) ?></option><?php endforeach; ?>
     </select>
     <button class="btn btn-o btn-sm" onclick="matClear()">Clear</button>
-    <span id="mat-loading" style="display:none;color:#64748b;font-size:12px;margin-left:4px">Loading…</span>
+    <span id="mat-loading" style="display:none;color:#64748b;font-size:12px">Loading…</span>
+    <a href="?s=materials&a=edit" class="btn btn-p btn-sm" style="flex-shrink:0">+ Add Material</a>
 </div>
 
 <div class="card" style="padding:0;overflow:hidden">
@@ -788,7 +803,7 @@ elseif ($section === 'materials' && $action === 'list'):
             <th class="mat-sort-th" onclick="matSortBy('tier')">Tier <span class="mat-sort-ind" id="mat-si-tier"></span></th>
             <th class="mat-sort-th" onclick="matSortBy('group')">Group <span class="mat-sort-ind" id="mat-si-group"></span></th>
             <th>Type</th>
-            <th style="width:120px">Actions</th>
+            <th style="width:160px">Actions</th>
         </tr>
     </thead>
     <tbody id="mat-tbody">
@@ -806,6 +821,10 @@ elseif ($section === 'materials' && $action === 'list'):
         <td>
             <div class="actions">
                 <a href="?s=materials&a=edit&id=<?= $r['id'] ?>" class="btn btn-o btn-sm">Edit</a>
+                <form method="POST" action="?s=materials&a=copy" style="display:inline">
+                    <input type="hidden" name="src_id" value="<?= $r['id'] ?>">
+                    <button type="submit" class="btn btn-o btn-sm">Copy</button>
+                </form>
                 <form method="POST" action="?s=materials&a=delete" style="display:inline" onsubmit="return confirm('Delete material: <?= htmlspecialchars(addslashes($r['name'])) ?>?')">
                     <input type="hidden" name="del_id" value="<?= $r['id'] ?>">
                     <button type="submit" class="btn btn-r btn-sm">Del</button>
@@ -931,6 +950,9 @@ function matRenderRows(rows) {
         html += '<td>' + typeHtml + '</td>';
         html += '<td><div class="actions">' +
             '<a href="?s=materials&a=edit&id=' + r.id + '" class="btn btn-o btn-sm">Edit</a>' +
+            '<form method="POST" action="?s=materials&a=copy" style="display:inline">' +
+            '<input type="hidden" name="src_id" value="' + r.id + '">' +
+            '<button type="submit" class="btn btn-o btn-sm">Copy</button></form>' +
             '<form method="POST" action="?s=materials&a=delete" style="display:inline" onsubmit="return confirm(\'Delete material: ' + matEscJs(r.name) + '?\')">' +
             '<input type="hidden" name="del_id" value="' + r.id + '">' +
             '<button type="submit" class="btn btn-r btn-sm">Del</button></form>' +
