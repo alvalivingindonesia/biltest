@@ -657,12 +657,12 @@ function handle_clone_rab() {
     $items = $db->prepare("SELECT * FROM rab_items WHERE section_id IN (SELECT id FROM rab_sections WHERE rab_id=?) ORDER BY order_index");
     $items->execute(array($rab_id));
     $item_rows = $items->fetchAll();
-    $ins_item = $db->prepare("INSERT INTO rab_items (section_id, item_template_id, name, description, unit_id, quantity, rate, total, order_index) VALUES (?,?,?,?,?,?,?,?,?)");
+    $ins_item = $db->prepare("INSERT INTO rab_items (section_id, name, description, unit_id, quantity, rate, total, order_index) VALUES (?,?,?,?,?,?,?,?)");
     foreach ($item_rows as $it) {
         $new_sect = isset($sect_map[$it['section_id']]) ? $sect_map[$it['section_id']] : null;
         if (!$new_sect) continue;
         $ins_item->execute(array(
-            $new_sect, $it['item_template_id'], $it['name'], $it['description'],
+            $new_sect, $it['name'], $it['description'],
             $it['unit_id'], $it['quantity'], $it['rate'], $it['total'], $it['order_index']
         ));
     }
@@ -780,22 +780,20 @@ function handle_save_item() {
     $unit_id    = (int)(isset($data['unit_id']) ? $data['unit_id'] : 0);
     $quantity   = (float)(isset($data['quantity']) ? $data['quantity'] : 0);
     $rate       = (float)(isset($data['rate']) ? $data['rate'] : 0);
-    $tpl_id     = (int)(isset($data['tpl_id']) ? $data['tpl_id'] : 0);
-    if ($tpl_id === 0) $tpl_id = null;
     $total      = $quantity * $rate;
 
     if (!$name || !$unit_id || !$section_id) json_error(400, 'Missing required fields.');
 
     $db = get_db();
     if ($item_id) {
-        $db->prepare("UPDATE rab_items SET name=?, unit_id=?, quantity=?, rate=?, total=?, item_template_id=? WHERE id=?")
-           ->execute(array($name, $unit_id, $quantity, $rate, $total, $tpl_id, $item_id));
+        $db->prepare("UPDATE rab_items SET name=?, unit_id=?, quantity=?, rate=?, total=? WHERE id=?")
+           ->execute(array($name, $unit_id, $quantity, $rate, $total, $item_id));
     } else {
         $max_idx = $db->prepare("SELECT COALESCE(MAX(order_index),0)+1 FROM rab_items WHERE section_id=?");
         $max_idx->execute(array($section_id));
         $oidx = (int)$max_idx->fetchColumn();
-        $db->prepare("INSERT INTO rab_items (section_id, item_template_id, name, unit_id, quantity, rate, total, order_index) VALUES (?,?,?,?,?,?,?,?)")
-           ->execute(array($section_id, $tpl_id, $name, $unit_id, $quantity, $rate, $total, $oidx));
+        $db->prepare("INSERT INTO rab_items (section_id, name, unit_id, quantity, rate, total, order_index) VALUES (?,?,?,?,?,?,?)")
+           ->execute(array($section_id, $name, $unit_id, $quantity, $rate, $total, $oidx));
         $item_id = (int)$db->lastInsertId();
     }
 
