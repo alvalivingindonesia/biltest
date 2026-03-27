@@ -50,6 +50,42 @@ $action  = $_GET['a'] ?? 'list';
 $id      = (int)($_GET['id'] ?? 0);
 $msg     = '';
 
+// ─── MATERIALS AJAX (GET, early exit) ────────────────────────────────
+if ($section === 'materials' && $action === 'mat_ajax') {
+    header('Content-Type: application/json; charset=utf-8');
+    $db = get_db();
+
+    $q      = trim($_GET['q']    ?? '');
+    $f_cat  = trim($_GET['fc']   ?? '');
+    $f_tier = trim($_GET['ft']   ?? '');
+    $f_grp  = trim($_GET['fg']   ?? '');
+    $sort   = $_GET['sort']      ?? 'name';
+    $dir    = strtoupper($_GET['dir'] ?? 'ASC') === 'DESC' ? 'DESC' : 'ASC';
+
+    $sort_map = [
+        'name'     => 'm.name',
+        'rate'     => 'm.default_rate',
+        'category' => 'm.category',
+        'tier'     => 'm.tier',
+        'group'    => 'm.group_type',
+        'unit'     => 'u.code',
+    ];
+    $sort_col = $sort_map[$sort] ?? 'm.name';
+
+    $where = '1=1'; $params = [];
+    if ($q)      { $where .= ' AND m.name LIKE ?';      $params[] = "%{$q}%"; }
+    if ($f_cat)  { $where .= ' AND m.category = ?';     $params[] = $f_cat; }
+    if ($f_tier) { $where .= ' AND m.tier = ?';         $params[] = $f_tier; }
+    if ($f_grp)  { $where .= ' AND m.group_type = ?';   $params[] = $f_grp; }
+
+    $stmt = $db->prepare("SELECT m.*, u.code AS unit_code FROM rab_materials m LEFT JOIN rab_units u ON u.id=m.unit_id WHERE {$where} ORDER BY {$sort_col} {$dir}, m.name ASC LIMIT 500");
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll();
+
+    echo json_encode(['ok' => true, 'count' => count($rows), 'rows' => $rows]);
+    exit;
+}
+
 // ─── HANDLE POST ACTIONS ─────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $db = get_db();
@@ -697,87 +733,76 @@ try {
 // MATERIALS — LIST
 // ═══════════════════════════════════════════════════════════════════════
 elseif ($section === 'materials' && $action === 'list'):
-    $q      = trim($_GET['q'] ?? '');
-    $f_cat  = trim($_GET['fc'] ?? '');
-
-    $where = '1=1'; $params = [];
-    if ($q) {
-        $where .= ' AND m.name LIKE ?';
-        $params[] = "%{$q}%";
-    }
-    if ($f_cat) {
-        $where .= ' AND m.category = ?';
-        $params[] = $f_cat;
-    }
-
-    $stmt = $db->prepare("SELECT m.*, u.code AS unit_code FROM rab_materials m LEFT JOIN rab_units u ON u.id=m.unit_id WHERE {$where} ORDER BY m.category, m.name LIMIT 500");
-    $stmt->execute($params);
+    // Initial full load
+    $stmt = $db->prepare("SELECT m.*, u.code AS unit_code FROM rab_materials m LEFT JOIN rab_units u ON u.id=m.unit_id ORDER BY m.category, m.name LIMIT 500");
+    $stmt->execute();
     $rows = $stmt->fetchAll();
 
-    // Get distinct categories for filter
-    $cats = $db->query("SELECT DISTINCT category FROM rab_materials WHERE category IS NOT NULL ORDER BY category")->fetchAll(PDO::FETCH_COLUMN);
-    // Group types for reference
-    $group_types_list = $db->query("SELECT DISTINCT group_type FROM rab_materials WHERE group_type IS NOT NULL AND group_type != '' ORDER BY group_type")->fetchAll(PDO::FETCH_COLUMN);
+    // Filter dropdown options
+    $cats   = $db->query("SELECT DISTINCT category   FROM rab_materials WHERE category   IS NOT NULL AND category   != '' ORDER BY category")->fetchAll(PDO::FETCH_COLUMN);
+    $groups = $db->query("SELECT DISTINCT group_type FROM rab_materials WHERE group_type IS NOT NULL AND group_type != '' ORDER BY group_type")->fetchAll(PDO::FETCH_COLUMN);
 ?>
 
+<style>
+.mat-sort-th{cursor:pointer;user-select:none;white-space:nowrap}
+.mat-sort-th:hover{color:#e2e8f0}
+.mat-sort-ind{font-size:10px;color:#0c7c84;margin-left:3px}
+.mat-filter-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.mat-filter-bar input[type=text]{max-width:240px}
+.mat-filter-bar select{min-width:140px}
+</style>
+
 <div class="page-header">
-    <h1>Materials <span style="color:#64748b;font-size:1rem;font-weight:400">(<?= count($rows) ?>)</span></h1>
+    <h1>Materials <span id="mat-count" style="color:#64748b;font-size:1rem;font-weight:400">(<?= count($rows) ?>)</span></h1>
     <a href="?s=materials&a=edit" class="btn btn-p">+ Add Material</a>
 </div>
 
-<form class="search-bar" method="GET">
-    <input type="hidden" name="s" value="materials">
-    <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" placeholder="Search by name…" style="max-width:300px">
-    <select name="fc" style="min-width:160px">
+<div class="mat-filter-bar">
+    <input type="text"  id="mat-q"  placeholder="Search by name…"   oninput="matDebounceFetch()">
+    <select id="mat-fc" onchange="matFetch()">
         <option value="">All Categories</option>
-        <?php foreach ($cats as $c): ?>
-            <option value="<?= htmlspecialchars($c) ?>" <?= $f_cat === $c ? 'selected' : '' ?>><?= htmlspecialchars($c) ?></option>
-        <?php endforeach; ?>
+        <?php foreach ($cats as $c): ?><option value="<?= htmlspecialchars($c) ?>"><?= htmlspecialchars($c) ?></option><?php endforeach; ?>
     </select>
-    <button class="btn btn-o" type="submit">Filter</button>
-    <?php if ($q || $f_cat): ?><a href="?s=materials" class="btn btn-o">Clear</a><?php endif; ?>
-</form>
+    <select id="mat-ft" onchange="matFetch()">
+        <option value="">All Tiers</option>
+        <option value="economy">Economy</option>
+        <option value="standard">Standard</option>
+        <option value="premium">Premium</option>
+    </select>
+    <select id="mat-fg" onchange="matFetch()">
+        <option value="">All Groups</option>
+        <?php foreach ($groups as $g): ?><option value="<?= htmlspecialchars($g) ?>"><?= htmlspecialchars($g) ?></option><?php endforeach; ?>
+    </select>
+    <button class="btn btn-o btn-sm" onclick="matClear()">Clear</button>
+    <span id="mat-loading" style="display:none;color:#64748b;font-size:12px;margin-left:4px">Loading…</span>
+</div>
 
 <div class="card" style="padding:0;overflow:hidden">
 <table>
     <thead>
         <tr>
-            <th>Name</th>
-            <th>Unit</th>
-            <th>Default Rate</th>
-            <th>Category</th>
-            <th>Tier</th>
-            <th>Group</th>
+            <th class="mat-sort-th" onclick="matSortBy('name')">Name <span class="mat-sort-ind" id="mat-si-name"></span></th>
+            <th class="mat-sort-th" onclick="matSortBy('unit')">Unit <span class="mat-sort-ind" id="mat-si-unit"></span></th>
+            <th class="mat-sort-th" onclick="matSortBy('rate')" style="text-align:right">Rate <span class="mat-sort-ind" id="mat-si-rate"></span></th>
+            <th class="mat-sort-th" onclick="matSortBy('category')">Category <span class="mat-sort-ind" id="mat-si-category"></span></th>
+            <th class="mat-sort-th" onclick="matSortBy('tier')">Tier <span class="mat-sort-ind" id="mat-si-tier"></span></th>
+            <th class="mat-sort-th" onclick="matSortBy('group')">Group <span class="mat-sort-ind" id="mat-si-group"></span></th>
             <th>Type</th>
             <th style="width:120px">Actions</th>
         </tr>
     </thead>
-    <tbody>
-    <?php foreach ($rows as $r): ?>
+    <tbody id="mat-tbody">
+    <?php foreach ($rows as $r):
+        $tc = ['economy'=>'#22c55e','standard'=>'#3b82f6','premium'=>'#a855f7'][$r['tier'] ?? ''] ?? '#64748b';
+    ?>
     <tr>
         <td><?= htmlspecialchars($r['name']) ?></td>
         <td><code style="color:#94a3b8;font-size:12px"><?= htmlspecialchars($r['unit_code'] ?? '—') ?></code></td>
-        <td class="idr"><?= fmt_idr($r['default_rate']) ?></td>
-        <td><?= $r['category'] ? htmlspecialchars($r['category']) : '<span style="color:#475569">—</span>' ?></td>
-        <td>
-            <?php if (!empty($r['tier'])): ?>
-                <?php
-                $tier_colors = array('economy' => '#22c55e', 'standard' => '#3b82f6', 'premium' => '#a855f7');
-                $tc = isset($tier_colors[$r['tier']]) ? $tier_colors[$r['tier']] : '#64748b';
-                ?>
-                <span class="badge" style="background:<?= $tc ?>20;color:<?= $tc ?>;border:1px solid <?= $tc ?>40"><?= ucfirst($r['tier']) ?></span>
-            <?php else: ?>
-                <span style="color:#475569">—</span>
-            <?php endif; ?>
-        </td>
+        <td class="idr" style="text-align:right"><?= fmt_idr($r['default_rate']) ?></td>
+        <td><?= !empty($r['category']) ? htmlspecialchars($r['category']) : '<span style="color:#475569">—</span>' ?></td>
+        <td><?= !empty($r['tier']) ? '<span class="badge" style="background:'.$tc.'20;color:'.$tc.';border:1px solid '.$tc.'40">'.ucfirst($r['tier']).'</span>' : '<span style="color:#475569">—</span>' ?></td>
         <td style="font-size:12px;color:#94a3b8"><?= !empty($r['group_type']) ? htmlspecialchars($r['group_type']) : '<span style="color:#475569">—</span>' ?></td>
-        <td>
-            <?php if ($r['is_composite']): ?>
-                <span class="badge b-blue">Composite</span>
-            <?php else: ?>
-                <span class="badge" style="background:#1e293b;color:#64748b;border:1px solid rgba(255,255,255,.1)">Simple</span>
-            <?php endif; ?>
-        </td>
+        <td><?= $r['is_composite'] ? '<span class="badge b-blue">Composite</span>' : '<span class="badge" style="background:#1e293b;color:#64748b;border:1px solid rgba(255,255,255,.1)">Simple</span>' ?></td>
         <td>
             <div class="actions">
                 <a href="?s=materials&a=edit&id=<?= $r['id'] ?>" class="btn btn-o btn-sm">Edit</a>
@@ -795,6 +820,126 @@ elseif ($section === 'materials' && $action === 'list'):
     </tbody>
 </table>
 </div>
+
+<script>
+var matSortCol = '';
+var matSortDir = 'ASC';
+var matDebounceTimer = null;
+var matTierColors = {economy:'#22c55e', standard:'#3b82f6', premium:'#a855f7'};
+
+function matDebounceFetch() {
+    clearTimeout(matDebounceTimer);
+    matDebounceTimer = setTimeout(matFetch, 280);
+}
+
+function matFetch() {
+    var q  = document.getElementById('mat-q').value;
+    var fc = document.getElementById('mat-fc').value;
+    var ft = document.getElementById('mat-ft').value;
+    var fg = document.getElementById('mat-fg').value;
+    var url = 'rab.php?s=materials&a=mat_ajax'
+        + '&q='    + encodeURIComponent(q)
+        + '&fc='   + encodeURIComponent(fc)
+        + '&ft='   + encodeURIComponent(ft)
+        + '&fg='   + encodeURIComponent(fg)
+        + '&sort=' + encodeURIComponent(matSortCol)
+        + '&dir='  + matSortDir;
+
+    document.getElementById('mat-loading').style.display = '';
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.onload = function() {
+        document.getElementById('mat-loading').style.display = 'none';
+        try {
+            var res = JSON.parse(xhr.responseText);
+            if (res.ok) {
+                matRenderRows(res.rows);
+                document.getElementById('mat-count').textContent = '(' + res.count + ')';
+            }
+        } catch(e) {}
+    };
+    xhr.onerror = function() { document.getElementById('mat-loading').style.display = 'none'; };
+    xhr.send();
+}
+
+function matSortBy(col) {
+    if (matSortCol === col) {
+        matSortDir = matSortDir === 'ASC' ? 'DESC' : 'ASC';
+    } else {
+        matSortCol = col;
+        matSortDir = 'ASC';
+    }
+    matUpdateSortIndicators();
+    matFetch();
+}
+
+function matClear() {
+    document.getElementById('mat-q').value  = '';
+    document.getElementById('mat-fc').value = '';
+    document.getElementById('mat-ft').value = '';
+    document.getElementById('mat-fg').value = '';
+    matSortCol = '';
+    matSortDir = 'ASC';
+    matUpdateSortIndicators();
+    matFetch();
+}
+
+function matUpdateSortIndicators() {
+    ['name','unit','rate','category','tier','group'].forEach(function(c) {
+        var el = document.getElementById('mat-si-' + c);
+        if (!el) return;
+        el.textContent = (c === matSortCol) ? (matSortDir === 'ASC' ? ' ▲' : ' ▼') : '';
+    });
+}
+
+function matEsc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function matEscJs(s) {
+    return String(s || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+}
+function matFmtIdr(v) {
+    return 'Rp\u00a0' + Math.round(parseFloat(v) || 0).toLocaleString('id-ID');
+}
+
+function matRenderRows(rows) {
+    var tbody = document.getElementById('mat-tbody');
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#475569;padding:24px">No materials found.</td></tr>';
+        return;
+    }
+    var html = '';
+    for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        var tier = r.tier || '';
+        var tc = matTierColors[tier] || '#64748b';
+        var tierHtml = tier
+            ? '<span class="badge" style="background:' + tc + '20;color:' + tc + ';border:1px solid ' + tc + '40">' + tier.charAt(0).toUpperCase() + tier.slice(1) + '</span>'
+            : '<span style="color:#475569">\u2014</span>';
+        var typeHtml = (r.is_composite == 1)
+            ? '<span class="badge b-blue">Composite</span>'
+            : '<span class="badge" style="background:#1e293b;color:#64748b;border:1px solid rgba(255,255,255,.1)">Simple</span>';
+        var catHtml  = r.category   ? matEsc(r.category)   : '<span style="color:#475569">\u2014</span>';
+        var grpHtml  = r.group_type ? matEsc(r.group_type) : '<span style="color:#475569">\u2014</span>';
+        html += '<tr>';
+        html += '<td>' + matEsc(r.name) + '</td>';
+        html += '<td><code style="color:#94a3b8;font-size:12px">' + matEsc(r.unit_code || '\u2014') + '</code></td>';
+        html += '<td class="idr" style="text-align:right">' + matFmtIdr(r.default_rate) + '</td>';
+        html += '<td>' + catHtml + '</td>';
+        html += '<td>' + tierHtml + '</td>';
+        html += '<td style="font-size:12px;color:#94a3b8">' + grpHtml + '</td>';
+        html += '<td>' + typeHtml + '</td>';
+        html += '<td><div class="actions">' +
+            '<a href="?s=materials&a=edit&id=' + r.id + '" class="btn btn-o btn-sm">Edit</a>' +
+            '<form method="POST" action="?s=materials&a=delete" style="display:inline" onsubmit="return confirm(\'Delete material: ' + matEscJs(r.name) + '?\')">' +
+            '<input type="hidden" name="del_id" value="' + r.id + '">' +
+            '<button type="submit" class="btn btn-r btn-sm">Del</button></form>' +
+            '</div></td>';
+        html += '</tr>';
+    }
+    tbody.innerHTML = html;
+}
+</script>
 
 <?php
 // ═══════════════════════════════════════════════════════════════════════
