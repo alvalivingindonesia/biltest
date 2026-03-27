@@ -766,7 +766,7 @@ function renderProviderCard(b, index = 0) {
   // Display format: +62 8xxxxxxxxx  (readable, still international)
   const waDisp = waNum.startsWith('+62') ? '+62\u00a0' + waNum.slice(3) : waNum;
   const waBtn  = waHref
-    ? `<a href="${waHref}" target="_blank" rel="noopener noreferrer" class="card-wa-btn" aria-label="WhatsApp ${b.name}">${iconWhatsApp()}<span class="card-wa-num">${waDisp}</span></a>`
+    ? `<a href="${waHref}" target="_blank" rel="noopener noreferrer" class="card-wa-btn" aria-label="WhatsApp ${b.name}">${iconWhatsApp()}</a>`
     : '';
 
   const badge = b.badge
