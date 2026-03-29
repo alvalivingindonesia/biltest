@@ -5066,6 +5066,8 @@ async function renderGetQuotes(el, params = {}) {
   let quoteItems = [{ id: 1, material: '', quantity: '', info: '' }];
   let nextId = 2;
   const contactedStores = new Set(JSON.parse(localStorage.getItem('gq_contacted') || '[]'));
+  let useBahasa = false;
+  let delivery = { enabled: false, location: '', mapsLink: '' };
 
   const filters = {
     area: params.area || '',
@@ -5078,20 +5080,45 @@ async function renderGetQuotes(el, params = {}) {
   };
 
   function buildMessage() {
-    const valid = quoteItems.filter(i => i.material.trim());
+    const valid = quoteItems.filter(function(i) { return i.material.trim(); });
     if (!valid.length) return '';
-    const lines = valid.map((item, idx) => {
-      let line = (idx + 1) + '. ' + item.material.trim();
-      if (item.quantity.trim()) line += ', Qty: ' + item.quantity.trim();
-      if (item.info.trim()) line += ', ' + item.info.trim();
+
+    const lines = valid.map(function(item) {
+      let line = '* ' + item.material.trim();
+      if (item.quantity.trim()) line += '  --  Qty : ' + item.quantity.trim();
+      if (item.info.trim()) line += '  --  ' + item.info.trim();
       return line;
     }).join('\n');
-    return 'Hello, please can you provide a quote for the following items:\n\n' + lines + '\n\nThank you.';
+
+    var msg;
+    if (useBahasa) {
+      msg = 'Halo, mohon dapat memberikan penawaran harga untuk barang-barang berikut:\n\n' + lines;
+      if (delivery.enabled && delivery.location.trim()) {
+        msg += '\n\nMohon informasikan apakah barang-barang tersebut dapat dikirim ke "' + delivery.location.trim() + '"';
+        if (delivery.mapsLink.trim()) msg += '\nLokasi Google Maps: ' + delivery.mapsLink.trim();
+        msg += '\nJika iya, mohon informasikan biaya pengiriman (jika ada)';
+      }
+      msg += '\n\nTerima kasih.';
+    } else {
+      msg = 'Hello, please can you provide a quote for the following items:\n\n' + lines;
+      if (delivery.enabled && delivery.location.trim()) {
+        msg += '\n\nPlease advise if the items can be delivered to "' + delivery.location.trim() + '"';
+        if (delivery.mapsLink.trim()) msg += '\nGoogle Maps location: ' + delivery.mapsLink.trim();
+        msg += '\nIf yes, please advise on the delivery fee (if any)';
+      }
+      msg += '\n\nThank you.';
+    }
+    return msg;
   }
 
   function syncMessage() {
     const ta = el.querySelector('#gq-message');
     if (ta && !ta.dataset.manualEdit) ta.value = buildMessage();
+  }
+
+  function syncDeliveryFields() {
+    const fields = el.querySelector('#gq-delivery-fields');
+    if (fields) fields.style.display = delivery.enabled ? '' : 'none';
   }
 
   function renderItems() {
@@ -5120,6 +5147,12 @@ async function renderGetQuotes(el, params = {}) {
   }
 
   function renderStores(stores) {
+    // Only show stores that have a usable WhatsApp/phone number
+    stores = stores.filter(function(b) {
+      const raw = b.whatsapp_number || b.phone || '';
+      return formatWhatsAppNumber(raw).replace(/[^0-9]/g, '').length >= 8;
+    });
+
     const listEl = el.querySelector('#gq-store-list');
     const countEl = el.querySelector('#gq-results-count');
     if (!listEl) return;
@@ -5154,8 +5187,7 @@ async function renderGetQuotes(el, params = {}) {
         )
         + '</div>'
         + '<div class="gq-store-info">'
-        + '<div class="gq-store-name">'
-        + trustedBadge
+        + '<div class="gq-store-name">' + trustedBadge
         + '<a href="#provider/' + b.slug + '" onclick="navigate(\'provider/' + b.slug + '\');return false;">' + escHtml(b.name) + '</a>'
         + '</div>'
         + '<div class="gq-store-meta">' + iconMapPin() + ' ' + formatAreaLabel(b.area) + (catLabel ? ' \u00b7 ' + catLabel : '') + '</div>'
@@ -5163,15 +5195,12 @@ async function renderGetQuotes(el, params = {}) {
         + '</div>'
         + '<div class="gq-store-actions">'
         + (contacted ? '<span class="gq-sent-badge">\u2713 Sent</span>' : '')
-        + (waNum
-          ? '<button class="gq-wa-btn' + (contacted ? ' gq-wa-btn--contacted' : '') + '"'
-            + ' data-wa="' + waNum + '" data-store-id="' + b.id + '"'
-            + ' onclick="gqOpenWhatsApp(this)"'
-            + ' title="Send quote request via WhatsApp" aria-label="WhatsApp ' + escHtml(b.name) + '">'
-            + iconWhatsApp()
-            + '</button>'
-          : '<span class="gq-wa-btn gq-wa-btn--disabled" title="No WhatsApp number">' + iconWhatsApp() + '</span>'
-        )
+        + '<button class="gq-wa-btn' + (contacted ? ' gq-wa-btn--contacted' : '') + '"'
+        + ' data-wa="' + waNum + '" data-store-id="' + b.id + '"'
+        + ' onclick="gqOpenWhatsApp(this)"'
+        + ' title="Send quote request via WhatsApp" aria-label="WhatsApp ' + escHtml(b.name) + '">'
+        + iconWhatsApp()
+        + '</button>'
         + '</div>'
         + '</div>';
     }).join('');
@@ -5253,17 +5282,50 @@ async function renderGetQuotes(el, params = {}) {
           </button>
         </div>
 
-        <!-- Step 2: Message -->
+        <!-- Step 2: Delivery -->
         <div class="gq-step">
           <div class="gq-step-header">
             <div class="gq-step-num">2</div>
+            <div>
+              <h2 class="gq-step-title">Delivery details</h2>
+              <p class="gq-step-desc">Optionally request delivery and include your location.</p>
+            </div>
+          </div>
+          <label class="gq-checkbox-label">
+            <input type="checkbox" id="gq-delivery-toggle" onchange="gqToggleDelivery(this.checked)">
+            <span>Request delivery to a specific location</span>
+          </label>
+          <div id="gq-delivery-fields" style="display:none;">
+            <div class="gq-delivery-grid">
+              <div class="gq-field">
+                <label class="gq-field-label" for="gq-delivery-location">Delivery location</label>
+                <input type="text" id="gq-delivery-location" class="gq-input" placeholder="e.g. Kuta, Lombok"
+                       oninput="gqUpdateDelivery('location', this.value)">
+              </div>
+              <div class="gq-field">
+                <label class="gq-field-label" for="gq-delivery-maps">Google Maps link <span class="gq-field-optional">(optional)</span></label>
+                <input type="url" id="gq-delivery-maps" class="gq-input" placeholder="https://maps.google.com/..."
+                       oninput="gqUpdateDelivery('mapsLink', this.value)">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3: Message -->
+        <div class="gq-step">
+          <div class="gq-step-header">
+            <div class="gq-step-num">3</div>
             <div>
               <h2 class="gq-step-title">Your quote message</h2>
               <p class="gq-step-desc">Auto-generated from your items above &mdash; edit freely.</p>
             </div>
           </div>
+          <label class="gq-checkbox-label" style="margin-bottom:var(--space-4);">
+            <input type="checkbox" id="gq-bahasa-toggle" onchange="gqToggleBahasa(this.checked)">
+            <span>Send the message using Bahasa Indonesia</span>
+          </label>
           <div class="gq-message-wrap">
-            <textarea id="gq-message" class="gq-textarea" rows="8"
+            <textarea id="gq-message" class="gq-textarea" rows="10"
                       placeholder="Add items above to generate your message\u2026"
                       oninput="this.dataset.manualEdit='1'"></textarea>
             <div class="gq-message-actions">
@@ -5275,10 +5337,10 @@ async function renderGetQuotes(el, params = {}) {
           </div>
         </div>
 
-        <!-- Step 3: Suppliers -->
+        <!-- Step 4: Suppliers -->
         <div class="gq-step">
           <div class="gq-step-header">
-            <div class="gq-step-num">3</div>
+            <div class="gq-step-num">4</div>
             <div>
               <h2 class="gq-step-title">Select suppliers</h2>
               <p class="gq-step-desc">Click the WhatsApp button next to any supplier to open WhatsApp with your message ready to send.</p>
@@ -5380,6 +5442,24 @@ async function renderGetQuotes(el, params = {}) {
   window.gqRemoveItem = function(id) {
     quoteItems = quoteItems.filter(function(i) { return i.id !== id; });
     renderItems();
+    syncMessage();
+  };
+
+  window.gqToggleBahasa = function(checked) {
+    useBahasa = checked;
+    const ta = el.querySelector('#gq-message');
+    if (ta) { delete ta.dataset.manualEdit; }
+    syncMessage();
+  };
+
+  window.gqToggleDelivery = function(checked) {
+    delivery.enabled = checked;
+    syncDeliveryFields();
+    syncMessage();
+  };
+
+  window.gqUpdateDelivery = function(field, value) {
+    delivery[field] = value;
     syncMessage();
   };
 

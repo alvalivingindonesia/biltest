@@ -5770,6 +5770,51 @@ a.rab-tool-card:hover {
   white-space: nowrap;
 }
 
+/* ---- Checkbox label ---- */
+.gq-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text);
+  user-select: none;
+}
+.gq-checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+/* ---- Delivery fields ---- */
+.gq-delivery-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+.gq-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.gq-field-label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+.gq-field-optional {
+  font-weight: 400;
+  font-style: italic;
+  color: var(--color-text-faint);
+}
+@media (max-width: 600px) {
+  .gq-delivery-grid { grid-template-columns: 1fr; }
+}
+
 /* ---- Responsive ---- */
 @media (max-width: 700px) {
   .gq-step {
