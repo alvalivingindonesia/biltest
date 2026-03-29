@@ -534,6 +534,14 @@ async function router() {
     }
   });
 
+  // Propagate active state up to .nav-dropdown parent <li>
+  document.querySelectorAll('.nav-dropdown').forEach(function(dd) {
+    var hasActive = !!dd.querySelector('.nav-dropdown-menu a.active');
+    dd.classList.toggle('active', hasActive);
+    var toggle = dd.querySelector('.nav-dropdown-toggle');
+    if (toggle) toggle.classList.toggle('active', hasActive);
+  });
+
   // Render
   const main = document.getElementById('main-content');
   if (!main) return;
@@ -571,6 +579,7 @@ async function router() {
     case 'rab-project': await renderRABProjectDetail(view, segments[1]); break;
     case 'rab-editor': await renderRABEditor(view, segments[1]); break;
     case 'get-quotes': await renderGetQuotes(view, params); break;
+    case 'search': await renderSearch(view, params); break;
     default: await renderHome(view);
   }
 
@@ -2706,20 +2715,32 @@ function initSearch() {
     if (!wrapper.contains(e.target)) dropdown.classList.remove('visible');
   });
 
-  // Mobile search: Enter key navigates to directory with search
+  // Hero search: Enter key navigates to the search results page
+  const heroSearch = document.getElementById('hero-search-input');
+  if (heroSearch) {
+    heroSearch.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        const q = heroSearch.value.trim();
+        if (q.length >= 1) {
+          navigate('search?q=' + encodeURIComponent(q));
+          heroSearch.value = '';
+        }
+      }
+    });
+  }
+
+  // Mobile search: Enter key navigates to the search results page
   const mobileSearch = document.getElementById('mobile-search');
   if (mobileSearch) {
-    mobileSearch.addEventListener('keydown', (e) => {
+    mobileSearch.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') {
         const q = mobileSearch.value.trim();
-        if (q.length >= 2) {
-          // Close mobile menu
+        if (q.length >= 1) {
           const mobileMenu = document.getElementById('mobile-menu');
           const hamburger = document.getElementById('hamburger-btn');
           if (mobileMenu) mobileMenu.classList.remove('open');
           if (hamburger) hamburger.setAttribute('aria-expanded', 'false');
-          // Navigate to directory with search
-          window.location.hash = 'directory?search=' + encodeURIComponent(q);
+          navigate('search?q=' + encodeURIComponent(q));
           mobileSearch.value = '';
         }
       }
@@ -4905,6 +4926,134 @@ function renderVerifyResult(el, params) {
       </div>
     </div>
   `;
+}
+
+// =====================================================
+// RENDER: SEARCH RESULTS
+// =====================================================
+
+async function renderSearch(el, params = {}) {
+  const initialQuery = params.q ? decodeURIComponent(params.q) : '';
+  let debounceTimer = null;
+
+  function renderSearchCard(item) {
+    var typeMap = {
+      provider:  { label: 'Provider',  nav: 'provider/'  + item.slug },
+      developer: { label: 'Developer', nav: 'developer/' + item.slug },
+      project:   { label: 'Project',   nav: 'project/'   + item.slug },
+      listing:   { label: 'Property',  nav: 'listing/'   + item.slug },
+    };
+    var cfg = typeMap[item.type] || { label: item.type, nav: item.type + '/' + item.slug };
+    var ratingHtml = item.google_rating
+      ? '<span class="gq-star">\u2605</span><span class="gq-rating-val">' + parseFloat(item.google_rating).toFixed(1) + '</span>'
+      : '';
+    return '<article class="search-card" onclick="navigate(\'' + cfg.nav + '\')">'
+      + '<div class="search-card-top">'
+      + '<span class="search-card-type search-card-type--' + item.type + '">' + cfg.label + '</span>'
+      + (ratingHtml ? '<div class="search-card-rating">' + ratingHtml + '</div>' : '')
+      + '</div>'
+      + '<h3 class="search-card-name"><a href="#' + cfg.nav + '" onclick="navigate(\'' + cfg.nav + '\');return false;">' + escHtml(item.name) + '</a></h3>'
+      + (item.excerpt ? '<p class="search-card-excerpt">' + escHtml(item.excerpt) + '</p>' : '')
+      + '<div class="search-card-footer">'
+      + '<span class="search-card-link">View ' + cfg.label.toLowerCase() + ' ' + iconArrowRight() + '</span>'
+      + '</div>'
+      + '</article>';
+  }
+
+  async function doSearch(q) {
+    var resultsEl = el.querySelector('#search-results');
+    var countEl   = el.querySelector('#search-count');
+    if (!resultsEl) return;
+
+    if (!q || q.length < 2) {
+      resultsEl.innerHTML = '<div class="search-hint"><p>Type at least 2 characters to search providers, developers, projects and listings.</p></div>';
+      if (countEl) countEl.innerHTML = '';
+      return;
+    }
+
+    resultsEl.innerHTML = '<div class="gq-loading"><div class="page-loading-spinner" style="width:22px;height:22px;border-width:3px;margin:0;"></div><span>Searching\u2026</span></div>';
+    if (countEl) countEl.innerHTML = '';
+
+    try {
+      var results = await DataLayer.search(q);
+      var providers  = results.filter(function(r) { return r.type === 'provider'; });
+      var developers = results.filter(function(r) { return r.type === 'developer'; });
+      var projects   = results.filter(function(r) { return r.type === 'project'; });
+      var listings   = results.filter(function(r) { return r.type === 'listing'; });
+      var total = results.length;
+
+      if (countEl) {
+        countEl.innerHTML = total > 0
+          ? '<strong>' + total + '</strong> result' + (total !== 1 ? 's' : '') + ' for \u201c' + escHtml(q) + '\u201d'
+          : 'No results for \u201c' + escHtml(q) + '\u201d';
+      }
+
+      if (total === 0) {
+        resultsEl.innerHTML = '<div class="empty-state">'
+          + '<div class="empty-state-icon">' + iconSearch() + '</div>'
+          + '<h3 class="empty-state-title">No results found</h3>'
+          + '<p class="empty-state-desc">Try different keywords, or browse the directory.</p>'
+          + '<a href="#directory" class="btn btn--primary btn--sm" onclick="navigate(\'directory\');return false;">Browse Directory</a>'
+          + '</div>';
+        return;
+      }
+
+      function renderGroup(items, label) {
+        if (!items.length) return '';
+        return '<div class="search-group">'
+          + '<h2 class="search-group-title">' + label + ' <span class="search-group-count">' + items.length + '</span></h2>'
+          + '<div class="search-results-grid">'
+          + items.map(renderSearchCard).join('')
+          + '</div>'
+          + '</div>';
+      }
+
+      resultsEl.innerHTML = ''
+        + renderGroup(providers,  'Providers &amp; Suppliers')
+        + renderGroup(developers, 'Developers')
+        + renderGroup(projects,   'Projects')
+        + renderGroup(listings,   'Property Listings');
+
+    } catch(e) {
+      console.error('Search error:', e);
+      resultsEl.innerHTML = '<div class="empty-state"><p>Search failed. Please try again.</p></div>';
+    }
+  }
+
+  el.innerHTML = `
+    <div class="dir-hero">
+      <div class="container">
+        <h1 class="dir-hero-title">Search</h1>
+        <p class="dir-hero-desc">Search across providers, developers, projects, and property listings.</p>
+      </div>
+    </div>
+    <div class="section">
+      <div class="container">
+        <div class="search-page-bar">
+          <div class="search-page-input-wrap">
+            <svg class="search-page-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="search" id="search-page-input" class="search-page-input"
+                   placeholder="Search providers, projects, listings\u2026"
+                   value="${escHtml(initialQuery)}" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+        <p class="results-count" id="search-count" style="margin-bottom:var(--space-6);min-height:1.4em;"></p>
+        <div id="search-results"></div>
+      </div>
+    </div>
+  `;
+
+  var input = el.querySelector('#search-page-input');
+  if (input) {
+    input.addEventListener('input', function() {
+      var q = this.value.trim();
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(function() { doSearch(q); }, 300);
+    });
+    setTimeout(function() { if (input) input.focus(); }, 80);
+  }
+
+  doSearch(initialQuery);
 }
 
 // =====================================================
