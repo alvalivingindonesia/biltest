@@ -524,6 +524,10 @@ async function router() {
     if (hrefPage === 'about' && page === 'about') {
       a.classList.add('active');
     }
+    // Get Quotes
+    if (hrefPage === 'get-quotes' && page === 'get-quotes') {
+      a.classList.add('active');
+    }
     // Home
     if (hrefPage === 'home' && page === 'home') {
       a.classList.add('active');
@@ -566,6 +570,7 @@ async function router() {
     case 'rab-projects': await renderRABProjects(view); break;
     case 'rab-project': await renderRABProjectDetail(view, segments[1]); break;
     case 'rab-editor': await renderRABEditor(view, segments[1]); break;
+    case 'get-quotes': await renderGetQuotes(view, params); break;
     default: await renderHome(view);
   }
 
@@ -4900,6 +4905,379 @@ function renderVerifyResult(el, params) {
       </div>
     </div>
   `;
+}
+
+// =====================================================
+// RENDER: GET QUOTES
+// =====================================================
+
+async function renderGetQuotes(el, params = {}) {
+  await FilterData.load();
+
+  let quoteItems = [{ id: 1, material: '', quantity: '', info: '' }];
+  let nextId = 2;
+  const contactedStores = new Set(JSON.parse(localStorage.getItem('gq_contacted') || '[]'));
+
+  const filters = {
+    area: params.area || '',
+    group: params.group || 'suppliers_materials',
+    category: params.category || '',
+    languages: params.languages || '',
+    min_rating: params.min_rating || '',
+    trusted: params.trusted || '',
+    sort: params.sort || 'confidence',
+  };
+
+  function buildMessage() {
+    const valid = quoteItems.filter(i => i.material.trim());
+    if (!valid.length) return '';
+    const lines = valid.map((item, idx) => {
+      let line = (idx + 1) + '. ' + item.material.trim();
+      if (item.quantity.trim()) line += ', Qty: ' + item.quantity.trim();
+      if (item.info.trim()) line += ', ' + item.info.trim();
+      return line;
+    }).join('\n');
+    return 'Hello, please can you provide a quote for the following items:\n\n' + lines + '\n\nThank you.';
+  }
+
+  function syncMessage() {
+    const ta = el.querySelector('#gq-message');
+    if (ta && !ta.dataset.manualEdit) ta.value = buildMessage();
+  }
+
+  function renderItems() {
+    const container = el.querySelector('#gq-items');
+    if (!container) return;
+    container.innerHTML = quoteItems.map(function(item, idx) {
+      return '<div class="gq-item-row" data-id="' + item.id + '">'
+        + '<span class="gq-item-num">' + (idx + 1) + '</span>'
+        + '<input type="text" class="gq-input gq-input--material" placeholder="Material (e.g. Mapei Mapeflex 45)"'
+        + ' value="' + escHtml(item.material) + '"'
+        + ' oninput="gqUpdateItem(' + item.id + ', \'material\', this.value)">'
+        + '<input type="text" class="gq-input gq-input--qty" placeholder="Qty"'
+        + ' value="' + escHtml(item.quantity) + '"'
+        + ' oninput="gqUpdateItem(' + item.id + ', \'quantity\', this.value)">'
+        + '<input type="text" class="gq-input gq-input--info" placeholder="Colour, size, spec\u2026"'
+        + ' value="' + escHtml(item.info) + '"'
+        + ' oninput="gqUpdateItem(' + item.id + ', \'info\', this.value)">'
+        + (quoteItems.length > 1
+          ? '<button class="gq-item-remove" onclick="gqRemoveItem(' + item.id + ')" aria-label="Remove item">'
+            + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+            + '</button>'
+          : '<div class="gq-item-remove-placeholder"></div>'
+        )
+        + '</div>';
+    }).join('');
+  }
+
+  function renderStores(stores) {
+    const listEl = el.querySelector('#gq-store-list');
+    const countEl = el.querySelector('#gq-results-count');
+    if (!listEl) return;
+    if (countEl) countEl.innerHTML = '<strong>' + stores.length + '</strong> supplier' + (stores.length !== 1 ? 's' : '') + ' found';
+    if (stores.length === 0) {
+      listEl.innerHTML = '<div class="empty-state"><div class="empty-state-icon">' + iconSearch() + '</div>'
+        + '<h3 class="empty-state-title">No suppliers found</h3>'
+        + '<p class="empty-state-desc">Try adjusting your filters.</p>'
+        + '<button class="btn btn--secondary btn--sm" onclick="gqClearFilters()">Clear filters</button></div>';
+      return;
+    }
+    listEl.innerHTML = stores.map(function(b) {
+      const rawWa = b.whatsapp_number || b.phone || '';
+      const waNum = formatWhatsAppNumber(rawWa).replace(/[^0-9]/g, '');
+      const contacted = contactedStores.has(String(b.id));
+      const ratingHtml = b.google_rating
+        ? '<span class="gq-star">\u2605</span>'
+          + '<span class="gq-rating-val">' + parseFloat(b.google_rating).toFixed(1) + '</span>'
+          + '<span class="gq-review-count">(' + (b.google_review_count || 0) + ' reviews)</span>'
+        : '<span class="gq-no-rating">No rating yet</span>';
+      const catLabel = (b.categories && b.categories.length > 0)
+        ? b.categories.map(function(c) { return formatCategoryLabel(c.key || c); }).join(' \u00b7 ')
+        : formatCategoryLabel(b.category);
+      const thumb = b.logo_url || b.profile_photo_url;
+      const trustedBadge = b.is_trusted ? '<span class="card-badge card-badge--trusted">\u2713 Trusted</span>' : '';
+      return '<div class="gq-store-row' + (contacted ? ' gq-store-row--contacted' : '') + '" data-id="' + b.id + '">'
+        + '<div class="gq-store-avatar">'
+        + (thumb
+          ? '<img src="' + thumb + '" alt="' + escHtml(b.name) + '" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">'
+            + '<div class="gq-store-initials" style="display:none">' + (b.name || 'S').charAt(0).toUpperCase() + '</div>'
+          : '<div class="gq-store-initials">' + (b.name || 'S').charAt(0).toUpperCase() + '</div>'
+        )
+        + '</div>'
+        + '<div class="gq-store-info">'
+        + '<div class="gq-store-name">'
+        + trustedBadge
+        + '<a href="#provider/' + b.slug + '" onclick="navigate(\'provider/' + b.slug + '\');return false;">' + escHtml(b.name) + '</a>'
+        + '</div>'
+        + '<div class="gq-store-meta">' + iconMapPin() + ' ' + formatAreaLabel(b.area) + (catLabel ? ' \u00b7 ' + catLabel : '') + '</div>'
+        + '<div class="gq-store-rating">' + ratingHtml + '</div>'
+        + '</div>'
+        + '<div class="gq-store-actions">'
+        + (contacted ? '<span class="gq-sent-badge">\u2713 Sent</span>' : '')
+        + (waNum
+          ? '<button class="gq-wa-btn' + (contacted ? ' gq-wa-btn--contacted' : '') + '"'
+            + ' data-wa="' + waNum + '" data-store-id="' + b.id + '"'
+            + ' onclick="gqOpenWhatsApp(this)"'
+            + ' title="Send quote request via WhatsApp" aria-label="WhatsApp ' + escHtml(b.name) + '">'
+            + iconWhatsApp()
+            + '</button>'
+          : '<span class="gq-wa-btn gq-wa-btn--disabled" title="No WhatsApp number">' + iconWhatsApp() + '</span>'
+        )
+        + '</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  async function applyFiltersAndRender() {
+    const listEl = el.querySelector('#gq-store-list');
+    if (listEl) listEl.innerHTML = '<div class="gq-loading"><div class="page-loading-spinner" style="width:22px;height:22px;border-width:3px;margin:0;"></div><span>Loading suppliers\u2026</span></div>';
+
+    const apiParams = { per_page: 100 };
+    if (filters.area) {
+      if (filters.area.startsWith('region:')) apiParams.region = filters.area.replace('region:', '');
+      else apiParams.area = filters.area;
+    }
+    if (filters.group) apiParams.group = filters.group;
+    if (filters.category) apiParams.category = filters.category;
+    if (filters.trusted) apiParams.trusted = '1';
+    if (filters.sort === 'rating') { apiParams.sort = 'google_rating'; apiParams.dir = 'DESC'; }
+    else if (filters.sort === 'alpha') { apiParams.sort = 'name'; }
+    else { apiParams.sort = 'google_rating'; apiParams.dir = 'DESC'; }
+
+    try {
+      const res = await DataLayer.getProviders(apiParams);
+      let results = res.data;
+      if (filters.languages === 'english') results = results.filter(function(b) { return (b.languages || '').toLowerCase().includes('english'); });
+      if (filters.languages === 'bahasa') results = results.filter(function(b) { return (b.languages || '').toLowerCase().includes('bahasa'); });
+      if (filters.min_rating) {
+        const minR = parseFloat(filters.min_rating);
+        results = results.filter(function(b) { return b.google_rating && b.google_rating >= minR; });
+      }
+      if (!filters.sort || filters.sort === 'confidence') {
+        results.sort(function(a, b_) {
+          if (b_.is_trusted && !a.is_trusted) return 1;
+          if (a.is_trusted && !b_.is_trusted) return -1;
+          if (b_.is_featured && !a.is_featured) return 1;
+          if (a.is_featured && !b_.is_featured) return -1;
+          return confidenceScore(b_.google_rating, b_.google_review_count) - confidenceScore(a.google_rating, a.google_review_count);
+        });
+      } else if (filters.sort === 'review_count') {
+        results.sort(function(a, b_) { return (b_.google_review_count || 0) - (a.google_review_count || 0); });
+      }
+      renderStores(results);
+    } catch(e) {
+      const listEl2 = el.querySelector('#gq-store-list');
+      if (listEl2) listEl2.innerHTML = '<div class="empty-state"><p>Unable to load suppliers. Please try again.</p></div>';
+    }
+  }
+
+  el.innerHTML = `
+    <div class="dir-hero" data-group="suppliers_materials">
+      <div class="container">
+        <h1 class="dir-hero-title">Get Quotes</h1>
+        <p class="dir-hero-desc">List what you need, then send your quote request to multiple suppliers via WhatsApp in seconds.</p>
+      </div>
+    </div>
+    <div class="section">
+      <div class="container">
+
+        <!-- Step 1: Items -->
+        <div class="gq-step">
+          <div class="gq-step-header">
+            <div class="gq-step-num">1</div>
+            <div>
+              <h2 class="gq-step-title">What do you need?</h2>
+              <p class="gq-step-desc">Add the materials or products you want a quote for.</p>
+            </div>
+          </div>
+          <div class="gq-items-cols">
+            <span></span>
+            <span class="gq-col-label">Material / Product</span>
+            <span class="gq-col-label">Quantity</span>
+            <span class="gq-col-label">Additional Info</span>
+            <span></span>
+          </div>
+          <div id="gq-items"></div>
+          <button class="gq-add-btn" onclick="gqAddItem()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add item
+          </button>
+        </div>
+
+        <!-- Step 2: Message -->
+        <div class="gq-step">
+          <div class="gq-step-header">
+            <div class="gq-step-num">2</div>
+            <div>
+              <h2 class="gq-step-title">Your quote message</h2>
+              <p class="gq-step-desc">Auto-generated from your items above &mdash; edit freely.</p>
+            </div>
+          </div>
+          <div class="gq-message-wrap">
+            <textarea id="gq-message" class="gq-textarea" rows="8"
+                      placeholder="Add items above to generate your message\u2026"
+                      oninput="this.dataset.manualEdit='1'"></textarea>
+            <div class="gq-message-actions">
+              <button class="btn btn--ghost btn--sm" onclick="gqResetMessage()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                Regenerate from items
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3: Suppliers -->
+        <div class="gq-step">
+          <div class="gq-step-header">
+            <div class="gq-step-num">3</div>
+            <div>
+              <h2 class="gq-step-title">Select suppliers</h2>
+              <p class="gq-step-desc">Click the WhatsApp button next to any supplier to open WhatsApp with your message ready to send.</p>
+            </div>
+          </div>
+
+          <div class="dir-filters" style="margin-bottom:var(--space-5);">
+            <div class="dir-primary-filters">
+              <div class="dir-filter-pill">
+                <label class="dir-filter-pill-label">Where in Lombok?</label>
+                <select class="dir-filter-pill-select" onchange="gqUpdateFilter('area', this.value)">
+                  <option value="">All Areas</option>
+                  ${buildAreaOptions(filters.area)}
+                </select>
+              </div>
+              <div class="dir-filter-pill">
+                <label class="dir-filter-pill-label">Store type</label>
+                <select class="dir-filter-pill-select" onchange="gqUpdateFilter('group', this.value)">
+                  <option value="">All Types</option>
+                  ${buildFilterOptions(FilterData.groups, filters.group)}
+                </select>
+              </div>
+              <div class="dir-filter-pill">
+                <label class="dir-filter-pill-label">Specialty</label>
+                <select class="dir-filter-pill-select" onchange="gqUpdateFilter('category', this.value)">
+                  <option value="">All Specialties</option>
+                  ${filters.group
+                    ? buildFilterOptions(FilterData.categories, filters.category, 'group_key', filters.group)
+                    : buildFilterOptions(FilterData.categories, filters.category)
+                  }
+                </select>
+              </div>
+            </div>
+            <div class="dir-secondary-filters">
+              <button class="dir-more-btn" onclick="this.nextElementSibling.classList.toggle('open');this.classList.toggle('open')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                More Filters
+              </button>
+              <div class="dir-more-body">
+                <div class="dir-more-grid">
+                  <div class="filter-group">
+                    <label class="filter-label">Language</label>
+                    <select class="filter-select" onchange="gqUpdateFilter('languages', this.value)">
+                      <option value="">Any language</option>
+                      <option value="english" ${filters.languages === 'english' ? 'selected' : ''}>English</option>
+                      <option value="bahasa" ${filters.languages === 'bahasa' ? 'selected' : ''}>Bahasa</option>
+                    </select>
+                  </div>
+                  <div class="filter-group">
+                    <label class="filter-label">Min Rating</label>
+                    <select class="filter-select" onchange="gqUpdateFilter('min_rating', this.value)">
+                      <option value="">Any</option>
+                      <option value="4.0" ${filters.min_rating === '4.0' ? 'selected' : ''}>4.0+</option>
+                      <option value="4.5" ${filters.min_rating === '4.5' ? 'selected' : ''}>4.5+</option>
+                    </select>
+                  </div>
+                  <div class="filter-group">
+                    <label class="filter-label">Status</label>
+                    <select class="filter-select" onchange="gqUpdateFilter('trusted', this.value)">
+                      <option value="">All</option>
+                      <option value="1" ${filters.trusted === '1' ? 'selected' : ''}>Trusted only</option>
+                    </select>
+                  </div>
+                  <div class="filter-group">
+                    <label class="filter-label">Sort by</label>
+                    <select class="filter-select" onchange="gqUpdateFilter('sort', this.value)">
+                      <option value="confidence" ${filters.sort === 'confidence' ? 'selected' : ''}>Most Trusted</option>
+                      <option value="rating" ${filters.sort === 'rating' ? 'selected' : ''}>Highest Rated</option>
+                      <option value="review_count" ${filters.sort === 'review_count' ? 'selected' : ''}>Most Reviewed</option>
+                      <option value="alpha" ${filters.sort === 'alpha' ? 'selected' : ''}>A&ndash;Z</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <p class="results-count" id="gq-results-count"></p>
+          <div id="gq-store-list" class="gq-store-list"></div>
+        </div>
+
+      </div>
+    </div>
+  `;
+
+  renderItems();
+  syncMessage();
+
+  window.gqUpdateItem = function(id, field, value) {
+    const item = quoteItems.find(function(i) { return i.id === id; });
+    if (item) { item[field] = value; syncMessage(); }
+  };
+
+  window.gqAddItem = function() {
+    quoteItems.push({ id: nextId++, material: '', quantity: '', info: '' });
+    renderItems();
+  };
+
+  window.gqRemoveItem = function(id) {
+    quoteItems = quoteItems.filter(function(i) { return i.id !== id; });
+    renderItems();
+    syncMessage();
+  };
+
+  window.gqResetMessage = function() {
+    const ta = el.querySelector('#gq-message');
+    if (ta) { delete ta.dataset.manualEdit; syncMessage(); }
+  };
+
+  window.gqOpenWhatsApp = function(btn) {
+    const waNum = btn.dataset.wa;
+    const storeId = btn.dataset.storeId;
+    const msg = (el.querySelector('#gq-message') || {}).value || buildMessage();
+    window.open('https://wa.me/' + waNum + '?text=' + encodeURIComponent(msg), '_blank', 'noopener,noreferrer');
+    gqMarkContacted(storeId);
+  };
+
+  window.gqMarkContacted = function(storeId) {
+    contactedStores.add(String(storeId));
+    localStorage.setItem('gq_contacted', JSON.stringify([...contactedStores]));
+    const row = el.querySelector('.gq-store-row[data-id="' + storeId + '"]');
+    if (row) {
+      row.classList.add('gq-store-row--contacted');
+      const actions = row.querySelector('.gq-store-actions');
+      if (actions && !actions.querySelector('.gq-sent-badge')) {
+        const badge = document.createElement('span');
+        badge.className = 'gq-sent-badge';
+        badge.textContent = '\u2713 Sent';
+        actions.insertBefore(badge, actions.firstChild);
+      }
+      const waBtn = row.querySelector('.gq-wa-btn');
+      if (waBtn) waBtn.classList.add('gq-wa-btn--contacted');
+    }
+  };
+
+  window.gqUpdateFilter = function(key, value) {
+    filters[key] = value;
+    applyFiltersAndRender();
+  };
+
+  window.gqClearFilters = function() {
+    filters.area = ''; filters.group = 'suppliers_materials'; filters.category = '';
+    filters.languages = ''; filters.min_rating = ''; filters.trusted = '';
+    el.querySelectorAll('.dir-filter-pill-select, .filter-select').forEach(function(s) { s.value = ''; });
+    applyFiltersAndRender();
+  };
+
+  applyFiltersAndRender();
 }
 
 function renderResetPassword(el, params) {
