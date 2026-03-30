@@ -1454,6 +1454,55 @@
   line-height: 1;
 }
 
+.card-check-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--radius-full);
+  color: var(--color-text-muted);
+  background: rgba(100, 116, 139, 0.07);
+  border: 1px solid rgba(100, 116, 139, 0.18);
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background var(--transition-interactive), border-color var(--transition-interactive), color var(--transition-interactive);
+}
+.card-check-btn:hover {
+  background: rgba(100, 116, 139, 0.14);
+  border-color: rgba(100, 116, 139, 0.32);
+  color: var(--color-text-secondary);
+}
+.card-check-btn:active {
+  background: rgba(100, 116, 139, 0.22);
+}
+
+/* Toast notification for quote actions */
+.quote-toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  background: var(--color-surface-raised, #1e293b);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  padding: 10px 22px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  white-space: nowrap;
+}
+.quote-toast--show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
 /* Project-specific: status indicator */
 .card-status {
   font-size: 0.6875rem;

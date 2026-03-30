@@ -220,6 +220,10 @@ switch ($action) {
     case 'check_reviews':  handle_check_reviews(); break;
     // Email test (admin only — remove after confirming)
     case 'test_email':     handle_test_email(); break;
+    // Quote tracking
+    case 'save_quote':     handle_save_quote(); break;
+    case 'check_quote':    handle_check_quote(); break;
+    case 'my_quotes':      handle_my_quotes(); break;
     default:               json_error(400, 'Unknown action');
 }
 
@@ -1246,4 +1250,97 @@ function handle_test_email(): void {
     } else {
         json_out(array('success' => false, 'error' => $result), 500);
     }
+}
+
+// =================================================================
+// QUOTE TRACKING
+// =================================================================
+
+function ensure_quote_tables(PDO $db): void {
+    $db->exec("CREATE TABLE IF NOT EXISTS provider_quotes (
+        id          INT AUTO_INCREMENT PRIMARY KEY,
+        user_id     INT NOT NULL,
+        provider_id INT NOT NULL,
+        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        KEY idx_pq_user     (user_id),
+        KEY idx_pq_provider (provider_id),
+        UNIQUE KEY uq_pq_user_provider (user_id, provider_id)
+    )");
+    $db->exec("CREATE TABLE IF NOT EXISTS provider_quote_logs (
+        id         INT AUTO_INCREMENT PRIMARY KEY,
+        quote_id   INT NOT NULL,
+        type       ENUM('created','checked') NOT NULL DEFAULT 'created',
+        note       VARCHAR(255) DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_pql_quote (quote_id)
+    )");
+}
+
+function handle_save_quote(): void {
+    require_auth();
+    $db      = get_db();
+    $uid     = get_current_user_id();
+    $data    = get_post_data();
+    $pid     = (int)($data['provider_id'] ?? 0);
+    if (!$pid) json_error(400, 'provider_id required');
+    ensure_quote_tables($db);
+
+    // INSERT IGNORE — idempotent, safe to call on every WA click
+    $db->prepare("INSERT IGNORE INTO provider_quotes (user_id, provider_id) VALUES (?,?)")->execute([$uid, $pid]);
+    $new_id = (int)$db->lastInsertId();
+    if ($new_id) {
+        // First time — log creation
+        $db->prepare("INSERT INTO provider_quote_logs (quote_id, type, note) VALUES (?,?,?)")
+           ->execute([$new_id, 'created', 'Quote request sent via WhatsApp']);
+    } else {
+        // Already existed — fetch id
+        $s = $db->prepare("SELECT id FROM provider_quotes WHERE user_id=? AND provider_id=?");
+        $s->execute([$uid, $pid]);
+        $new_id = (int)$s->fetchColumn();
+    }
+    json_out(['ok' => true, 'quote_id' => $new_id]);
+}
+
+function handle_check_quote(): void {
+    require_auth();
+    $db   = get_db();
+    $uid  = get_current_user_id();
+    $data = get_post_data();
+    $pid  = (int)($data['provider_id'] ?? 0);
+    if (!$pid) json_error(400, 'provider_id required');
+    ensure_quote_tables($db);
+
+    // Ensure quote row exists
+    $db->prepare("INSERT IGNORE INTO provider_quotes (user_id, provider_id) VALUES (?,?)")->execute([$uid, $pid]);
+    $s = $db->prepare("SELECT id FROM provider_quotes WHERE user_id=? AND provider_id=?");
+    $s->execute([$uid, $pid]);
+    $qid = (int)$s->fetchColumn();
+
+    $db->prepare("INSERT INTO provider_quote_logs (quote_id, type, note) VALUES (?,?,?)")
+       ->execute([$qid, 'checked', 'Checked for updates']);
+    $db->prepare("UPDATE provider_quotes SET updated_at=NOW() WHERE id=?")->execute([$qid]);
+
+    json_out(['ok' => true, 'quote_id' => $qid, 'checked_at' => date('c')]);
+}
+
+function handle_my_quotes(): void {
+    require_auth();
+    $db  = get_db();
+    $uid = get_current_user_id();
+    ensure_quote_tables($db);
+
+    $rows = $db->prepare("
+        SELECT q.id, q.provider_id, q.created_at, q.updated_at,
+               p.name AS provider_name, p.slug AS provider_slug,
+               p.whatsapp_number, p.phone,
+               (SELECT COUNT(*) FROM provider_quote_logs l WHERE l.quote_id = q.id AND l.type = 'checked') AS check_count,
+               (SELECT l2.created_at FROM provider_quote_logs l2 WHERE l2.quote_id = q.id ORDER BY l2.created_at DESC LIMIT 1) AS last_activity_at
+        FROM provider_quotes q
+        JOIN providers p ON p.id = q.provider_id
+        WHERE q.user_id = ?
+        ORDER BY q.updated_at DESC
+    ");
+    $rows->execute([$uid]);
+    json_out(['ok' => true, 'data' => $rows->fetchAll()]);
 }
