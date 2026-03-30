@@ -4944,7 +4944,7 @@ async function renderSearch(el, params = {}) {
   const initialQuery = params.q ? decodeURIComponent(params.q) : '';
   let debounceTimer = null;
 
-  function renderSearchCard(item) {
+  function renderSearchCard(item, index) {
     var typeMap = {
       provider:  { label: 'Provider',  nav: 'provider/'  + item.slug },
       developer: { label: 'Developer', nav: 'developer/' + item.slug },
@@ -4952,18 +4952,32 @@ async function renderSearch(el, params = {}) {
       listing:   { label: 'Property',  nav: 'listing/'   + item.slug },
     };
     var cfg = typeMap[item.type] || { label: item.type, nav: item.type + '/' + item.slug };
+
     var ratingHtml = item.google_rating
-      ? '<span class="gq-star">\u2605</span><span class="gq-rating-val">' + parseFloat(item.google_rating).toFixed(1) + '</span>'
+      ? '<span class="card-rating-inline"><span class="card-rating-star">\u2605</span> '
+        + parseFloat(item.google_rating).toFixed(1)
+        + (item.google_review_count ? ' <span class="card-rating-count">(' + item.google_review_count + ')</span>' : '')
+        + '</span>'
       : '';
-    return '<article class="search-card" onclick="navigate(\'' + cfg.nav + '\')">'
-      + '<div class="search-card-top">'
-      + '<span class="search-card-type search-card-type--' + item.type + '">' + cfg.label + '</span>'
-      + (ratingHtml ? '<div class="search-card-rating">' + ratingHtml + '</div>' : '')
+
+    var favHtml = item.id ? renderFavBtn(item.type, item.id) : '';
+
+    return '<article class="card card-animate" style="animation-delay:' + ((index || 0) * 50) + 'ms">'
+      + '<div class="card-visual-header">'
+      + '<div class="card-avatar card-avatar--placeholder"><span>' + (item.name || 'B').charAt(0).toUpperCase() + '</span></div>'
+      + '<div class="card-header-info">'
+      + '<span class="card-category-label">' + cfg.label + '</span>'
+      + '<div class="card-header-badges"></div>'
       + '</div>'
-      + '<h3 class="search-card-name"><a href="#' + cfg.nav + '" onclick="navigate(\'' + cfg.nav + '\');return false;">' + escHtml(item.name) + '</a></h3>'
-      + (item.excerpt ? '<p class="search-card-excerpt">' + escHtml(item.excerpt) + '</p>' : '')
-      + '<div class="search-card-footer">'
-      + '<span class="search-card-link">View ' + cfg.label.toLowerCase() + ' ' + iconArrowRight() + '</span>'
+      + ratingHtml
+      + '</div>'
+      + '<h3 class="card-name"><a href="#' + cfg.nav + '" onclick="navigate(\'' + cfg.nav + '\');return false;">' + escHtml(item.name) + '</a></h3>'
+      + '<p class="card-desc">' + (item.excerpt ? escHtml(item.excerpt) : '') + '</p>'
+      + '<div class="card-footer">'
+      + '<button class="card-view-btn" onclick="navigate(\'' + cfg.nav + '\')">'
+      + 'View details ' + iconArrowRight()
+      + '</button>'
+      + (favHtml ? '<div class="card-footer-right">' + favHtml + '</div>' : '')
       + '</div>'
       + '</article>';
   }
@@ -5010,7 +5024,7 @@ async function renderSearch(el, params = {}) {
         if (!items.length) return '';
         return '<div class="search-group">'
           + '<h2 class="search-group-title">' + label + ' <span class="search-group-count">' + items.length + '</span></h2>'
-          + '<div class="search-results-grid">'
+          + '<div class="card-grid">'
           + items.map(renderSearchCard).join('')
           + '</div>'
           + '</div>';
