@@ -4941,8 +4941,12 @@ function renderVerifyResult(el, params) {
 // =====================================================
 
 async function renderSearch(el, params = {}) {
+  await FilterData.load();
   const initialQuery = params.q ? decodeURIComponent(params.q) : '';
   let debounceTimer = null;
+  let allResults = [];           // raw API results, updated on each search
+  let activeGroup    = '';       // selected group_key filter
+  let activeCategory = '';       // selected category_key filter
 
   function renderSearchCard(item, index) {
     var typeMap = {
@@ -5030,12 +5034,94 @@ async function renderSearch(el, params = {}) {
       + '</article>';
   }
 
+  // ── Build category <option> tags for the given group ──────────────────
+  function buildSearchCategoryOptions(groupKey) {
+    var cats = groupKey
+      ? FilterData.categories.filter(function(c) { return c.group_key === groupKey; })
+      : FilterData.categories;
+    return cats.map(function(c) {
+      return '<option value="' + c.key + '"' + (activeCategory === c.key ? ' selected' : '') + '>' + c.label + '</option>';
+    }).join('');
+  }
+
+  // ── Refresh the Specialty dropdown when Type changes ──────────────────
+  function refreshCategoryDropdown() {
+    var sel = el.querySelector('#sf-category');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">All Specialties</option>' + buildSearchCategoryOptions(activeGroup);
+  }
+
+  // ── Client-side filter + render ───────────────────────────────────────
+  function applyAndRender(currentQuery) {
+    var resultsEl = el.querySelector('#search-results');
+    var countEl   = el.querySelector('#search-count');
+    if (!resultsEl) return;
+
+    // Helper: does a provider match the active group/category filters?
+    function providerMatchesFilter(item) {
+      if (!activeGroup && !activeCategory) return true;
+      var cats = item.categories || [];
+      if (activeCategory) {
+        return cats.some(function(c) { return (c.key || c) === activeCategory; });
+      }
+      // group only — look up group_key for each category key in FilterData
+      var catMap = {};
+      FilterData.categories.forEach(function(c) { catMap[c.key] = c.group_key; });
+      return cats.some(function(c) { return catMap[c.key || c] === activeGroup; });
+    }
+
+    var filtered = allResults.filter(function(r) {
+      if (r.type === 'provider') return providerMatchesFilter(r);
+      return true; // developers/projects/listings always shown
+    });
+
+    var providers  = filtered.filter(function(r) { return r.type === 'provider'; });
+    var developers = filtered.filter(function(r) { return r.type === 'developer'; });
+    var projects   = filtered.filter(function(r) { return r.type === 'project'; });
+    var listings   = filtered.filter(function(r) { return r.type === 'listing'; });
+    var total = filtered.length;
+
+    if (countEl) {
+      countEl.innerHTML = total > 0
+        ? '<strong>' + total + '</strong> result' + (total !== 1 ? 's' : '') + ' for \u201c' + escHtml(currentQuery) + '\u201d'
+        : 'No results for \u201c' + escHtml(currentQuery) + '\u201d';
+    }
+
+    if (total === 0) {
+      resultsEl.innerHTML = '<div class="empty-state">'
+        + '<div class="empty-state-icon">' + iconSearch() + '</div>'
+        + '<h3 class="empty-state-title">No results found</h3>'
+        + '<p class="empty-state-desc">Try different keywords or adjust the filters.</p>'
+        + '<a href="#directory" class="btn btn--primary btn--sm" onclick="navigate(\'directory\');return false;">Browse Directory</a>'
+        + '</div>';
+      return;
+    }
+
+    function renderGroup(items, label) {
+      if (!items.length) return '';
+      return '<div class="search-group">'
+        + '<h2 class="search-group-title">' + label + ' <span class="search-group-count">' + items.length + '</span></h2>'
+        + '<div class="card-grid">'
+        + items.map(renderSearchCard).join('')
+        + '</div>'
+        + '</div>';
+    }
+
+    resultsEl.innerHTML = ''
+      + renderGroup(providers,  'Providers &amp; Suppliers')
+      + renderGroup(developers, 'Developers')
+      + renderGroup(projects,   'Projects')
+      + renderGroup(listings,   'Property Listings');
+  }
+
+  // ── Fetch from API, store raw results, then apply filters ─────────────
   async function doSearch(q) {
     var resultsEl = el.querySelector('#search-results');
     var countEl   = el.querySelector('#search-count');
     if (!resultsEl) return;
 
     if (!q || q.length < 2) {
+      allResults = [];
       resultsEl.innerHTML = '<div class="search-hint"><p>Type at least 2 characters to search providers, developers, projects and listings.</p></div>';
       if (countEl) countEl.innerHTML = '';
       return;
@@ -5045,50 +5131,18 @@ async function renderSearch(el, params = {}) {
     if (countEl) countEl.innerHTML = '';
 
     try {
-      var results = await DataLayer.search(q);
-      var providers  = results.filter(function(r) { return r.type === 'provider'; });
-      var developers = results.filter(function(r) { return r.type === 'developer'; });
-      var projects   = results.filter(function(r) { return r.type === 'project'; });
-      var listings   = results.filter(function(r) { return r.type === 'listing'; });
-      var total = results.length;
-
-      if (countEl) {
-        countEl.innerHTML = total > 0
-          ? '<strong>' + total + '</strong> result' + (total !== 1 ? 's' : '') + ' for \u201c' + escHtml(q) + '\u201d'
-          : 'No results for \u201c' + escHtml(q) + '\u201d';
-      }
-
-      if (total === 0) {
-        resultsEl.innerHTML = '<div class="empty-state">'
-          + '<div class="empty-state-icon">' + iconSearch() + '</div>'
-          + '<h3 class="empty-state-title">No results found</h3>'
-          + '<p class="empty-state-desc">Try different keywords, or browse the directory.</p>'
-          + '<a href="#directory" class="btn btn--primary btn--sm" onclick="navigate(\'directory\');return false;">Browse Directory</a>'
-          + '</div>';
-        return;
-      }
-
-      function renderGroup(items, label) {
-        if (!items.length) return '';
-        return '<div class="search-group">'
-          + '<h2 class="search-group-title">' + label + ' <span class="search-group-count">' + items.length + '</span></h2>'
-          + '<div class="card-grid">'
-          + items.map(renderSearchCard).join('')
-          + '</div>'
-          + '</div>';
-      }
-
-      resultsEl.innerHTML = ''
-        + renderGroup(providers,  'Providers &amp; Suppliers')
-        + renderGroup(developers, 'Developers')
-        + renderGroup(projects,   'Projects')
-        + renderGroup(listings,   'Property Listings');
-
+      allResults = await DataLayer.search(q);
+      applyAndRender(q);
     } catch(e) {
       console.error('Search error:', e);
       resultsEl.innerHTML = '<div class="empty-state"><p>Search failed. Please try again.</p></div>';
     }
   }
+
+  // ── Build group options from FilterData ───────────────────────────────
+  var groupOptions = FilterData.groups.map(function(g) {
+    return '<option value="' + g.key + '">' + g.label + '</option>';
+  }).join('');
 
   el.innerHTML = `
     <div class="dir-hero">
@@ -5107,12 +5161,30 @@ async function renderSearch(el, params = {}) {
                    value="${escHtml(initialQuery)}" autocomplete="off" spellcheck="false">
           </div>
         </div>
-        <p class="results-count" id="search-count" style="margin-bottom:var(--space-6);min-height:1.4em;"></p>
+
+        <div class="dir-primary-filters" style="margin-top:var(--space-6);">
+          <div class="dir-filter-pill">
+            <label class="dir-filter-pill-label" for="sf-group">What type?</label>
+            <select id="sf-group" class="dir-filter-pill-select">
+              <option value="">All Types</option>
+              ${groupOptions}
+            </select>
+          </div>
+          <div class="dir-filter-pill">
+            <label class="dir-filter-pill-label" for="sf-category">What specialty?</label>
+            <select id="sf-category" class="dir-filter-pill-select">
+              <option value="">All Specialties</option>
+            </select>
+          </div>
+        </div>
+
+        <p class="results-count" id="search-count" style="margin-top:var(--space-6);margin-bottom:var(--space-6);min-height:1.4em;"></p>
         <div id="search-results"></div>
       </div>
     </div>
   `;
 
+  // ── Wire up input ─────────────────────────────────────────────────────
   var input = el.querySelector('#search-page-input');
   if (input) {
     input.addEventListener('input', function() {
@@ -5121,6 +5193,28 @@ async function renderSearch(el, params = {}) {
       debounceTimer = setTimeout(function() { doSearch(q); }, 300);
     });
     setTimeout(function() { if (input) input.focus(); }, 80);
+  }
+
+  // ── Wire up group dropdown ────────────────────────────────────────────
+  var groupSel = el.querySelector('#sf-group');
+  if (groupSel) {
+    groupSel.addEventListener('change', function() {
+      activeGroup    = this.value;
+      activeCategory = '';           // reset specialty when type changes
+      refreshCategoryDropdown();
+      var q = (input ? input.value.trim() : initialQuery);
+      if (allResults.length) applyAndRender(q);
+    });
+  }
+
+  // ── Wire up category dropdown ─────────────────────────────────────────
+  var catSel = el.querySelector('#sf-category');
+  if (catSel) {
+    catSel.addEventListener('change', function() {
+      activeCategory = this.value;
+      var q = (input ? input.value.trim() : initialQuery);
+      if (allResults.length) applyAndRender(q);
+    });
   }
 
   doSearch(initialQuery);
