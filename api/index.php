@@ -659,7 +659,7 @@ function handle_search(): void {
     if (strlen($q) < 2) json_error(400, 'Search query must be at least 2 characters');
 
     $db = get_db();
-    $limit = min(20, max(1, (int)($_GET['limit'] ?? 10)));
+    $limit = min(100, max(1, (int)($_GET['limit'] ?? 100)));
 
     $results = [];
 
