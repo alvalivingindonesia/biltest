@@ -5900,6 +5900,21 @@ a.rab-tool-card:hover {
   margin-bottom: var(--space-5);
 }
 
+/* Three-column filter row on the search page */
+.search-primary-filters {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+@media (max-width: 768px) {
+  .search-primary-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 480px) {
+  .search-primary-filters {
+    grid-template-columns: 1fr;
+  }
+}
+
 .search-page-input-wrap {
   position: relative;
   max-width: 680px;

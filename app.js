@@ -4947,6 +4947,7 @@ async function renderSearch(el, params = {}) {
   let allResults = [];           // raw API results, updated on each search
   let activeGroup    = '';       // selected group_key filter
   let activeCategory = '';       // selected category_key filter
+  let activeArea     = '';       // selected area_key / region:key filter
 
   function renderSearchCard(item, index) {
     var typeMap = {
@@ -5057,6 +5058,19 @@ async function renderSearch(el, params = {}) {
     var countEl   = el.querySelector('#search-count');
     if (!resultsEl) return;
 
+    // Helper: does an item's area match the active area filter?
+    function areaMatches(item) {
+      if (!activeArea) return true;
+      var itemArea = item.area || '';
+      if (activeArea.startsWith('region:')) {
+        var regionKey = activeArea.replace('region:', '');
+        // look up area's region_key in FilterData
+        var areaObj = FilterData.areas.find(function(a) { return a.key === itemArea; });
+        return areaObj ? areaObj.region_key === regionKey : false;
+      }
+      return itemArea === activeArea;
+    }
+
     // Helper: does a provider match the active group/category filters?
     function providerMatchesFilter(item) {
       if (!activeGroup && !activeCategory) return true;
@@ -5071,8 +5085,9 @@ async function renderSearch(el, params = {}) {
     }
 
     var filtered = allResults.filter(function(r) {
+      if (!areaMatches(r)) return false;
       if (r.type === 'provider') return providerMatchesFilter(r);
-      return true; // developers/projects/listings always shown
+      return true; // developers/projects/listings pass group/category filter
     });
 
     var providers  = filtered.filter(function(r) { return r.type === 'provider'; });
@@ -5162,7 +5177,14 @@ async function renderSearch(el, params = {}) {
           </div>
         </div>
 
-        <div class="dir-primary-filters" style="margin-top:var(--space-6);">
+        <div class="dir-primary-filters search-primary-filters" style="margin-top:var(--space-6);">
+          <div class="dir-filter-pill">
+            <label class="dir-filter-pill-label" for="sf-area">Where in Lombok?</label>
+            <select id="sf-area" class="dir-filter-pill-select">
+              <option value="">All Areas</option>
+              ${buildAreaOptions('')}
+            </select>
+          </div>
           <div class="dir-filter-pill">
             <label class="dir-filter-pill-label" for="sf-group">What type?</label>
             <select id="sf-group" class="dir-filter-pill-select">
@@ -5193,6 +5215,16 @@ async function renderSearch(el, params = {}) {
       debounceTimer = setTimeout(function() { doSearch(q); }, 300);
     });
     setTimeout(function() { if (input) input.focus(); }, 80);
+  }
+
+  // ── Wire up area dropdown ─────────────────────────────────────────────
+  var areaSel = el.querySelector('#sf-area');
+  if (areaSel) {
+    areaSel.addEventListener('change', function() {
+      activeArea = this.value;
+      var q = (input ? input.value.trim() : initialQuery);
+      if (allResults.length) applyAndRender(q);
+    });
   }
 
   // ── Wire up group dropdown ────────────────────────────────────────────
