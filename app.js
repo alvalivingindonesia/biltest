@@ -420,6 +420,10 @@ function iconMapPin() {
   return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`;
 }
 
+function iconClock() {
+  return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
+}
+
 function iconPhone() {
   return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.26h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.88a16 16 0 0 0 6.06 6.06l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.7 16.4l.22.52z"/></svg>`;
 }
@@ -782,8 +786,13 @@ function renderProviderCard(b, index = 0) {
   const waHref = waNum ? 'https://wa.me/' + waNum.replace(/[^0-9]/g, '') : '';
   // Display format: +62 8xxxxxxxxx  (readable, still international)
   const waDisp = waNum.startsWith('+62') ? '+62\u00a0' + waNum.slice(3) : waNum;
+  const isLoggedIn = !!UserAuth.user;
   const waBtn  = waHref
-    ? `<a href="${waHref}" target="_blank" rel="noopener noreferrer" class="card-wa-btn" aria-label="WhatsApp ${b.name}">${iconWhatsApp()}</a>`
+    ? `<a href="${waHref}" target="_blank" rel="noopener noreferrer" class="card-wa-btn" aria-label="WhatsApp ${b.name}"${isLoggedIn ? ` onclick="QuoteTracker.onWaClick(${b.id})"` : ''}>${iconWhatsApp()}<span class="card-wa-num">${waDisp}</span></a>`
+    : '';
+  // "Check Status" button — logged-in users only, only when WA number exists
+  const checkBtn = (waHref && isLoggedIn)
+    ? `<button class="card-check-btn" onclick="QuoteTracker.checkStatus(${b.id}, '${waHref}')" title="Check WhatsApp for a reply">${iconClock()} Check status</button>`
     : '';
 
   const badge = b.badge
@@ -826,7 +835,7 @@ function renderProviderCard(b, index = 0) {
         <button class="card-view-btn" onclick="navigate('provider/${b.slug}')">
           View details ${iconArrowRight()}
         </button>
-        <div class="card-footer-right">${renderFavBtn('provider', b.id)}${waBtn}</div>
+        <div class="card-footer-right">${renderFavBtn('provider', b.id)}${checkBtn}${waBtn}</div>
       </div>
     </article>
   `;
@@ -2783,7 +2792,10 @@ const UserAuth = (() => {
     try {
       const res = await apiCall('me');
       currentUser = res.user;
-      if (currentUser) await loadFavorites();
+      if (currentUser) {
+        await loadFavorites();
+        QuoteTracker.load().catch(() => {});
+      }
       updateUI();
     } catch(e) { currentUser = null; updateUI(); }
   }
@@ -2834,6 +2846,7 @@ const UserAuth = (() => {
           </div>
           <button class="user-dropdown-item" onclick="navigate('account');document.getElementById('user-dropdown').classList.remove('open');">My Account</button>
           <button class="user-dropdown-item" onclick="navigate('account?tab=favorites');document.getElementById('user-dropdown').classList.remove('open');">My Favorites</button>
+          <button class="user-dropdown-item" onclick="navigate('account?tab=quotes');document.getElementById('user-dropdown').classList.remove('open');">My Quotes</button>
           <button class="user-dropdown-item" onclick="navigate('submit-listing');document.getElementById('user-dropdown').classList.remove('open');">Submit a Listing</button>
           <button class="user-dropdown-item" onclick="navigate('create-listing');document.getElementById('user-dropdown').classList.remove('open');">Post a Property</button>
           <button class="user-dropdown-item user-dropdown-item--danger" onclick="UserAuth.logout()">Log Out</button>
@@ -2894,6 +2907,7 @@ const UserAuth = (() => {
       const res = await apiCall('login', { email, password });
       currentUser = res.user;
       await loadFavorites();
+      QuoteTracker.load().catch(() => {});
       updateUI();
       return res;
     },
@@ -3228,6 +3242,64 @@ function renderFavBtn(entityType, entityId) {
   const faved = UserAuth.isFavorited(entityType, entityId);
   return `<button class="fav-btn ${faved ? 'favorited' : ''}" data-fav="${entityType}:${entityId}" onclick="UserAuth.toggleFavorite('${entityType}', ${entityId})" aria-label="${faved ? 'Remove from' : 'Add to'} favorites" title="${faved ? 'Remove from' : 'Add to'} favorites">${faved ? iconHeartFilled() : iconHeartOutline()}</button>`;
 }
+
+// =====================================================
+// QUOTE TRACKER
+// =====================================================
+
+const QuoteTracker = (() => {
+  let savedSet = new Set(); // provider IDs with a saved quote
+
+  async function load() {
+    if (!UserAuth.user) { savedSet.clear(); return; }
+    try {
+      const res = await UserAuth.apiCall('my_quotes');
+      savedSet.clear();
+      (res.data || []).forEach(q => savedSet.add(parseInt(q.provider_id)));
+    } catch(e) { /* silent */ }
+  }
+
+  function hasSaved(providerId) {
+    return savedSet.has(parseInt(providerId));
+  }
+
+  // Called when user clicks the main WA button (non-blocking — link still opens)
+  function onWaClick(providerId) {
+    if (!UserAuth.user) return;
+    UserAuth.apiCall('save_quote', { provider_id: providerId })
+      .then(() => savedSet.add(parseInt(providerId)))
+      .catch(() => {});
+  }
+
+  // Called when user clicks "Check Status" — opens WA without pre-filled message + logs
+  async function checkStatus(providerId, waHref) {
+    window.open(waHref, '_blank', 'noopener,noreferrer');
+    if (!UserAuth.user) return;
+    try {
+      await UserAuth.apiCall('check_quote', { provider_id: providerId });
+      savedSet.add(parseInt(providerId));
+      showToast('Checked for updates');
+    } catch(e) { /* silent */ }
+  }
+
+  function showToast(msg) {
+    // Remove any existing toast
+    document.querySelectorAll('.quote-toast').forEach(el => el.remove());
+    const t = document.createElement('div');
+    t.className = 'quote-toast';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => t.classList.add('quote-toast--show'));
+    });
+    setTimeout(() => {
+      t.classList.remove('quote-toast--show');
+      setTimeout(() => t.remove(), 300);
+    }, 3000);
+  }
+
+  return { load, hasSaved, onWaClick, checkStatus };
+})();
 
 // Google Review link helper
 function renderGoogleReviewBtn(google_maps_url) {
