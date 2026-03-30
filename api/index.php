@@ -664,6 +664,8 @@ function handle_search(): void {
     $results = [];
 
     // Providers — full card fields
+    // Match on full-text (name/desc) OR category key/label OR tag
+    $like = '%' . $q . '%';
     $stmt = $db->prepare(
         "SELECT 'provider' AS type,
                 p.id, p.slug, p.name, p.short_description AS excerpt,
@@ -675,10 +677,22 @@ function handle_search(): void {
                 a.label AS area_label
          FROM providers p
          LEFT JOIN areas a ON a.`key` = p.area_key
-         WHERE p.is_active = 1 AND MATCH(p.name, p.short_description, p.description) AGAINST(? IN BOOLEAN MODE)
+         WHERE p.is_active = 1 AND (
+             MATCH(p.name, p.short_description, p.description) AGAINST(? IN BOOLEAN MODE)
+             OR EXISTS (
+                 SELECT 1 FROM provider_categories pc
+                 JOIN categories c ON c.`key` = pc.category_key
+                 WHERE pc.provider_id = p.id
+                   AND (c.`key` LIKE ? OR c.label LIKE ?)
+             )
+             OR EXISTS (
+                 SELECT 1 FROM provider_tags pt
+                 WHERE pt.provider_id = p.id AND pt.tag LIKE ?
+             )
+         )
          LIMIT ?"
     );
-    $stmt->execute([$q, $limit]);
+    $stmt->execute([$q, $like, $like, $like, $limit]);
     $providers = $stmt->fetchAll();
     attach_tags($providers, 'provider_tags', 'provider_id');
     attach_categories($providers, 'provider_categories', 'provider_id');
