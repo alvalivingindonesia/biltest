@@ -2630,6 +2630,17 @@ function initSectionAnimations(container) {
 // =====================================================
 
 function initSearch() {
+  // Hero search submit — defined first so it's always reachable regardless of nav state
+  window.heroSearchSubmit = function() {
+    const input = document.getElementById('hero-search-input');
+    if (!input) return;
+    const q = input.value.trim();
+    if (q.length >= 1) {
+      navigate('search?q=' + encodeURIComponent(q));
+      input.value = '';
+    }
+  };
+
   const inputs = document.querySelectorAll('.nav-search-input, #hero-search');
   const wrapper = document.querySelector('.nav-search-wrapper');
   if (!wrapper) return;
@@ -2718,17 +2729,7 @@ function initSearch() {
     if (!wrapper.contains(e.target)) dropdown.classList.remove('visible');
   });
 
-  // Hero search: Enter key or button click navigates to the search results page
-  window.heroSearchSubmit = function() {
-    const heroSearch = document.getElementById('hero-search-input');
-    if (!heroSearch) return;
-    const q = heroSearch.value.trim();
-    if (q.length >= 1) {
-      navigate('search?q=' + encodeURIComponent(q));
-      heroSearch.value = '';
-    }
-  };
-
+  // Hero search: Enter key also triggers submit
   const heroSearch = document.getElementById('hero-search-input');
   if (heroSearch) {
     heroSearch.addEventListener('keydown', function(e) {
