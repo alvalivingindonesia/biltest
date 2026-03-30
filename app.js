@@ -656,7 +656,7 @@ async function renderHome(el) {
             <div class="category-card-icon">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
             </div>
-            <h3 class="category-card-title">Find Property &amp; Agents</h3>
+            <h3 class="category-card-title">Find Property</h3>
             <p class="category-card-desc">Browse properties and find local agents.</p>
             <span class="category-card-cta">Explore ${iconArrowRight()}</span>
           </a>
