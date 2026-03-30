@@ -659,25 +659,41 @@ function handle_search(): void {
     if (strlen($q) < 2) json_error(400, 'Search query must be at least 2 characters');
 
     $db = get_db();
-    $limit = min(10, max(1, (int)($_GET['limit'] ?? 10)));
+    $limit = min(20, max(1, (int)($_GET['limit'] ?? 10)));
 
     $results = [];
 
-    // Providers
+    // Providers — full card fields
     $stmt = $db->prepare(
-        "SELECT 'provider' AS type, slug, name, short_description AS excerpt, google_rating
-         FROM providers
-         WHERE is_active = 1 AND MATCH(name, short_description, description) AGAINST(? IN BOOLEAN MODE)
+        "SELECT 'provider' AS type,
+                p.id, p.slug, p.name, p.short_description AS excerpt,
+                p.google_rating, p.google_review_count,
+                p.area_key AS area, p.languages,
+                p.whatsapp_number, p.phone,
+                p.logo_url, p.profile_photo_url,
+                p.is_trusted, p.is_featured, p.badge,
+                a.label AS area_label
+         FROM providers p
+         LEFT JOIN areas a ON a.`key` = p.area_key
+         WHERE p.is_active = 1 AND MATCH(p.name, p.short_description, p.description) AGAINST(? IN BOOLEAN MODE)
          LIMIT ?"
     );
     $stmt->execute([$q, $limit]);
-    $results = array_merge($results, $stmt->fetchAll());
+    $providers = $stmt->fetchAll();
+    attach_tags($providers, 'provider_tags', 'provider_id');
+    attach_categories($providers, 'provider_categories', 'provider_id');
+    $results = array_merge($results, $providers);
 
-    // Developers
+    // Developers — full card fields
     $stmt = $db->prepare(
-        "SELECT 'developer' AS type, slug, name, short_description AS excerpt, google_rating
-         FROM developers
-         WHERE is_active = 1 AND MATCH(name, short_description, description) AGAINST(? IN BOOLEAN MODE)
+        "SELECT 'developer' AS type,
+                d.id, d.slug, d.name, d.short_description AS excerpt,
+                d.google_rating, d.google_review_count,
+                d.languages, d.logo_url, d.profile_photo_url,
+                d.whatsapp_number, d.phone,
+                d.is_featured, d.badge
+         FROM developers d
+         WHERE d.is_active = 1 AND MATCH(d.name, d.short_description, d.description) AGAINST(? IN BOOLEAN MODE)
          LIMIT ?"
     );
     $stmt->execute([$q, $limit]);
@@ -685,9 +701,14 @@ function handle_search(): void {
 
     // Projects
     $stmt = $db->prepare(
-        "SELECT 'project' AS type, slug, name, short_description AS excerpt, NULL AS google_rating
-         FROM projects
-         WHERE is_active = 1 AND MATCH(name, short_description, description) AGAINST(? IN BOOLEAN MODE)
+        "SELECT 'project' AS type,
+                p.id, p.slug, p.name, p.short_description AS excerpt,
+                NULL AS google_rating, NULL AS google_review_count,
+                p.logo_url, p.logo_url AS profile_photo_url,
+                p.area_key AS area, a.label AS area_label
+         FROM projects p
+         LEFT JOIN areas a ON a.`key` = p.area_key
+         WHERE p.is_active = 1 AND MATCH(p.name, p.short_description, p.description) AGAINST(? IN BOOLEAN MODE)
          LIMIT ?"
     );
     $stmt->execute([$q, $limit]);
@@ -695,8 +716,12 @@ function handle_search(): void {
 
     // Listings
     $stmt = $db->prepare(
-        "SELECT 'listing' AS type, l.slug, l.title AS name, l.short_description AS excerpt, NULL AS google_rating
+        "SELECT 'listing' AS type,
+                l.id, l.slug, l.title AS name, l.short_description AS excerpt,
+                NULL AS google_rating, NULL AS google_review_count,
+                l.area_key AS area, a.label AS area_label
          FROM listings l
+         LEFT JOIN areas a ON a.`key` = l.area_key
          WHERE l.status = 'active' AND l.is_approved = 1
            AND MATCH(l.title, l.short_description, l.description) AGAINST(? IN BOOLEAN MODE)
          LIMIT ?"

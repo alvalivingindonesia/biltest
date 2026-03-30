@@ -4953,6 +4953,23 @@ async function renderSearch(el, params = {}) {
     };
     var cfg = typeMap[item.type] || { label: item.type, nav: item.type + '/' + item.slug };
 
+    // Avatar / photo
+    var thumbImg = item.profile_photo_url || item.logo_url || '';
+    var avatarHtml = thumbImg
+      ? '<img src="' + thumbImg + '" alt="' + escHtml(item.name) + '" class="card-avatar' + (item.logo_url && !item.profile_photo_url ? ' card-avatar--logo' : '') + '" loading="lazy" onerror="this.style.display=\'none\'">'
+      : '<div class="card-avatar card-avatar--placeholder"><span>' + (item.name || 'B').charAt(0).toUpperCase() + '</span></div>';
+
+    // Category label: use actual categories if available, else type label
+    var categoryLabel = cfg.label;
+    if (item.categories && item.categories.length > 0) {
+      categoryLabel = item.categories.map(function(c) { return formatCategoryLabel(c.key || c); }).join(' · ');
+    }
+
+    // Badges
+    var trustedBadge = item.is_trusted ? '<span class="card-badge card-badge--trusted">\u2713 Trusted</span>' : '';
+    var badge = item.badge ? '<span class="card-badge">' + escHtml(item.badge) + '</span>' : '';
+
+    // Rating
     var ratingHtml = item.google_rating
       ? '<span class="card-rating-inline"><span class="card-rating-star">\u2605</span> '
         + parseFloat(item.google_rating).toFixed(1)
@@ -4960,24 +4977,55 @@ async function renderSearch(el, params = {}) {
         + '</span>'
       : '';
 
+    // Meta line (area + language)
+    var areaLabel = item.area_label || (item.area ? formatAreaLabel(item.area) : '');
+    var langParts = (item.languages || '').split(/[,+]+/).map(function(s) { return s.trim(); }).filter(Boolean);
+    var langShort = langParts.length ? langParts.join(' \u00b7 ') : '';
+    var metaHtml = (areaLabel || langShort)
+      ? '<div class="card-meta-line">'
+        + (areaLabel ? '<span class="card-meta-item">' + iconMapPin() + ' ' + areaLabel + '</span>' : '')
+        + (areaLabel && langShort ? '<span class="card-meta-sep"></span>' : '')
+        + (langShort ? '<span class="card-meta-item">' + langShort + '</span>' : '')
+        + '</div>'
+      : '';
+
+    // Tags
+    var tags = item.tags || [];
+    var tagsHtml = tags.length
+      ? '<div class="card-tags-line">'
+        + tags.slice(0, 3).map(function(t) { return '<span class="card-tag">' + escHtml(t) + '</span>'; }).join('<span class="card-tag-dot">\u00b7</span>')
+        + '</div>'
+      : '';
+
+    // WhatsApp button
+    var rawWa = item.whatsapp_number || item.phone || '';
+    var waNum = formatWhatsAppNumber(rawWa);
+    var waHref = waNum ? 'https://wa.me/' + waNum.replace(/[^0-9]/g, '') : '';
+    var waBtn = waHref
+      ? '<a href="' + waHref + '" target="_blank" rel="noopener noreferrer" class="card-wa-btn" aria-label="WhatsApp ' + escHtml(item.name) + '">' + iconWhatsApp() + '</a>'
+      : '';
+
+    // Fav button
     var favHtml = item.id ? renderFavBtn(item.type, item.id) : '';
 
     return '<article class="card card-animate" style="animation-delay:' + ((index || 0) * 50) + 'ms">'
       + '<div class="card-visual-header">'
-      + '<div class="card-avatar card-avatar--placeholder"><span>' + (item.name || 'B').charAt(0).toUpperCase() + '</span></div>'
+      + avatarHtml
       + '<div class="card-header-info">'
-      + '<span class="card-category-label">' + cfg.label + '</span>'
-      + '<div class="card-header-badges"></div>'
+      + '<span class="card-category-label">' + categoryLabel + '</span>'
+      + '<div class="card-header-badges">' + trustedBadge + badge + '</div>'
       + '</div>'
       + ratingHtml
       + '</div>'
       + '<h3 class="card-name"><a href="#' + cfg.nav + '" onclick="navigate(\'' + cfg.nav + '\');return false;">' + escHtml(item.name) + '</a></h3>'
       + '<p class="card-desc">' + (item.excerpt ? escHtml(item.excerpt) : '') + '</p>'
+      + metaHtml
+      + tagsHtml
       + '<div class="card-footer">'
       + '<button class="card-view-btn" onclick="navigate(\'' + cfg.nav + '\')">'
       + 'View details ' + iconArrowRight()
       + '</button>'
-      + (favHtml ? '<div class="card-footer-right">' + favHtml + '</div>' : '')
+      + '<div class="card-footer-right">' + favHtml + waBtn + '</div>'
       + '</div>'
       + '</article>';
   }
