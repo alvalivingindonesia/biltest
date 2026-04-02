@@ -1,0 +1,5 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/rovin629/subdomains/biltest.roving-i.com.au/
+    - /bin/cp -R . $DEPLOYPATH
