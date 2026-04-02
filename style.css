@@ -3649,6 +3649,13 @@
   gap: var(--space-6);
 }
 
+/* listing-card-wrap is the outer container (added for admin edit button support) */
+.listing-card-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
 .listing-card {
   display: flex;
   flex-direction: column;
@@ -3656,6 +3663,7 @@
   color: inherit;
   overflow: hidden;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  flex: 1;
 }
 
 .listing-card:hover {
@@ -6134,5 +6142,199 @@ a.rab-tool-card:hover {
 @media (max-width: 600px) {
   .search-results-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* =====================================================
+   ADMIN INLINE EDITING
+   ===================================================== */
+
+/* Edit button on listing card */
+.admin-edit-card-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: 10;
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+}
+.listing-card-wrap:hover .admin-edit-card-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Admin bar on detail page */
+.admin-detail-bar {
+  background: #1e1e2e;
+  color: #e0e0f0;
+  padding: var(--space-2) var(--space-6);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+}
+.admin-detail-bar-label {
+  font-weight: 700;
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--color-primary);
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}
+
+/* Modal overlay */
+.admin-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+}
+.admin-modal-box {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.25);
+}
+.admin-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+.admin-modal-header h3 {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 700;
+}
+.admin-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  padding: 0 4px;
+}
+.admin-modal-body {
+  overflow-y: auto;
+  padding: var(--space-5);
+  flex: 1;
+}
+.admin-modal-footer {
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+/* Shared form elements */
+.admin-form-row {
+  margin-bottom: var(--space-4);
+}
+.admin-form-row label {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--color-text-muted);
+}
+.admin-form-row--2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+.admin-form-row--3col {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--space-3);
+}
+.admin-input,
+.admin-select,
+.admin-textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+.admin-input:focus,
+.admin-select:focus,
+.admin-textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+.admin-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+.admin-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.admin-form-error {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  margin-top: var(--space-2);
+}
+
+/* Inline detail edit form */
+.admin-inline-form {
+  padding: var(--space-2) 0 var(--space-8);
+}
+.admin-inline-form h2 {
+  font-size: var(--text-lg);
+}
+.admin-form-actions {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: flex-end;
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+@media (max-width: 600px) {
+  .admin-form-row--2col,
+  .admin-form-row--3col {
+    grid-template-columns: 1fr;
+  }
+  .admin-modal-box {
+    max-height: 95vh;
   }
 }

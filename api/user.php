@@ -212,6 +212,7 @@ switch ($action) {
     case 'update_listing': handle_update_listing(); break;
     case 'my_listings':    handle_my_listings(); break;
     case 'delete_listing': handle_delete_listing(); break;
+    case 'admin_update_listing': handle_admin_update_listing(); break;
     // Image management
     case 'upload_image':   handle_upload_image(); break;
     case 'delete_image':   handle_delete_image(); break;
@@ -990,6 +991,76 @@ function handle_delete_listing(): void {
     json_out(['success' => true, 'message' => 'Listing deleted.']);
 }
 
+
+// =================================================================
+// ADMIN LISTING UPDATE (no ownership check)
+// =================================================================
+
+function handle_admin_update_listing(): void {
+    $uid = require_auth();
+    if (($_SESSION['user_role'] ?? '') !== 'admin') json_error(403, 'Admin access required.');
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+
+    $data       = get_post_data();
+    $listing_id = (int)($data['listing_id'] ?? 0);
+    if (!$listing_id) json_error(400, 'listing_id required.');
+
+    $db   = get_db();
+    $stmt = $db->prepare("SELECT * FROM listings WHERE id = ?");
+    $stmt->execute([$listing_id]);
+    $listing = $stmt->fetch();
+    if (!$listing) json_error(404, 'Listing not found.');
+
+    $title = trim($data['title'] ?? $listing['title']);
+    if (strlen($title) < 3) json_error(400, 'title too short.');
+
+    $db->prepare(
+        "UPDATE listings SET
+            listing_type_key     = ?,
+            title                = ?,
+            short_description    = ?,
+            description          = ?,
+            area_key             = ?,
+            location_detail      = ?,
+            price_usd            = ?,
+            price_idr            = ?,
+            price_label          = ?,
+            land_size_sqm        = ?,
+            land_size_are        = ?,
+            building_size_sqm    = ?,
+            bedrooms             = ?,
+            bathrooms            = ?,
+            certificate_type_key = ?,
+            is_featured          = ?,
+            status               = ?,
+            google_maps_url      = ?,
+            address              = ?
+         WHERE id = ?"
+    )->execute([
+        trim($data['listing_type_key'] ?? $listing['listing_type_key']),
+        $title,
+        trim($data['short_description'] ?? $listing['short_description'] ?? ''),
+        isset($data['description']) ? trim($data['description']) : ($listing['description'] ?? null),
+        trim($data['area_key'] ?? $listing['area_key'] ?? ''),
+        trim($data['location_detail'] ?? $listing['location_detail'] ?? ''),
+        isset($data['price_usd']) && $data['price_usd'] !== '' ? (int)$data['price_usd'] : ($listing['price_usd'] ?? null),
+        isset($data['price_idr']) && $data['price_idr'] !== '' ? (int)$data['price_idr'] : ($listing['price_idr'] ?? null),
+        trim($data['price_label'] ?? $listing['price_label'] ?? ''),
+        isset($data['land_size_sqm']) && $data['land_size_sqm'] !== '' ? (float)$data['land_size_sqm'] : ($listing['land_size_sqm'] ?? null),
+        isset($data['land_size_are']) && $data['land_size_are'] !== '' ? (float)$data['land_size_are'] : ($listing['land_size_are'] ?? null),
+        isset($data['building_size_sqm']) && $data['building_size_sqm'] !== '' ? (float)$data['building_size_sqm'] : ($listing['building_size_sqm'] ?? null),
+        isset($data['bedrooms']) && $data['bedrooms'] !== '' ? (int)$data['bedrooms'] : ($listing['bedrooms'] ?? null),
+        isset($data['bathrooms']) && $data['bathrooms'] !== '' ? (int)$data['bathrooms'] : ($listing['bathrooms'] ?? null),
+        trim($data['certificate_type_key'] ?? $listing['certificate_type_key'] ?? ''),
+        isset($data['is_featured']) ? ($data['is_featured'] ? 1 : 0) : (int)$listing['is_featured'],
+        trim($data['status'] ?? $listing['status'] ?? 'active'),
+        trim($data['google_maps_url'] ?? $listing['google_maps_url'] ?? ''),
+        trim($data['address'] ?? $listing['address'] ?? ''),
+        $listing_id,
+    ]);
+
+    json_out(['success' => true, 'message' => 'Listing updated.']);
+}
 
 // =================================================================
 // IMAGE UPLOAD
