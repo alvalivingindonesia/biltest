@@ -216,6 +216,10 @@ const DataLayer = (() => {
 // UTILITY FUNCTIONS
 // =====================================================
 
+function isAdmin() {
+  return !!(UserAuth.user && UserAuth.user.role === 'admin');
+}
+
 function formatUSD(amount) {
   if (!amount) return "TBC";
   if (amount >= 1000000) return `$${(amount / 1000000).toFixed(1)}M`;
@@ -1398,7 +1402,13 @@ function renderListingCard(l, index) {
   var linkOnclick = l.source_url ? '' : ' onclick="navigate(\'listing/' + l.slug + '\');return false;"';
   var sourceTag = l.source_site ? '<span class="listing-card-source">' + l.source_site + ' <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></span>' : '';
 
-  return '<a href="' + linkHref + '" class="listing-card card"' + linkTarget + linkOnclick + ' style="animation-delay:' + (index * 60) + 'ms">'
+  var adminEditBtn = isAdmin()
+    ? '<button class="admin-edit-card-btn" onclick="event.preventDefault();event.stopPropagation();adminListingQuickEdit(' + l.id + ',\'' + (l.slug || '') + '\')" title="Edit listing"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit</button>'
+    : '';
+
+  return '<div class="listing-card-wrap" data-listing-id="' + (l.id || '') + '" style="animation-delay:' + (index * 60) + 'ms">'
+    + adminEditBtn
+    + '<a href="' + linkHref + '" class="listing-card card"' + linkTarget + linkOnclick + '>'
     + '<div class="listing-card-image">'
     + (imgUrl ? '<img src="' + imgUrl + '" alt="' + (l.title || '').replace(/"/g, '&quot;') + '" loading="lazy" onload="this.classList.add(\'loaded\')">' : '<div class="listing-card-noimg"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></div>')
     + '<span class="listing-card-type">' + typeLabel + '</span>'
@@ -1417,7 +1427,8 @@ function renderListingCard(l, index) {
     + (l.agent_name ? '<div class="listing-card-agent">' + l.agent_name + '</div>' : '')
     + sourceTag
     + '</div>'
-    + '</a>';
+    + '</a>'
+    + '</div>';
 }
 
 // =====================================================
@@ -1683,12 +1694,14 @@ async function renderListingDetail(el, slug) {
   const typeLabel = listing.listing_type_label || '';
   const certLabel = listing.certificate_type_label || '';
   const wa = listing.contact_whatsapp || listing.agent_whatsapp || '';
+  const admin = isAdmin();
 
   el.innerHTML = `
     <div class="page-header">
       <div class="container">
       </div>
     </div>
+    ${admin ? `<div class="admin-detail-bar"><span class="admin-detail-bar-label">Admin</span> <button class="btn btn--primary btn--sm" onclick="adminListingDetailEdit(${listing.id}, '${slug}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit this listing</button></div>` : ''}
     <div class="section">
       <div class="container">
         <div class="listing-detail-layout">
@@ -1701,15 +1714,15 @@ async function renderListingDetail(el, slug) {
               (images.length > 1 ?
                 '<div class="listing-gallery-thumbs">' +
                 images.map((img, idx) =>
-                  '<img src="' + img.url + '" alt="' + (img.alt_text || '') + '" class="listing-thumb ' + (idx === 0 ? 'active' : '') + '" onclick="var m=document.getElementById(\'gallery-main-img\');m.src=\'' + img.url + '\';document.querySelectorAll(\'.listing-thumb\').forEach(function(t){t.classList.remove(\'active\')});this.classList.add(\'active\');">' 
+                  '<img src="' + img.url + '" alt="' + (img.alt_text || '') + '" class="listing-thumb ' + (idx === 0 ? 'active' : '') + '" onclick="var m=document.getElementById(\'gallery-main-img\');m.src=\'' + img.url + '\';document.querySelectorAll(\'.listing-thumb\').forEach(function(t){t.classList.remove(\'active\')});this.classList.add(\'active\');">'
                 ).join('') +
                 '</div>'
               : '') +
               '</div>'
             ) : ''}
 
-            <h1 class="listing-detail-title">${listing.title}</h1>
-            <div class="listing-detail-price">${priceStr}${listing.price_label ? ' <span class="price-note">' + listing.price_label + '</span>' : ''}</div>
+            <h1 class="listing-detail-title" id="ldt-title">${listing.title}</h1>
+            <div class="listing-detail-price" id="ldt-price">${priceStr}${listing.price_label ? ' <span class="price-note">' + listing.price_label + '</span>' : ''}</div>
 
             <div class="listing-detail-tags">
               ${typeLabel ? '<span class="detail-tag">' + typeLabel + '</span>' : ''}
@@ -1727,7 +1740,7 @@ async function renderListingDetail(el, slug) {
               ${listing.furnishing ? '<div class="spec-item"><span class="spec-label">Furnishing</span><span class="spec-value">' + listing.furnishing.replace(/_/g, ' ') + '</span></div>' : ''}
             </div>
 
-            <div class="listing-detail-desc">
+            <div class="listing-detail-desc" id="ldt-desc">
               <h3>Description</h3>
               <p>${listing.short_description || ''}</p>
               ${listing.description ? '<div class="listing-full-desc">' + listing.description.replace(/\n/g, '<br>') + '</div>' : ''}
@@ -1764,6 +1777,319 @@ async function renderListingDetail(el, slug) {
 // =====================================================
 // RENDER: AGENTS
 // =====================================================
+
+// =====================================================
+// ADMIN: LISTING INLINE EDIT
+// =====================================================
+
+async function adminListingQuickEdit(listingId, slug) {
+  await FilterData.load();
+
+  // Fetch full listing data
+  let listing;
+  try { listing = await DataLayer.getListing(slug); }
+  catch(e) { alert('Could not load listing data.'); return; }
+
+  const typeOptions = FilterData.listing_types.map(t =>
+    '<option value="' + t.key + '"' + (listing.listing_type_key === t.key ? ' selected' : '') + '>' + t.label + '</option>'
+  ).join('');
+  const certOptions = FilterData.land_certificate_types.map(c =>
+    '<option value="' + c.key + '"' + (listing.certificate_type_key === c.key ? ' selected' : '') + '>' + c.label + '</option>'
+  ).join('');
+  const areaOptions = FilterData.areas.map(a =>
+    '<option value="' + a.key + '"' + ((listing.area_key || listing.area) === a.key ? ' selected' : '') + '>' + a.label + '</option>'
+  ).join('');
+
+  // Remove any existing modal
+  var old = document.getElementById('admin-listing-modal');
+  if (old) old.remove();
+
+  var modal = document.createElement('div');
+  modal.id = 'admin-listing-modal';
+  modal.className = 'admin-modal-overlay';
+  modal.innerHTML = `
+    <div class="admin-modal-box">
+      <div class="admin-modal-header">
+        <h3>Edit Listing</h3>
+        <button class="admin-modal-close" onclick="document.getElementById('admin-listing-modal').remove()">&times;</button>
+      </div>
+      <div class="admin-modal-body">
+        <div class="admin-form-row">
+          <label>Title</label>
+          <input id="alm-title" type="text" value="${(listing.title || '').replace(/"/g, '&quot;')}">
+        </div>
+        <div class="admin-form-row admin-form-row--2col">
+          <div>
+            <label>Type</label>
+            <select id="alm-type">${typeOptions}</select>
+          </div>
+          <div>
+            <label>Area</label>
+            <select id="alm-area"><option value="">— select —</option>${areaOptions}</select>
+          </div>
+        </div>
+        <div class="admin-form-row">
+          <label>Location detail</label>
+          <input id="alm-location" type="text" value="${(listing.location_detail || '').replace(/"/g, '&quot;')}">
+        </div>
+        <div class="admin-form-row admin-form-row--2col">
+          <div>
+            <label>Price USD</label>
+            <input id="alm-price-usd" type="number" value="${listing.price_usd || ''}">
+          </div>
+          <div>
+            <label>Price IDR</label>
+            <input id="alm-price-idr" type="number" value="${listing.price_idr || ''}">
+          </div>
+        </div>
+        <div class="admin-form-row admin-form-row--3col">
+          <div>
+            <label>Land (sqm)</label>
+            <input id="alm-land" type="number" value="${listing.land_size_sqm || ''}">
+          </div>
+          <div>
+            <label>Building (sqm)</label>
+            <input id="alm-building" type="number" value="${listing.building_size_sqm || ''}">
+          </div>
+          <div>
+            <label>Certificate</label>
+            <select id="alm-cert"><option value="">— none —</option>${certOptions}</select>
+          </div>
+        </div>
+        <div class="admin-form-row admin-form-row--3col">
+          <div>
+            <label>Beds</label>
+            <input id="alm-beds" type="number" min="0" value="${listing.bedrooms || ''}">
+          </div>
+          <div>
+            <label>Baths</label>
+            <input id="alm-baths" type="number" min="0" value="${listing.bathrooms || ''}">
+          </div>
+          <div>
+            <label>Status</label>
+            <select id="alm-status">
+              <option value="active"${(listing.status||'active') === 'active' ? ' selected' : ''}>Active</option>
+              <option value="expired"${listing.status === 'expired' ? ' selected' : ''}>Expired</option>
+              <option value="draft"${listing.status === 'draft' ? ' selected' : ''}>Draft</option>
+            </select>
+          </div>
+        </div>
+        <div class="admin-form-row">
+          <label class="admin-checkbox-label">
+            <input id="alm-featured" type="checkbox"${listing.is_featured ? ' checked' : ''}> Featured listing
+          </label>
+        </div>
+        <div id="alm-error" class="admin-form-error" style="display:none"></div>
+      </div>
+      <div class="admin-modal-footer">
+        <button class="btn btn--ghost btn--sm" onclick="document.getElementById('admin-listing-modal').remove()">Cancel</button>
+        <button class="btn btn--primary btn--sm" onclick="adminListingQuickSave(${listingId})">Save changes</button>
+      </div>
+    </div>
+  `;
+  modal.addEventListener('click', function(e) {
+    if (e.target === modal) modal.remove();
+  });
+  document.body.appendChild(modal);
+}
+
+async function adminListingQuickSave(listingId) {
+  var btn = document.querySelector('#admin-listing-modal .btn--primary');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  var errEl = document.getElementById('alm-error');
+  if (errEl) errEl.style.display = 'none';
+
+  var payload = {
+    listing_id:          listingId,
+    title:               document.getElementById('alm-title').value,
+    listing_type_key:    document.getElementById('alm-type').value,
+    area_key:            document.getElementById('alm-area').value,
+    location_detail:     document.getElementById('alm-location').value,
+    price_usd:           document.getElementById('alm-price-usd').value,
+    price_idr:           document.getElementById('alm-price-idr').value,
+    land_size_sqm:       document.getElementById('alm-land').value,
+    building_size_sqm:   document.getElementById('alm-building').value,
+    certificate_type_key:document.getElementById('alm-cert').value,
+    bedrooms:            document.getElementById('alm-beds').value,
+    bathrooms:           document.getElementById('alm-baths').value,
+    status:              document.getElementById('alm-status').value,
+    is_featured:         document.getElementById('alm-featured').checked,
+  };
+
+  try {
+    await UserAuth.apiCall('admin_update_listing', payload);
+    document.getElementById('admin-listing-modal').remove();
+    DataLayer.clearCache && DataLayer.clearCache();
+    // Refresh the card in place by re-fetching if possible, otherwise notify
+    var wrap = document.querySelector('[data-listing-id="' + listingId + '"]');
+    if (wrap) {
+      wrap.querySelector('.listing-card-title') && (wrap.querySelector('.listing-card-title').textContent = payload.title);
+    }
+    // Show toast
+    showToast('Listing updated', 'success');
+  } catch(err) {
+    if (errEl) { errEl.textContent = err.message || 'Save failed.'; errEl.style.display = 'block'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Save changes'; }
+  }
+}
+
+// Full-detail inline edit — replaces the detail page content with an edit form
+async function adminListingDetailEdit(listingId, slug) {
+  await FilterData.load();
+  let listing;
+  try { listing = await DataLayer.getListing(slug); }
+  catch(e) { showToast('Could not load listing.', 'error'); return; }
+
+  const typeOptions = FilterData.listing_types.map(t =>
+    '<option value="' + t.key + '"' + (listing.listing_type_key === t.key ? ' selected' : '') + '>' + t.label + '</option>'
+  ).join('');
+  const certOptions = FilterData.land_certificate_types.map(c =>
+    '<option value="' + c.key + '"' + (listing.certificate_type_key === c.key ? ' selected' : '') + '>' + c.label + '</option>'
+  ).join('');
+  const areaOptions = FilterData.areas.map(a =>
+    '<option value="' + a.key + '"' + ((listing.area_key || listing.area) === a.key ? ' selected' : '') + '>' + a.label + '</option>'
+  ).join('');
+
+  var mainEl = document.querySelector('.listing-detail-main');
+  if (!mainEl) return;
+
+  mainEl.innerHTML = `
+    <div class="admin-inline-form">
+      <h2 style="margin-bottom:var(--space-5)">Editing listing</h2>
+      <div class="admin-form-row">
+        <label>Title</label>
+        <input id="ald-title" type="text" class="admin-input" value="${(listing.title || '').replace(/"/g, '&quot;')}">
+      </div>
+      <div class="admin-form-row admin-form-row--2col">
+        <div>
+          <label>Type</label>
+          <select id="ald-type" class="admin-select">${typeOptions}</select>
+        </div>
+        <div>
+          <label>Area</label>
+          <select id="ald-area" class="admin-select"><option value="">— select —</option>${areaOptions}</select>
+        </div>
+      </div>
+      <div class="admin-form-row">
+        <label>Location detail</label>
+        <input id="ald-location" type="text" class="admin-input" value="${(listing.location_detail || '').replace(/"/g, '&quot;')}">
+      </div>
+      <div class="admin-form-row admin-form-row--2col">
+        <div>
+          <label>Price USD</label>
+          <input id="ald-price-usd" type="number" class="admin-input" value="${listing.price_usd || ''}">
+        </div>
+        <div>
+          <label>Price IDR</label>
+          <input id="ald-price-idr" type="number" class="admin-input" value="${listing.price_idr || ''}">
+        </div>
+      </div>
+      <div class="admin-form-row admin-form-row--3col">
+        <div>
+          <label>Land size (sqm)</label>
+          <input id="ald-land" type="number" class="admin-input" value="${listing.land_size_sqm || ''}">
+        </div>
+        <div>
+          <label>Land size (are)</label>
+          <input id="ald-land-are" type="number" step="0.01" class="admin-input" value="${listing.land_size_are || ''}">
+        </div>
+        <div>
+          <label>Building (sqm)</label>
+          <input id="ald-building" type="number" class="admin-input" value="${listing.building_size_sqm || ''}">
+        </div>
+      </div>
+      <div class="admin-form-row admin-form-row--3col">
+        <div>
+          <label>Beds</label>
+          <input id="ald-beds" type="number" min="0" class="admin-input" value="${listing.bedrooms || ''}">
+        </div>
+        <div>
+          <label>Baths</label>
+          <input id="ald-baths" type="number" min="0" class="admin-input" value="${listing.bathrooms || ''}">
+        </div>
+        <div>
+          <label>Certificate</label>
+          <select id="ald-cert" class="admin-select"><option value="">— none —</option>${certOptions}</select>
+        </div>
+      </div>
+      <div class="admin-form-row admin-form-row--2col">
+        <div>
+          <label>Status</label>
+          <select id="ald-status" class="admin-select">
+            <option value="active"${(listing.status||'active')==='active'?' selected':''}>Active</option>
+            <option value="expired"${listing.status==='expired'?' selected':''}>Expired</option>
+            <option value="draft"${listing.status==='draft'?' selected':''}>Draft</option>
+          </select>
+        </div>
+        <div>
+          <label>Price label</label>
+          <input id="ald-price-label" type="text" class="admin-input" placeholder="e.g. negotiable" value="${(listing.price_label || '').replace(/"/g, '&quot;')}">
+        </div>
+      </div>
+      <div class="admin-form-row">
+        <label>Short description</label>
+        <textarea id="ald-short-desc" class="admin-textarea" rows="3">${(listing.short_description || '').replace(/</g, '&lt;')}</textarea>
+      </div>
+      <div class="admin-form-row">
+        <label>Full description</label>
+        <textarea id="ald-desc" class="admin-textarea" rows="8">${(listing.description || '').replace(/</g, '&lt;')}</textarea>
+      </div>
+      <div class="admin-form-row">
+        <label>Google Maps URL</label>
+        <input id="ald-maps" type="url" class="admin-input" value="${(listing.google_maps_url || '').replace(/"/g, '&quot;')}">
+      </div>
+      <div class="admin-form-row">
+        <label class="admin-checkbox-label">
+          <input id="ald-featured" type="checkbox"${listing.is_featured ? ' checked' : ''}> Featured listing
+        </label>
+      </div>
+      <div id="ald-error" class="admin-form-error" style="display:none"></div>
+      <div class="admin-form-actions">
+        <button class="btn btn--ghost" onclick="navigate('listing/${slug}')">Cancel</button>
+        <button class="btn btn--primary" id="ald-save-btn" onclick="adminListingDetailSave(${listingId}, '${slug}')">Save changes</button>
+      </div>
+    </div>
+  `;
+}
+
+async function adminListingDetailSave(listingId, slug) {
+  var btn = document.getElementById('ald-save-btn');
+  var errEl = document.getElementById('ald-error');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  if (errEl) errEl.style.display = 'none';
+
+  var payload = {
+    listing_id:           listingId,
+    title:                document.getElementById('ald-title').value,
+    listing_type_key:     document.getElementById('ald-type').value,
+    area_key:             document.getElementById('ald-area').value,
+    location_detail:      document.getElementById('ald-location').value,
+    price_usd:            document.getElementById('ald-price-usd').value,
+    price_idr:            document.getElementById('ald-price-idr').value,
+    price_label:          document.getElementById('ald-price-label').value,
+    land_size_sqm:        document.getElementById('ald-land').value,
+    land_size_are:        document.getElementById('ald-land-are').value,
+    building_size_sqm:    document.getElementById('ald-building').value,
+    certificate_type_key: document.getElementById('ald-cert').value,
+    bedrooms:             document.getElementById('ald-beds').value,
+    bathrooms:            document.getElementById('ald-baths').value,
+    status:               document.getElementById('ald-status').value,
+    short_description:    document.getElementById('ald-short-desc').value,
+    description:          document.getElementById('ald-desc').value,
+    google_maps_url:      document.getElementById('ald-maps').value,
+    is_featured:          document.getElementById('ald-featured').checked,
+  };
+
+  try {
+    await UserAuth.apiCall('admin_update_listing', payload);
+    DataLayer.clearCache && DataLayer.clearCache();
+    showToast('Listing saved', 'success');
+    navigate('listing/' + slug);
+  } catch(err) {
+    if (errEl) { errEl.textContent = err.message || 'Save failed.'; errEl.style.display = 'block'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Save changes'; }
+  }
+}
 
 function renderAgentCard(agent, index = 0) {
   return `
