@@ -990,9 +990,9 @@ function handle_agents_list(): void {
     $stmt = $db->prepare(
         "SELECT ag.id, ag.slug, ag.display_name, ag.agency_name, ag.bio,
                 ag.phone, ag.whatsapp_number, ag.email, ag.website_url,
-                ag.areas_served, ag.languages, ag.is_verified, ag.badge,
-                ag.google_rating, ag.google_review_count, ag.profile_image_url,
-                (SELECT COUNT(*) FROM listings l WHERE l.agent_id = ag.id AND l.status = 'active' AND l.is_approved = 1) AS active_listing_count
+                ag.areas_served, ag.languages, ag.is_verified,
+                ag.google_rating, ag.google_review_count, ag.profile_photo_url,
+                (SELECT COUNT(*) FROM listings l WHERE l.agent_id = ag.id AND l.status = 'active' AND l.is_active = 1) AS listing_count
          FROM agents ag
          WHERE {$where_sql}
          ORDER BY {$order}
@@ -1023,7 +1023,7 @@ function handle_agent_detail(string $slug): void {
          FROM listings l
          LEFT JOIN listing_types lt ON lt.`key` = l.listing_type_key
          LEFT JOIN areas a ON a.`key` = l.area_key
-         WHERE l.agent_id = ? AND l.status = 'active' AND l.is_approved = 1
+         WHERE l.agent_id = ? AND l.status = 'active' AND l.is_active = 1
          ORDER BY l.is_featured DESC, l.created_at DESC"
     );
     $l->execute([$item['id']]);
