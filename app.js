@@ -815,7 +815,7 @@ function renderProviderCard(b, index = 0) {
   const hasPhoto = !!thumbImg;
   const categoryLabel = (b.categories && b.categories.length > 0) ? b.categories.map(c => formatCategoryLabel(c.key || c)).join(' · ') : formatCategoryLabel(b.category);
 
-  return `
+  const _provCard = `
     <article class="card card-animate" style="animation-delay: ${index * 50}ms" data-id="${b.id}">
       <div class="card-visual-header">
         ${hasPhoto ? `<img src="${thumbImg}" alt="${b.name}" class="card-avatar${b.logo_url ? ' card-avatar--logo' : ''}" loading="lazy" onerror="this.style.display='none'">` : `<div class="card-avatar card-avatar--placeholder"><span>${(b.name || 'B').charAt(0).toUpperCase()}</span></div>`}
@@ -843,6 +843,8 @@ function renderProviderCard(b, index = 0) {
       </div>
     </article>
   `;
+  if (!isAdmin()) return _provCard;
+  return `<div class="admin-card-wrap" data-entity-id="${b.id}"><button class="admin-edit-card-btn" onclick="event.stopPropagation();adminProviderQuickEdit(${b.id},'${b.slug}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit</button>${_provCard}</div>`;
 }
 
 // =====================================================
@@ -1099,6 +1101,7 @@ async function renderProviderDetail(el, slug) {
   const waNum = formatWhatsAppNumber(b.phone);
   const heroImg = b.hero_image_url || '';
   el.innerHTML = `
+    ${isAdmin() ? `<div class="admin-detail-bar"><span class="admin-detail-bar-label">Admin</span><button class="btn btn--primary btn--sm" onclick="adminProviderDetailEdit(${b.id},'${slug}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit this listing</button></div>` : ''}
     <div class="detail-hero">
       ${heroImg ? '<div class="detail-hero-bg" style="background-image:url(\'' + heroImg + '\');"></div>' : ''}
       <div class="container">
@@ -1193,7 +1196,7 @@ function renderDeveloperCard(dev, index = 0) {
   const thumbImg = dev.logo_url || dev.profile_photo_url;
   const hasPhoto = !!thumbImg;
   const categoryLabel = (dev.categories && dev.categories.length > 0) ? dev.categories.map(c => formatCategoryLabel(c.key || c)).join(' · ') : 'Developer';
-  return `
+  const _devCard = `
     <article class="card card-animate" style="animation-delay:${index * 50}ms">
       <div class="card-visual-header">
         ${hasPhoto ? `<img src="${thumbImg}" alt="${dev.name}" class="card-avatar${dev.logo_url ? ' card-avatar--logo' : ''}" loading="lazy" onerror="this.style.display='none'">` : `<div class="card-avatar card-avatar--placeholder"><span>${(dev.name || 'D').charAt(0).toUpperCase()}</span></div>`}
@@ -1220,6 +1223,8 @@ function renderDeveloperCard(dev, index = 0) {
       </div>
     </article>
   `;
+  if (!isAdmin()) return _devCard;
+  return `<div class="admin-card-wrap" data-entity-id="${dev.id}"><button class="admin-edit-card-btn" onclick="event.stopPropagation();adminDeveloperQuickEdit(${dev.id},'${dev.slug}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit</button>${_devCard}</div>`;
 }
 
 async function renderDevelopers(el, params = {}) {
@@ -1316,6 +1321,7 @@ async function renderDeveloperDetail(el, slug) {
   const devSpecialties = (dev.categories && dev.categories.length > 0) ? dev.categories.map(c => formatCategoryLabel(c.key || c)).join(', ') : 'Property Developer';
   const devHeroImg = dev.hero_image_url || '';
   el.innerHTML = `
+    ${isAdmin() ? `<div class="admin-detail-bar"><span class="admin-detail-bar-label">Admin</span><button class="btn btn--primary btn--sm" onclick="adminDeveloperDetailEdit(${dev.id},'${slug}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit this listing</button></div>` : ''}
     <div class="detail-hero">
       ${devHeroImg ? '<div class="detail-hero-bg" style="background-image:url(\'' + devHeroImg + '\');"></div>' : ''}
       <div class="container">
@@ -2091,8 +2097,463 @@ async function adminListingDetailSave(listingId, slug) {
   }
 }
 
+// =====================================================
+// ADMIN: SHARED HELPERS FOR DIRECTORY EDITING
+// =====================================================
+
+function _adminEditIcon() {
+  return '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+}
+
+function _adminModalOpen(id, title, bodyHtml, onSave) {
+  var old = document.getElementById('admin-dir-modal');
+  if (old) old.remove();
+  var modal = document.createElement('div');
+  modal.id = 'admin-dir-modal';
+  modal.className = 'admin-modal-overlay';
+  modal.innerHTML = `
+    <div class="admin-modal-box">
+      <div class="admin-modal-header">
+        <h3>${title}</h3>
+        <button class="admin-modal-close" onclick="document.getElementById('admin-dir-modal').remove()">&times;</button>
+      </div>
+      <div class="admin-modal-body">${bodyHtml}</div>
+      <div class="admin-modal-footer">
+        <button class="btn btn--ghost btn--sm" onclick="document.getElementById('admin-dir-modal').remove()">Cancel</button>
+        <button class="btn btn--primary btn--sm" id="adm-save-btn" onclick="${onSave}">Save changes</button>
+      </div>
+    </div>`;
+  modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+async function _adminModalSave(action, payload, reloadSlug, reloadPage) {
+  var btn = document.getElementById('adm-save-btn');
+  var errEl = document.getElementById('adm-error');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  if (errEl) errEl.style.display = 'none';
+  try {
+    await UserAuth.apiCall(action, payload);
+    document.getElementById('admin-dir-modal') && document.getElementById('admin-dir-modal').remove();
+    DataLayer.clearCache && DataLayer.clearCache();
+    showToast('Saved', 'success');
+    if (reloadSlug) navigate(reloadPage + '/' + reloadSlug);
+  } catch(err) {
+    if (errEl) { errEl.textContent = err.message || 'Save failed.'; errEl.style.display = 'block'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Save changes'; }
+  }
+}
+
+function _adminInlineFormReplace(mainSel, formHtml) {
+  var mainEl = document.querySelector(mainSel);
+  if (!mainEl) { showToast('Could not find page section to edit', 'error'); return false; }
+  mainEl.innerHTML = `<div class="admin-inline-form">${formHtml}</div>`;
+  return true;
+}
+
+function _adminV(id) {
+  var el = document.getElementById(id);
+  return el ? el.value : '';
+}
+function _adminC(id) {
+  var el = document.getElementById(id);
+  return el ? el.checked : false;
+}
+
+// =====================================================
+// ADMIN: PROVIDER EDIT
+// =====================================================
+
+async function adminProviderQuickEdit(id, slug) {
+  await FilterData.load();
+  let b;
+  try { b = await DataLayer.getProvider(slug); } catch(e) { showToast('Could not load provider', 'error'); return; }
+  const areaOptions = FilterData.areas.map(a => `<option value="${a.key}"${(b.area_key||b.area)===a.key?' selected':''}>${a.label}</option>`).join('');
+  _adminModalOpen(id, 'Edit Provider', `
+    <div class="admin-form-row"><label>Name</label><input id="adm-name" class="admin-input" type="text" value="${(b.name||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row"><label>Area</label><select id="adm-area" class="admin-select"><option value="">—</option>${areaOptions}</select></div>
+    <div class="admin-form-row"><label>Phone / WhatsApp</label>
+      <div class="admin-form-row--2col">
+        <input id="adm-phone" class="admin-input" type="text" value="${(b.phone||'').replace(/"/g,'&quot;')}" placeholder="Phone">
+        <input id="adm-wa" class="admin-input" type="text" value="${(b.whatsapp_number||'').replace(/"/g,'&quot;')}" placeholder="WhatsApp">
+      </div>
+    </div>
+    <div class="admin-form-row"><label>Short description</label><textarea id="adm-short" class="admin-textarea" rows="2">${(b.short_description_en||b.short_description||'').replace(/</g,'&lt;')}</textarea></div>
+    <div class="admin-form-row"><label>Profile photo URL</label><input id="adm-photo" class="admin-input" type="url" value="${(b.profile_photo_url||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row"><label>Logo URL</label><input id="adm-logo" class="admin-input" type="url" value="${(b.logo_url||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row admin-form-row--2col">
+      <label class="admin-checkbox-label"><input id="adm-trusted" type="checkbox"${b.is_trusted?' checked':''}> Trusted</label>
+      <label class="admin-checkbox-label"><input id="adm-active" type="checkbox"${b.is_active!==false&&b.is_active!=0?' checked':''}> Active</label>
+    </div>
+    <div id="adm-error" class="admin-form-error" style="display:none"></div>
+  `, `adminProviderQuickSave(${id},'${slug}')`);
+}
+
+async function adminProviderQuickSave(id, slug) {
+  await _adminModalSave('admin_update_provider', {
+    id, name: _adminV('adm-name'), area_key: _adminV('adm-area'),
+    phone: _adminV('adm-phone'), whatsapp_number: _adminV('adm-wa'),
+    short_description: _adminV('adm-short'),
+    profile_photo_url: _adminV('adm-photo'), logo_url: _adminV('adm-logo'),
+    is_trusted: _adminC('adm-trusted'), is_active: _adminC('adm-active'),
+  }, slug, 'provider');
+}
+
+async function adminProviderDetailEdit(id, slug) {
+  await FilterData.load();
+  let b;
+  try { b = await DataLayer.getProvider(slug); } catch(e) { showToast('Could not load provider', 'error'); return; }
+  const areaOptions = FilterData.areas.map(a => `<option value="${a.key}"${(b.area_key||b.area)===a.key?' selected':''}>${a.label}</option>`).join('');
+  const ok = _adminInlineFormReplace('.detail-main', `
+    <h2 style="margin-bottom:var(--space-5)">Editing: ${(b.name||'').replace(/</g,'&lt;')}</h2>
+    <div class="admin-form-row"><label>Name</label><input id="ade-name" class="admin-input" type="text" value="${(b.name||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row admin-form-row--2col">
+      <div><label>Area</label><select id="ade-area" class="admin-select"><option value="">—</option>${areaOptions}</select></div>
+      <div><label>Website</label><input id="ade-web" class="admin-input" type="url" value="${(b.website_url||'').replace(/"/g,'&quot;')}"></div>
+    </div>
+    <div class="admin-form-row admin-form-row--2col">
+      <div><label>Phone</label><input id="ade-phone" class="admin-input" type="text" value="${(b.phone||'').replace(/"/g,'&quot;')}"></div>
+      <div><label>WhatsApp</label><input id="ade-wa" class="admin-input" type="text" value="${(b.whatsapp_number||'').replace(/"/g,'&quot;')}"></div>
+    </div>
+    <div class="admin-form-row"><label>Short description</label><textarea id="ade-short" class="admin-textarea" rows="3">${(b.short_description_en||b.short_description||'').replace(/</g,'&lt;')}</textarea></div>
+    <div class="admin-form-row"><label>Full description</label><textarea id="ade-desc" class="admin-textarea" rows="7">${(b.description||'').replace(/</g,'&lt;')}</textarea></div>
+    <div class="admin-form-row"><label>Address</label><input id="ade-address" class="admin-input" type="text" value="${(b.address||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row"><label>Google Maps URL</label><input id="ade-maps" class="admin-input" type="url" value="${(b.google_maps_url||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row"><label>Profile photo URL</label><input id="ade-photo" class="admin-input" type="url" value="${(b.profile_photo_url||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row"><label>Logo URL</label><input id="ade-logo" class="admin-input" type="url" value="${(b.logo_url||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row"><label>Hero image URL</label><input id="ade-hero" class="admin-input" type="url" value="${(b.hero_image_url||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row admin-form-row--3col">
+      <label class="admin-checkbox-label"><input id="ade-trusted" type="checkbox"${b.is_trusted?' checked':''}> Trusted</label>
+      <label class="admin-checkbox-label"><input id="ade-featured" type="checkbox"${b.is_featured?' checked':''}> Featured</label>
+      <label class="admin-checkbox-label"><input id="ade-active" type="checkbox"${b.is_active!==false&&b.is_active!=0?' checked':''}> Active</label>
+    </div>
+    <div id="ade-error" class="admin-form-error" style="display:none"></div>
+    <div class="admin-form-actions">
+      <button class="btn btn--ghost" onclick="navigate('provider/${slug}')">Cancel</button>
+      <button class="btn btn--primary" id="ade-save-btn" onclick="adminProviderDetailSave(${id},'${slug}')">Save changes</button>
+    </div>
+  `);
+  if (!ok) return;
+}
+
+async function adminProviderDetailSave(id, slug) {
+  var btn = document.getElementById('ade-save-btn');
+  var errEl = document.getElementById('ade-error');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  if (errEl) errEl.style.display = 'none';
+  try {
+    await UserAuth.apiCall('admin_update_provider', {
+      id, name: _adminV('ade-name'), area_key: _adminV('ade-area'),
+      phone: _adminV('ade-phone'), whatsapp_number: _adminV('ade-wa'),
+      website_url: _adminV('ade-web'), address: _adminV('ade-address'),
+      google_maps_url: _adminV('ade-maps'),
+      short_description: _adminV('ade-short'), description: _adminV('ade-desc'),
+      profile_photo_url: _adminV('ade-photo'), logo_url: _adminV('ade-logo'), hero_image_url: _adminV('ade-hero'),
+      is_trusted: _adminC('ade-trusted'), is_featured: _adminC('ade-featured'), is_active: _adminC('ade-active'),
+    });
+    DataLayer.clearCache && DataLayer.clearCache();
+    showToast('Provider saved', 'success');
+    navigate('provider/' + slug);
+  } catch(err) {
+    if (errEl) { errEl.textContent = err.message || 'Save failed.'; errEl.style.display = 'block'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Save changes'; }
+  }
+}
+
+// =====================================================
+// ADMIN: DEVELOPER EDIT
+// =====================================================
+
+async function adminDeveloperQuickEdit(id, slug) {
+  await FilterData.load();
+  let dev;
+  try { dev = await DataLayer.getDeveloper(slug); } catch(e) { showToast('Could not load developer', 'error'); return; }
+  const areaOptions = FilterData.areas.map(a => `<option value="${a.key}"${(dev.areas_focus||[]).includes(a.key)?' selected':''}>${a.label}</option>`).join('');
+  _adminModalOpen(id, 'Edit Developer', `
+    <div class="admin-form-row"><label>Name</label><input id="adm-name" class="admin-input" type="text" value="${(dev.name||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row admin-form-row--2col">
+      <div><label>Phone</label><input id="adm-phone" class="admin-input" type="text" value="${(dev.phone||'').replace(/"/g,'&quot;')}"></div>
+      <div><label>WhatsApp</label><input id="adm-wa" class="admin-input" type="text" value="${(dev.whatsapp_number||'').replace(/"/g,'&quot;')}"></div>
+    </div>
+    <div class="admin-form-row"><label>Short description</label><textarea id="adm-short" class="admin-textarea" rows="2">${(dev.short_description_en||dev.short_description||'').replace(/</g,'&lt;')}</textarea></div>
+    <div class="admin-form-row"><label>Profile photo URL</label><input id="adm-photo" class="admin-input" type="url" value="${(dev.profile_photo_url||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row"><label>Logo URL</label><input id="adm-logo" class="admin-input" type="url" value="${(dev.logo_url||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row admin-form-row--2col">
+      <label class="admin-checkbox-label"><input id="adm-featured" type="checkbox"${dev.is_featured?' checked':''}> Featured</label>
+      <label class="admin-checkbox-label"><input id="adm-active" type="checkbox"${dev.is_active!==false&&dev.is_active!=0?' checked':''}> Active</label>
+    </div>
+    <div id="adm-error" class="admin-form-error" style="display:none"></div>
+  `, `adminDeveloperQuickSave(${id},'${slug}')`);
+}
+
+async function adminDeveloperQuickSave(id, slug) {
+  await _adminModalSave('admin_update_developer', {
+    id, name: _adminV('adm-name'),
+    phone: _adminV('adm-phone'), whatsapp_number: _adminV('adm-wa'),
+    short_description: _adminV('adm-short'),
+    profile_photo_url: _adminV('adm-photo'), logo_url: _adminV('adm-logo'),
+    is_featured: _adminC('adm-featured'), is_active: _adminC('adm-active'),
+  }, slug, 'developer');
+}
+
+async function adminDeveloperDetailEdit(id, slug) {
+  await FilterData.load();
+  let dev;
+  try { dev = await DataLayer.getDeveloper(slug); } catch(e) { showToast('Could not load developer', 'error'); return; }
+  const ok = _adminInlineFormReplace('.detail-main', `
+    <h2 style="margin-bottom:var(--space-5)">Editing: ${(dev.name||'').replace(/</g,'&lt;')}</h2>
+    <div class="admin-form-row"><label>Name</label><input id="ade-name" class="admin-input" type="text" value="${(dev.name||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row admin-form-row--2col">
+      <div><label>Phone</label><input id="ade-phone" class="admin-input" type="text" value="${(dev.phone||'').replace(/"/g,'&quot;')}"></div>
+      <div><label>WhatsApp</label><input id="ade-wa" class="admin-input" type="text" value="${(dev.whatsapp_number||'').replace(/"/g,'&quot;')}"></div>
+    </div>
+    <div class="admin-form-row admin-form-row--2col">
+      <div><label>Website</label><input id="ade-web" class="admin-input" type="url" value="${(dev.website_url||'').replace(/"/g,'&quot;')}"></div>
+      <div><label>Min investment (USD)</label><input id="ade-ticket" class="admin-input" type="number" value="${dev.min_ticket_usd||''}"></div>
+    </div>
+    <div class="admin-form-row"><label>Short description</label><textarea id="ade-short" class="admin-textarea" rows="3">${(dev.short_description_en||dev.short_description||'').replace(/</g,'&lt;')}</textarea></div>
+    <div class="admin-form-row"><label>Full description</label><textarea id="ade-desc" class="admin-textarea" rows="7">${(dev.description||'').replace(/</g,'&lt;')}</textarea></div>
+    <div class="admin-form-row"><label>Google Maps URL</label><input id="ade-maps" class="admin-input" type="url" value="${(dev.google_maps_url||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row"><label>Profile photo URL</label><input id="ade-photo" class="admin-input" type="url" value="${(dev.profile_photo_url||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row"><label>Logo URL</label><input id="ade-logo" class="admin-input" type="url" value="${(dev.logo_url||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row"><label>Hero image URL</label><input id="ade-hero" class="admin-input" type="url" value="${(dev.hero_image_url||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row admin-form-row--2col">
+      <label class="admin-checkbox-label"><input id="ade-featured" type="checkbox"${dev.is_featured?' checked':''}> Featured</label>
+      <label class="admin-checkbox-label"><input id="ade-active" type="checkbox"${dev.is_active!==false&&dev.is_active!=0?' checked':''}> Active</label>
+    </div>
+    <div id="ade-error" class="admin-form-error" style="display:none"></div>
+    <div class="admin-form-actions">
+      <button class="btn btn--ghost" onclick="navigate('developer/${slug}')">Cancel</button>
+      <button class="btn btn--primary" id="ade-save-btn" onclick="adminDeveloperDetailSave(${id},'${slug}')">Save changes</button>
+    </div>
+  `);
+  if (!ok) return;
+}
+
+async function adminDeveloperDetailSave(id, slug) {
+  var btn = document.getElementById('ade-save-btn');
+  var errEl = document.getElementById('ade-error');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  if (errEl) errEl.style.display = 'none';
+  try {
+    await UserAuth.apiCall('admin_update_developer', {
+      id, name: _adminV('ade-name'),
+      phone: _adminV('ade-phone'), whatsapp_number: _adminV('ade-wa'),
+      website_url: _adminV('ade-web'), google_maps_url: _adminV('ade-maps'),
+      min_ticket_usd: _adminV('ade-ticket'),
+      short_description: _adminV('ade-short'), description: _adminV('ade-desc'),
+      profile_photo_url: _adminV('ade-photo'), logo_url: _adminV('ade-logo'), hero_image_url: _adminV('ade-hero'),
+      is_featured: _adminC('ade-featured'), is_active: _adminC('ade-active'),
+    });
+    DataLayer.clearCache && DataLayer.clearCache();
+    showToast('Developer saved', 'success');
+    navigate('developer/' + slug);
+  } catch(err) {
+    if (errEl) { errEl.textContent = err.message || 'Save failed.'; errEl.style.display = 'block'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Save changes'; }
+  }
+}
+
+// =====================================================
+// ADMIN: PROJECT EDIT
+// =====================================================
+
+async function adminProjectQuickEdit(id, slug) {
+  await FilterData.load();
+  let p;
+  try { p = await DataLayer.getProject(slug); } catch(e) { showToast('Could not load project', 'error'); return; }
+  const areaOptions = FilterData.areas.map(a => `<option value="${a.key}"${p.area_key===a.key||p.location_area===a.key?' selected':''}>${a.label}</option>`).join('');
+  const statusOptions = FilterData.project_statuses.map(s => `<option value="${s.key}"${p.status===s.key?' selected':''}>${s.label}</option>`).join('');
+  _adminModalOpen(id, 'Edit Project', `
+    <div class="admin-form-row"><label>Name</label><input id="adm-name" class="admin-input" type="text" value="${(p.name||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row admin-form-row--2col">
+      <div><label>Area</label><select id="adm-area" class="admin-select"><option value="">—</option>${areaOptions}</select></div>
+      <div><label>Status</label><select id="adm-status" class="admin-select">${statusOptions}</select></div>
+    </div>
+    <div class="admin-form-row admin-form-row--2col">
+      <div><label>Min investment (USD)</label><input id="adm-ticket" class="admin-input" type="number" value="${p.min_investment_usd||''}"></div>
+      <div><label>Yield range</label><input id="adm-yield" class="admin-input" type="text" value="${(p.expected_yield_range||'').replace(/"/g,'&quot;')}"></div>
+    </div>
+    <div class="admin-form-row"><label>Short description</label><textarea id="adm-short" class="admin-textarea" rows="2">${(p.short_description_en||p.short_description||'').replace(/</g,'&lt;')}</textarea></div>
+    <div class="admin-form-row"><label>Logo URL</label><input id="adm-logo" class="admin-input" type="url" value="${(p.logo_url||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row admin-form-row--2col">
+      <label class="admin-checkbox-label"><input id="adm-featured" type="checkbox"${p.is_featured?' checked':''}> Featured</label>
+      <label class="admin-checkbox-label"><input id="adm-active" type="checkbox"${p.is_active!==false&&p.is_active!=0?' checked':''}> Active</label>
+    </div>
+    <div id="adm-error" class="admin-form-error" style="display:none"></div>
+  `, `adminProjectQuickSave(${id},'${slug}')`);
+}
+
+async function adminProjectQuickSave(id, slug) {
+  await _adminModalSave('admin_update_project', {
+    id, name: _adminV('adm-name'), area_key: _adminV('adm-area'),
+    status_key: _adminV('adm-status'),
+    min_investment_usd: _adminV('adm-ticket'), expected_yield_range: _adminV('adm-yield'),
+    short_description: _adminV('adm-short'), logo_url: _adminV('adm-logo'),
+    is_featured: _adminC('adm-featured'), is_active: _adminC('adm-active'),
+  }, slug, 'project');
+}
+
+async function adminProjectDetailEdit(id, slug) {
+  await FilterData.load();
+  let p;
+  try { p = await DataLayer.getProject(slug); } catch(e) { showToast('Could not load project', 'error'); return; }
+  const areaOptions = FilterData.areas.map(a => `<option value="${a.key}"${p.area_key===a.key||p.location_area===a.key?' selected':''}>${a.label}</option>`).join('');
+  const statusOptions = FilterData.project_statuses.map(s => `<option value="${s.key}"${p.status===s.key?' selected':''}>${s.label}</option>`).join('');
+  const typeOptions = FilterData.project_types.map(t => `<option value="${t.key}"${p.project_type===t.key?' selected':''}>${t.label}</option>`).join('');
+  const ok = _adminInlineFormReplace('.detail-main', `
+    <h2 style="margin-bottom:var(--space-5)">Editing: ${(p.name||'').replace(/</g,'&lt;')}</h2>
+    <div class="admin-form-row"><label>Name</label><input id="ade-name" class="admin-input" type="text" value="${(p.name||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row admin-form-row--3col">
+      <div><label>Area</label><select id="ade-area" class="admin-select"><option value="">—</option>${areaOptions}</select></div>
+      <div><label>Status</label><select id="ade-status" class="admin-select">${statusOptions}</select></div>
+      <div><label>Type</label><select id="ade-type" class="admin-select">${typeOptions}</select></div>
+    </div>
+    <div class="admin-form-row admin-form-row--2col">
+      <div><label>Min investment (USD)</label><input id="ade-ticket" class="admin-input" type="number" value="${p.min_investment_usd||''}"></div>
+      <div><label>Yield range</label><input id="ade-yield" class="admin-input" type="text" value="${(p.expected_yield_range||'').replace(/"/g,'&quot;')}"></div>
+    </div>
+    <div class="admin-form-row"><label>Timeline summary</label><input id="ade-timeline" class="admin-input" type="text" value="${(p.timeline_summary||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row"><label>Short description</label><textarea id="ade-short" class="admin-textarea" rows="3">${(p.short_description_en||p.short_description||'').replace(/</g,'&lt;')}</textarea></div>
+    <div class="admin-form-row"><label>Full description</label><textarea id="ade-desc" class="admin-textarea" rows="7">${(p.description||'').replace(/</g,'&lt;')}</textarea></div>
+    <div class="admin-form-row admin-form-row--2col">
+      <div><label>Website</label><input id="ade-web" class="admin-input" type="url" value="${(p.website_url||'').replace(/"/g,'&quot;')}"></div>
+      <div><label>Contact WhatsApp</label><input id="ade-wa" class="admin-input" type="text" value="${(p.info_contact_whatsapp||'').replace(/"/g,'&quot;')}"></div>
+    </div>
+    <div class="admin-form-row"><label>Logo URL</label><input id="ade-logo" class="admin-input" type="url" value="${(p.logo_url||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row"><label>Hero image URL</label><input id="ade-hero" class="admin-input" type="url" value="${(p.hero_image_url||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row admin-form-row--2col">
+      <label class="admin-checkbox-label"><input id="ade-featured" type="checkbox"${p.is_featured?' checked':''}> Featured</label>
+      <label class="admin-checkbox-label"><input id="ade-active" type="checkbox"${p.is_active!==false&&p.is_active!=0?' checked':''}> Active</label>
+    </div>
+    <div id="ade-error" class="admin-form-error" style="display:none"></div>
+    <div class="admin-form-actions">
+      <button class="btn btn--ghost" onclick="navigate('project/${slug}')">Cancel</button>
+      <button class="btn btn--primary" id="ade-save-btn" onclick="adminProjectDetailSave(${id},'${slug}')">Save changes</button>
+    </div>
+  `);
+  if (!ok) return;
+}
+
+async function adminProjectDetailSave(id, slug) {
+  var btn = document.getElementById('ade-save-btn');
+  var errEl = document.getElementById('ade-error');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  if (errEl) errEl.style.display = 'none';
+  try {
+    await UserAuth.apiCall('admin_update_project', {
+      id, name: _adminV('ade-name'), area_key: _adminV('ade-area'),
+      status_key: _adminV('ade-status'), project_type_key: _adminV('ade-type'),
+      min_investment_usd: _adminV('ade-ticket'), expected_yield_range: _adminV('ade-yield'),
+      timeline_summary: _adminV('ade-timeline'),
+      short_description: _adminV('ade-short'), description: _adminV('ade-desc'),
+      website_url: _adminV('ade-web'), info_contact_whatsapp: _adminV('ade-wa'),
+      logo_url: _adminV('ade-logo'), hero_image_url: _adminV('ade-hero'),
+      is_featured: _adminC('ade-featured'), is_active: _adminC('ade-active'),
+    });
+    DataLayer.clearCache && DataLayer.clearCache();
+    showToast('Project saved', 'success');
+    navigate('project/' + slug);
+  } catch(err) {
+    if (errEl) { errEl.textContent = err.message || 'Save failed.'; errEl.style.display = 'block'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Save changes'; }
+  }
+}
+
+// =====================================================
+// ADMIN: AGENT EDIT
+// =====================================================
+
+async function adminAgentQuickEdit(id, slug) {
+  let agent;
+  try { agent = await DataLayer.getAgent(slug); } catch(e) { showToast('Could not load agent', 'error'); return; }
+  _adminModalOpen(id, 'Edit Agent', `
+    <div class="admin-form-row"><label>Display name</label><input id="adm-name" class="admin-input" type="text" value="${(agent.display_name||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row"><label>Agency name</label><input id="adm-agency" class="admin-input" type="text" value="${(agent.agency_name||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row admin-form-row--2col">
+      <div><label>Phone</label><input id="adm-phone" class="admin-input" type="text" value="${(agent.phone||'').replace(/"/g,'&quot;')}"></div>
+      <div><label>WhatsApp</label><input id="adm-wa" class="admin-input" type="text" value="${(agent.whatsapp_number||'').replace(/"/g,'&quot;')}"></div>
+    </div>
+    <div class="admin-form-row"><label>Profile photo URL</label><input id="adm-photo" class="admin-input" type="url" value="${(agent.profile_photo_url||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row"><label>Bio</label><textarea id="adm-bio" class="admin-textarea" rows="3">${(agent.bio||'').replace(/</g,'&lt;')}</textarea></div>
+    <div class="admin-form-row admin-form-row--2col">
+      <label class="admin-checkbox-label"><input id="adm-verified" type="checkbox"${agent.is_verified?' checked':''}> Verified</label>
+      <label class="admin-checkbox-label"><input id="adm-active" type="checkbox"${agent.is_active!==false&&agent.is_active!=0?' checked':''}> Active</label>
+    </div>
+    <div id="adm-error" class="admin-form-error" style="display:none"></div>
+  `, `adminAgentQuickSave(${id},'${slug}')`);
+}
+
+async function adminAgentQuickSave(id, slug) {
+  await _adminModalSave('admin_update_agent', {
+    id, display_name: _adminV('adm-name'), agency_name: _adminV('adm-agency'),
+    phone: _adminV('adm-phone'), whatsapp_number: _adminV('adm-wa'),
+    profile_photo_url: _adminV('adm-photo'), bio: _adminV('adm-bio'),
+    is_verified: _adminC('adm-verified'), is_active: _adminC('adm-active'),
+  }, slug, 'agent');
+}
+
+async function adminAgentDetailEdit(id, slug) {
+  let agent;
+  try { agent = await DataLayer.getAgent(slug); } catch(e) { showToast('Could not load agent', 'error'); return; }
+  const ok = _adminInlineFormReplace('.detail-main', `
+    <h2 style="margin-bottom:var(--space-5)">Editing: ${(agent.display_name||'').replace(/</g,'&lt;')}</h2>
+    <div class="admin-form-row admin-form-row--2col">
+      <div><label>Display name</label><input id="ade-name" class="admin-input" type="text" value="${(agent.display_name||'').replace(/"/g,'&quot;')}"></div>
+      <div><label>Agency name</label><input id="ade-agency" class="admin-input" type="text" value="${(agent.agency_name||'').replace(/"/g,'&quot;')}"></div>
+    </div>
+    <div class="admin-form-row admin-form-row--2col">
+      <div><label>Phone</label><input id="ade-phone" class="admin-input" type="text" value="${(agent.phone||'').replace(/"/g,'&quot;')}"></div>
+      <div><label>WhatsApp</label><input id="ade-wa" class="admin-input" type="text" value="${(agent.whatsapp_number||'').replace(/"/g,'&quot;')}"></div>
+    </div>
+    <div class="admin-form-row admin-form-row--2col">
+      <div><label>Email</label><input id="ade-email" class="admin-input" type="email" value="${(agent.email||'').replace(/"/g,'&quot;')}"></div>
+      <div><label>Website</label><input id="ade-web" class="admin-input" type="url" value="${(agent.website_url||'').replace(/"/g,'&quot;')}"></div>
+    </div>
+    <div class="admin-form-row"><label>Profile photo URL</label><input id="ade-photo" class="admin-input" type="url" value="${(agent.profile_photo_url||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row"><label>Bio</label><textarea id="ade-bio" class="admin-textarea" rows="5">${(agent.bio||'').replace(/</g,'&lt;')}</textarea></div>
+    <div class="admin-form-row"><label>Areas served</label><input id="ade-areas" class="admin-input" type="text" value="${(agent.areas_served||'').replace(/"/g,'&quot;')}" placeholder="e.g. kuta_lombok,senggigi"></div>
+    <div class="admin-form-row"><label>Languages</label><input id="ade-langs" class="admin-input" type="text" value="${(agent.languages||'').replace(/"/g,'&quot;')}" placeholder="e.g. Bahasa, English"></div>
+    <div class="admin-form-row"><label>Google Maps URL</label><input id="ade-maps" class="admin-input" type="url" value="${(agent.google_maps_url||'').replace(/"/g,'&quot;')}"></div>
+    <div class="admin-form-row admin-form-row--2col">
+      <label class="admin-checkbox-label"><input id="ade-verified" type="checkbox"${agent.is_verified?' checked':''}> Verified</label>
+      <label class="admin-checkbox-label"><input id="ade-active" type="checkbox"${agent.is_active!==false&&agent.is_active!=0?' checked':''}> Active</label>
+    </div>
+    <div id="ade-error" class="admin-form-error" style="display:none"></div>
+    <div class="admin-form-actions">
+      <button class="btn btn--ghost" onclick="navigate('agent/${slug}')">Cancel</button>
+      <button class="btn btn--primary" id="ade-save-btn" onclick="adminAgentDetailSave(${id},'${slug}')">Save changes</button>
+    </div>
+  `);
+  if (!ok) return;
+}
+
+async function adminAgentDetailSave(id, slug) {
+  var btn = document.getElementById('ade-save-btn');
+  var errEl = document.getElementById('ade-error');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  if (errEl) errEl.style.display = 'none';
+  try {
+    await UserAuth.apiCall('admin_update_agent', {
+      id, display_name: _adminV('ade-name'), agency_name: _adminV('ade-agency'),
+      phone: _adminV('ade-phone'), whatsapp_number: _adminV('ade-wa'),
+      email: _adminV('ade-email'), website_url: _adminV('ade-web'),
+      profile_photo_url: _adminV('ade-photo'), bio: _adminV('ade-bio'),
+      areas_served: _adminV('ade-areas'), languages: _adminV('ade-langs'),
+      google_maps_url: _adminV('ade-maps'),
+      is_verified: _adminC('ade-verified'), is_active: _adminC('ade-active'),
+    });
+    DataLayer.clearCache && DataLayer.clearCache();
+    showToast('Agent saved', 'success');
+    navigate('agent/' + slug);
+  } catch(err) {
+    if (errEl) { errEl.textContent = err.message || 'Save failed.'; errEl.style.display = 'block'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Save changes'; }
+  }
+}
+
 function renderAgentCard(agent, index = 0) {
-  return `
+  const _agentCard = `
     <a href="#agent/${agent.slug}" class="card agent-card" onclick="navigate('agent/${agent.slug}');return false;" style="animation-delay:${index * 60}ms">
       <div class="agent-card-avatar">
         ${agent.profile_photo_url
@@ -2111,6 +2572,8 @@ function renderAgentCard(agent, index = 0) {
       </div>
     </a>
   `;
+  if (!isAdmin()) return _agentCard;
+  return `<div class="admin-card-wrap" data-entity-id="${agent.id}"><button class="admin-edit-card-btn" onclick="event.stopPropagation();adminAgentQuickEdit(${agent.id},'${agent.slug}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit</button>${_agentCard}</div>`;
 }
 
 async function renderAgents(el, params = {}) {
@@ -2202,6 +2665,7 @@ async function renderAgentDetail(el, slug) {
   const wa = agent.whatsapp_number || '';
 
   el.innerHTML = `
+    ${isAdmin() ? `<div class="admin-detail-bar"><span class="admin-detail-bar-label">Admin</span><button class="btn btn--primary btn--sm" onclick="adminAgentDetailEdit(${agent.id},'${slug}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit this listing</button></div>` : ''}
     <div class="detail-hero">
       <div class="container">
         <div class="detail-hero-inner">
@@ -2543,7 +3007,7 @@ function renderProjectCard(p, index = 0) {
   const badge = p.badge ? `<span class="card-badge">${renderBadge(p.badge)}</span>` : '';
   const statusLabel = formatProjectStatus(p.status);
 
-  return `
+  const _projCard = `
     <article class="card card-animate" style="animation-delay:${index * 50}ms">
       <div class="card-top">
         <div class="card-top-left">
@@ -2582,6 +3046,8 @@ function renderProjectCard(p, index = 0) {
       </div>
     </article>
   `;
+  if (!isAdmin()) return _projCard;
+  return `<div class="admin-card-wrap" data-entity-id="${p.id}"><button class="admin-edit-card-btn" onclick="event.stopPropagation();adminProjectQuickEdit(${p.id},'${p.slug}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit</button>${_projCard}</div>`;
 }
 
 // =====================================================
@@ -2725,6 +3191,7 @@ async function renderProjectDetail(el, slug) {
   const dev = p.developer_name ? { name: p.developer_name, slug: p.developer_slug } : null;
 
   el.innerHTML = `
+    ${isAdmin() ? `<div class="admin-detail-bar"><span class="admin-detail-bar-label">Admin</span><button class="btn btn--primary btn--sm" onclick="adminProjectDetailEdit(${p.id},'${slug}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit this listing</button></div>` : ''}
     <div class="page-header">
       <div class="container">
         <div class="card-meta mb-3">

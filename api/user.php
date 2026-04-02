@@ -212,7 +212,11 @@ switch ($action) {
     case 'update_listing': handle_update_listing(); break;
     case 'my_listings':    handle_my_listings(); break;
     case 'delete_listing': handle_delete_listing(); break;
-    case 'admin_update_listing': handle_admin_update_listing(); break;
+    case 'admin_update_listing':  handle_admin_update_listing(); break;
+    case 'admin_update_provider': handle_admin_update_provider(); break;
+    case 'admin_update_developer':handle_admin_update_developer(); break;
+    case 'admin_update_project':  handle_admin_update_project(); break;
+    case 'admin_update_agent':    handle_admin_update_agent_admin(); break;
     // Image management
     case 'upload_image':   handle_upload_image(); break;
     case 'delete_image':   handle_delete_image(); break;
@@ -1060,6 +1064,192 @@ function handle_admin_update_listing(): void {
     ]);
 
     json_out(['success' => true, 'message' => 'Listing updated.']);
+}
+
+// =================================================================
+// ADMIN DIRECTORY UPDATES (providers, developers, projects, agents)
+// =================================================================
+
+function require_admin(): void {
+    require_auth();
+    if (($_SESSION['user_role'] ?? '') !== 'admin') json_error(403, 'Admin access required.');
+}
+
+function handle_admin_update_provider(): void {
+    require_admin();
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+    $data = get_post_data();
+    $id   = (int)($data['id'] ?? 0);
+    if (!$id) json_error(400, 'id required.');
+
+    $db   = get_db();
+    $stmt = $db->prepare("SELECT * FROM providers WHERE id = ?");
+    $stmt->execute([$id]);
+    $row  = $stmt->fetch();
+    if (!$row) json_error(404, 'Provider not found.');
+
+    $name = trim($data['name'] ?? $row['name']);
+    if (strlen($name) < 2) json_error(400, 'name too short.');
+
+    $db->prepare(
+        "UPDATE providers SET
+            name = ?, short_description = ?, description = ?,
+            area_key = ?, phone = ?, whatsapp_number = ?,
+            website_url = ?, google_maps_url = ?, address = ?,
+            profile_photo_url = ?, logo_url = ?, hero_image_url = ?,
+            is_featured = ?, is_trusted = ?, is_active = ?
+         WHERE id = ?"
+    )->execute([
+        $name,
+        trim($data['short_description'] ?? $row['short_description'] ?? ''),
+        isset($data['description']) ? trim($data['description']) : ($row['description'] ?? null),
+        trim($data['area_key'] ?? $row['area_key'] ?? ''),
+        trim($data['phone'] ?? $row['phone'] ?? ''),
+        trim($data['whatsapp_number'] ?? $row['whatsapp_number'] ?? ''),
+        trim($data['website_url'] ?? $row['website_url'] ?? ''),
+        trim($data['google_maps_url'] ?? $row['google_maps_url'] ?? ''),
+        trim($data['address'] ?? $row['address'] ?? ''),
+        isset($data['profile_photo_url']) ? trim($data['profile_photo_url']) : ($row['profile_photo_url'] ?? null),
+        isset($data['logo_url']) ? trim($data['logo_url']) : ($row['logo_url'] ?? null),
+        isset($data['hero_image_url']) ? trim($data['hero_image_url']) : ($row['hero_image_url'] ?? null),
+        isset($data['is_featured']) ? ($data['is_featured'] ? 1 : 0) : (int)$row['is_featured'],
+        isset($data['is_trusted']) ? ($data['is_trusted'] ? 1 : 0) : (int)$row['is_trusted'],
+        isset($data['is_active']) ? ($data['is_active'] ? 1 : 0) : (int)$row['is_active'],
+        $id,
+    ]);
+    json_out(['success' => true, 'message' => 'Provider updated.']);
+}
+
+function handle_admin_update_developer(): void {
+    require_admin();
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+    $data = get_post_data();
+    $id   = (int)($data['id'] ?? 0);
+    if (!$id) json_error(400, 'id required.');
+
+    $db   = get_db();
+    $stmt = $db->prepare("SELECT * FROM developers WHERE id = ?");
+    $stmt->execute([$id]);
+    $row  = $stmt->fetch();
+    if (!$row) json_error(404, 'Developer not found.');
+
+    $name = trim($data['name'] ?? $row['name']);
+    if (strlen($name) < 2) json_error(400, 'name too short.');
+
+    $db->prepare(
+        "UPDATE developers SET
+            name = ?, short_description = ?, description = ?,
+            phone = ?, whatsapp_number = ?, website_url = ?,
+            google_maps_url = ?, min_ticket_usd = ?,
+            profile_photo_url = ?, logo_url = ?, hero_image_url = ?,
+            is_featured = ?, is_active = ?
+         WHERE id = ?"
+    )->execute([
+        $name,
+        trim($data['short_description'] ?? $row['short_description'] ?? ''),
+        isset($data['description']) ? trim($data['description']) : ($row['description'] ?? null),
+        trim($data['phone'] ?? $row['phone'] ?? ''),
+        trim($data['whatsapp_number'] ?? $row['whatsapp_number'] ?? ''),
+        trim($data['website_url'] ?? $row['website_url'] ?? ''),
+        trim($data['google_maps_url'] ?? $row['google_maps_url'] ?? ''),
+        isset($data['min_ticket_usd']) && $data['min_ticket_usd'] !== '' ? (int)$data['min_ticket_usd'] : ($row['min_ticket_usd'] ?? null),
+        isset($data['profile_photo_url']) ? trim($data['profile_photo_url']) : ($row['profile_photo_url'] ?? null),
+        isset($data['logo_url']) ? trim($data['logo_url']) : ($row['logo_url'] ?? null),
+        isset($data['hero_image_url']) ? trim($data['hero_image_url']) : ($row['hero_image_url'] ?? null),
+        isset($data['is_featured']) ? ($data['is_featured'] ? 1 : 0) : (int)$row['is_featured'],
+        isset($data['is_active']) ? ($data['is_active'] ? 1 : 0) : (int)$row['is_active'],
+        $id,
+    ]);
+    json_out(['success' => true, 'message' => 'Developer updated.']);
+}
+
+function handle_admin_update_project(): void {
+    require_admin();
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+    $data = get_post_data();
+    $id   = (int)($data['id'] ?? 0);
+    if (!$id) json_error(400, 'id required.');
+
+    $db   = get_db();
+    $stmt = $db->prepare("SELECT * FROM projects WHERE id = ?");
+    $stmt->execute([$id]);
+    $row  = $stmt->fetch();
+    if (!$row) json_error(404, 'Project not found.');
+
+    $name = trim($data['name'] ?? $row['name']);
+    if (strlen($name) < 2) json_error(400, 'name too short.');
+
+    $db->prepare(
+        "UPDATE projects SET
+            name = ?, short_description = ?, description = ?,
+            area_key = ?, status_key = ?, project_type_key = ?,
+            min_investment_usd = ?, expected_yield_range = ?, timeline_summary = ?,
+            website_url = ?, info_contact_whatsapp = ?,
+            logo_url = ?, hero_image_url = ?,
+            is_featured = ?, is_active = ?
+         WHERE id = ?"
+    )->execute([
+        $name,
+        trim($data['short_description'] ?? $row['short_description'] ?? ''),
+        isset($data['description']) ? trim($data['description']) : ($row['description'] ?? null),
+        trim($data['area_key'] ?? $row['area_key'] ?? ''),
+        trim($data['status_key'] ?? $row['status_key'] ?? ''),
+        trim($data['project_type_key'] ?? $row['project_type_key'] ?? ''),
+        isset($data['min_investment_usd']) && $data['min_investment_usd'] !== '' ? (int)$data['min_investment_usd'] : ($row['min_investment_usd'] ?? null),
+        trim($data['expected_yield_range'] ?? $row['expected_yield_range'] ?? ''),
+        trim($data['timeline_summary'] ?? $row['timeline_summary'] ?? ''),
+        trim($data['website_url'] ?? $row['website_url'] ?? ''),
+        trim($data['info_contact_whatsapp'] ?? $row['info_contact_whatsapp'] ?? ''),
+        isset($data['logo_url']) ? trim($data['logo_url']) : ($row['logo_url'] ?? null),
+        isset($data['hero_image_url']) ? trim($data['hero_image_url']) : ($row['hero_image_url'] ?? null),
+        isset($data['is_featured']) ? ($data['is_featured'] ? 1 : 0) : (int)$row['is_featured'],
+        isset($data['is_active']) ? ($data['is_active'] ? 1 : 0) : (int)$row['is_active'],
+        $id,
+    ]);
+    json_out(['success' => true, 'message' => 'Project updated.']);
+}
+
+function handle_admin_update_agent_admin(): void {
+    require_admin();
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
+    $data = get_post_data();
+    $id   = (int)($data['id'] ?? 0);
+    if (!$id) json_error(400, 'id required.');
+
+    $db   = get_db();
+    $stmt = $db->prepare("SELECT * FROM agents WHERE id = ?");
+    $stmt->execute([$id]);
+    $row  = $stmt->fetch();
+    if (!$row) json_error(404, 'Agent not found.');
+
+    $name = trim($data['display_name'] ?? $row['display_name']);
+    if (strlen($name) < 2) json_error(400, 'display_name too short.');
+
+    $db->prepare(
+        "UPDATE agents SET
+            display_name = ?, agency_name = ?, bio = ?,
+            phone = ?, whatsapp_number = ?, email = ?,
+            website_url = ?, areas_served = ?, languages = ?,
+            google_maps_url = ?, profile_photo_url = ?,
+            is_verified = ?, is_active = ?
+         WHERE id = ?"
+    )->execute([
+        $name,
+        trim($data['agency_name'] ?? $row['agency_name'] ?? ''),
+        isset($data['bio']) ? trim($data['bio']) : ($row['bio'] ?? null),
+        trim($data['phone'] ?? $row['phone'] ?? ''),
+        trim($data['whatsapp_number'] ?? $row['whatsapp_number'] ?? ''),
+        trim($data['email'] ?? $row['email'] ?? ''),
+        trim($data['website_url'] ?? $row['website_url'] ?? ''),
+        trim($data['areas_served'] ?? $row['areas_served'] ?? ''),
+        trim($data['languages'] ?? $row['languages'] ?? ''),
+        trim($data['google_maps_url'] ?? $row['google_maps_url'] ?? ''),
+        isset($data['profile_photo_url']) ? trim($data['profile_photo_url']) : ($row['profile_photo_url'] ?? null),
+        isset($data['is_verified']) ? ($data['is_verified'] ? 1 : 0) : (int)$row['is_verified'],
+        isset($data['is_active']) ? ($data['is_active'] ? 1 : 0) : (int)$row['is_active'],
+        $id,
+    ]);
+    json_out(['success' => true, 'message' => 'Agent updated.']);
 }
 
 // =================================================================

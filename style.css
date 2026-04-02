@@ -3649,11 +3649,16 @@
   gap: var(--space-6);
 }
 
-/* listing-card-wrap is the outer container (added for admin edit button support) */
-.listing-card-wrap {
+/* listing-card-wrap / admin-card-wrap — outer containers for admin edit button support */
+.listing-card-wrap,
+.admin-card-wrap {
   position: relative;
   display: flex;
   flex-direction: column;
+}
+.admin-card-wrap:hover .admin-edit-card-btn {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .listing-card {
