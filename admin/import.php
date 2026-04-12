@@ -979,7 +979,8 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
 
             // ── AGENT SAVE ──────────────────────────────
             if ($item_type === 'agent') {
-                if (!empty($item['overwrite']) && !empty($item['existing_id'])) {
+                if (!empty($item['existing_id'])) {
+                    // Record already exists — always UPDATE
                     $upd = $db->prepare(
                         "UPDATE agents SET display_name=?, slug=?, agency_name=?, bio=?,
                             google_maps_url=?, google_rating=?, google_review_count=?,
@@ -999,14 +1000,18 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                     continue;
                 }
 
-                // Duplicate slug check
+                // Duplicate slug check (new inserts only)
                 $check = $db->prepare("SELECT COUNT(*) FROM agents WHERE slug = ?");
                 $check->execute([$slug]);
-                if ($check->fetchColumn() > 0) {
+                $slugCount = (int)$check->fetchColumn();
+                $check->closeCursor();
+                if ($slugCount > 0) {
                     $suffix = 2;
                     while (true) {
                         $check->execute([$slug . '-' . $suffix]);
-                        if ($check->fetchColumn() == 0) break;
+                        $c = (int)$check->fetchColumn();
+                        $check->closeCursor();
+                        if ($c == 0) break;
                         $suffix++;
                     }
                     $slug .= '-' . $suffix;
@@ -1035,7 +1040,8 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
             } elseif ($item_type === 'developer') {
                 $is_featured_dev = $is_featured;
 
-                if (!empty($item['overwrite']) && !empty($item['existing_id'])) {
+                if (!empty($item['existing_id'])) {
+                    // Record already exists — always UPDATE
                     $upd = $db->prepare(
                         "UPDATE developers SET name=?, short_description=?, description=?,
                             google_maps_url=?, google_rating=?, google_review_count=?,
@@ -1061,14 +1067,18 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                     continue;
                 }
 
-                // Duplicate slug check
+                // Duplicate slug check (new inserts only)
                 $check = $db->prepare("SELECT COUNT(*) FROM developers WHERE slug = ?");
                 $check->execute([$slug]);
-                if ($check->fetchColumn() > 0) {
+                $slugCount = (int)$check->fetchColumn();
+                $check->closeCursor();
+                if ($slugCount > 0) {
                     $suffix = 2;
                     while (true) {
                         $check->execute([$slug . '-' . $suffix]);
-                        if ($check->fetchColumn() == 0) break;
+                        $c = (int)$check->fetchColumn();
+                        $check->closeCursor();
+                        if ($c == 0) break;
                         $suffix++;
                     }
                     $slug .= '-' . $suffix;
@@ -1117,7 +1127,8 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                     continue;
                 }
 
-                if (!empty($item['overwrite']) && !empty($item['existing_id'])) {
+                if (!empty($item['existing_id'])) {
+                    // Record already exists — always UPDATE
                     $ex_id = (int)$item['existing_id'];
                     $upd = $db->prepare(
                         "UPDATE providers SET name=?, group_key=?, category_key=?, area_key=?,
@@ -1147,14 +1158,18 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                     continue;
                 }
 
-                // Duplicate slug check
+                // Duplicate slug check (new inserts only)
                 $check = $db->prepare("SELECT COUNT(*) FROM providers WHERE slug = ?");
                 $check->execute([$slug]);
-                if ($check->fetchColumn() > 0) {
+                $slugCount = (int)$check->fetchColumn();
+                $check->closeCursor();
+                if ($slugCount > 0) {
                     $suffix = 2;
                     while (true) {
                         $check->execute([$slug . '-' . $suffix]);
-                        if ($check->fetchColumn() == 0) break;
+                        $c = (int)$check->fetchColumn();
+                        $check->closeCursor();
+                        if ($c == 0) break;
                         $suffix++;
                     }
                     $slug .= '-' . $suffix;
