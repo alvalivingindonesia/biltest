@@ -77,7 +77,8 @@ $KEYWORD_MAP = [
         'tukang beton', 'concrete contractor',
     ],
     'roofer' => [
-        'roofer', 'roofing', 'tukang atap', 'atap',
+        'roofer', 'roofing contractor', 'roofing service', 'tukang atap', 'atap',
+        'jasa atap', 'jasa roofing', 'pasang atap', 'instalasi atap',
     ],
     'plumber' => [
         'plumber', 'plumbing', 'tukang ledeng', 'tukang pipa', 'pipa air',
@@ -159,6 +160,28 @@ $KEYWORD_MAP = [
         'building materials', 'hardware store', 'bahan bangunan', 'toko bangunan',
         'material supplier', 'building supply', 'home improvement',
         'toko material', 'depot bangunan',
+    ],
+    'roofing_supplier' => [
+        // English
+        'roofing supplier', 'roofing materials', 'roofing material', 'roofing store',
+        'roofing supply', 'roof tile', 'roof tiles', 'roof sheet', 'roof panel',
+        'metal roofing', 'steel roofing', 'ceiling panel', 'ceiling supplier',
+        'polycarbonate roofing', 'polycarbonate sheet',
+        // Indonesian — ceiling/plafon
+        'plafon', 'plafond', 'toko plafon', 'supplier plafon', 'pvc plafon',
+        // Indonesian — roof tiles
+        'genteng', 'toko genteng', 'supplier genteng', 'genteng keramik',
+        'genteng beton', 'genteng metal', 'genteng tanah liat',
+        // Indonesian — metal/sheet roofing
+        'seng', 'atap seng', 'toko seng', 'spandek', 'spandeck',
+        'galvalum', 'galvalume', 'atap galvalum', 'atap spandek',
+        'metal sheet', 'baja ringan', 'atap baja',
+        // Indonesian — roof structure materials
+        'rangka atap', 'kuda kuda', 'kuda-kuda', 'toko atap', 'supplier atap',
+        // Indonesian — polycarbonate / canopy materials
+        'polikarbonat', 'atap polikarbonat', 'kanopi', 'toko kanopi',
+        // Brand names common in Indonesia
+        'alderon', 'multiroof', 'sakura roof',
     ],
     'timber_workshop' => [
         'timber', 'lumber', 'kayu', 'sawmill', 'wood processing',
