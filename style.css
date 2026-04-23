@@ -6343,3 +6343,70 @@ a.rab-tool-card:hover {
     max-height: 95vh;
   }
 }
+
+/* =============================================================
+   Language toggle (EN | ID)
+   Lives in the header .nav-actions and in the mobile drawer.
+   Pattern mirrors .btn-icon for colour handling over the hero.
+   ============================================================= */
+.lang-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3rem 0.6rem;
+  border: 1.5px solid var(--color-divider);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: border-color var(--transition-interactive), background var(--transition-interactive);
+  line-height: 1;
+}
+.lang-toggle:hover {
+  border-color: var(--color-text-muted);
+  background: var(--color-surface-offset);
+}
+.lang-toggle .lang-opt {
+  padding: 0.15rem 0.35rem;
+  border-radius: var(--radius-full);
+  color: var(--color-text-faint);
+  transition: color var(--transition-interactive), background var(--transition-interactive);
+}
+.lang-toggle .lang-opt.active {
+  color: var(--color-primary);
+  background: var(--color-surface-dynamic);
+}
+.lang-toggle .lang-sep {
+  color: var(--color-divider);
+  font-weight: 400;
+  pointer-events: none;
+}
+
+/* Transparent (hero) header state — match .btn-icon contrast */
+.site-header:not(.scrolled):not(.solid) .lang-toggle {
+  color: rgba(250,248,244,0.85);
+  border-color: rgba(250,248,244,0.35);
+}
+.site-header:not(.scrolled):not(.solid) .lang-toggle:hover {
+  border-color: rgba(250,248,244,0.6);
+  background: rgba(255,255,255,0.1);
+}
+.site-header:not(.scrolled):not(.solid) .lang-toggle .lang-opt {
+  color: rgba(250,248,244,0.6);
+}
+.site-header:not(.scrolled):not(.solid) .lang-toggle .lang-opt.active {
+  color: #fff;
+  background: rgba(255,255,255,0.18);
+}
+.site-header:not(.scrolled):not(.solid) .lang-toggle .lang-sep {
+  color: rgba(250,248,244,0.35);
+}
+
+/* Hide the desktop toggle on narrow screens — the mobile drawer has its own */
+@media (max-width: 768px) {
+  #lang-toggle-desktop { display: none; }
+}

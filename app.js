@@ -16,7 +16,9 @@
     root.setAttribute('data-theme', theme);
     document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
       btn.innerHTML = getThemeIcon(theme);
-      btn.setAttribute('aria-label', `Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`);
+      btn.setAttribute('aria-label', (typeof t === 'function')
+        ? t(theme === 'dark' ? 'theme.switch_light_aria' : 'theme.switch_dark_aria', `Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`)
+        : `Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`);
     });
   };
 
@@ -33,6 +35,82 @@
     return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
   }
 })();
+
+
+// =====================================================
+// i18n — English + Indonesian
+// Dictionaries live in /i18n/en.js and /i18n/id.js and are loaded
+// before app.js in index.html. Missing keys fall back to English,
+// and missing dictionaries fall back to {} so nothing breaks.
+// =====================================================
+const I18N = {
+  en: window.I18N_EN || {},
+  id: window.I18N_ID || {},
+};
+let CURRENT_LANG = (function() {
+  try {
+    const stored = localStorage.getItem('bil_lang');
+    if (stored === 'en' || stored === 'id') return stored;
+  } catch (e) {}
+  const nav = (navigator.language || '').toLowerCase();
+  return nav.startsWith('id') ? 'id' : 'en';
+})();
+
+function t(key, fallback) {
+  const dict = I18N[CURRENT_LANG] || I18N.en || {};
+  if (Object.prototype.hasOwnProperty.call(dict, key)) return dict[key];
+  // Fall back to English dict, then to the provided fallback, then the key itself
+  if (I18N.en && Object.prototype.hasOwnProperty.call(I18N.en, key)) return I18N.en[key];
+  return (fallback !== undefined) ? fallback : key;
+}
+
+function lookupLabel(row) {
+  if (!row) return '';
+  if (CURRENT_LANG === 'id' && row.label_id) return row.label_id;
+  return row.label || '';
+}
+
+function applyStaticTranslations(root) {
+  root = root || document;
+  root.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.getAttribute('data-i18n'), el.textContent);
+  });
+  root.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.getAttribute('data-i18n-placeholder'), el.placeholder);
+  });
+  root.querySelectorAll('[data-i18n-aria]').forEach(el => {
+    el.setAttribute('aria-label', t(el.getAttribute('data-i18n-aria'), el.getAttribute('aria-label') || ''));
+  });
+  root.querySelectorAll('[data-i18n-title]').forEach(el => {
+    el.setAttribute('title', t(el.getAttribute('data-i18n-title'), el.getAttribute('title') || ''));
+  });
+  document.documentElement.lang = CURRENT_LANG;
+}
+
+function updateLangToggleUI() {
+  document.querySelectorAll('.lang-toggle').forEach(tog => {
+    tog.querySelectorAll('.lang-opt').forEach(opt => {
+      const active = opt.getAttribute('data-lang') === CURRENT_LANG;
+      opt.classList.toggle('active', active);
+    });
+  });
+}
+
+function setLanguage(lang) {
+  if (lang !== 'en' && lang !== 'id') return;
+  if (lang === CURRENT_LANG) return;
+  CURRENT_LANG = lang;
+  try { localStorage.setItem('bil_lang', lang); } catch (e) {}
+  applyStaticTranslations();
+  updateLangToggleUI();
+  // Re-render the current SPA view so JS-generated strings refresh.
+  if (typeof router === 'function') {
+    try { router(); } catch (e) { /* swallow */ }
+  }
+}
+
+window.setLanguage = setLanguage;
+window.getCurrentLang = function() { return CURRENT_LANG; };
 
 
 // =====================================================
@@ -261,7 +339,9 @@ const FilterData = {
     } catch(e) { console.error('Failed to load filters:', e); }
   },
   labelMap(arr) {
-    const m = {}; arr.forEach(i => { m[i.key || i.region_key] = i.label; }); return m;
+    // Returns {key → localised label}. lookupLabel() picks label_id when
+    // Indonesian is active and the row has one, else falls back to label.
+    const m = {}; arr.forEach(i => { m[i.key || i.region_key] = lookupLabel(i); }); return m;
   }
 };
 
@@ -271,11 +351,11 @@ function buildAreaOptions(selectedValue) {
   const areas = FilterData.areas;
   if (!regions.length) {
     // Fallback: flat list if regions not loaded
-    return areas.map(a => '<option value="' + (a.key) + '"' + (selectedValue === a.key ? ' selected' : '') + '>' + a.label + '</option>').join('');
+    return areas.map(a => '<option value="' + (a.key) + '"' + (selectedValue === a.key ? ' selected' : '') + '>' + lookupLabel(a) + '</option>').join('');
   }
   let html = '';
   const regionMap = {};
-  regions.forEach(r => { regionMap[r.region_key] = { label: r.label, areas: [] }; });
+  regions.forEach(r => { regionMap[r.region_key] = { label: lookupLabel(r), areas: [] }; });
   areas.forEach(a => {
     const rk = a.region_key || 'other';
     if (!regionMap[rk]) regionMap[rk] = { label: rk.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), areas: [] };
@@ -287,7 +367,7 @@ function buildAreaOptions(selectedValue) {
     html += '<optgroup label="' + rd.label + '">';
     html += '<option value="region:' + rk + '"' + (selectedValue === 'region:' + rk ? ' selected' : '') + '>▶ All ' + rd.label + '</option>';
     rd.areas.forEach(a => {
-      html += '<option value="' + a.key + '"' + (selectedValue === a.key ? ' selected' : '') + '>' + a.label + '</option>';
+      html += '<option value="' + a.key + '"' + (selectedValue === a.key ? ' selected' : '') + '>' + lookupLabel(a) + '</option>';
     });
     html += '</optgroup>';
   }
@@ -352,7 +432,7 @@ function formatProjectStatus(status) {
 function buildFilterOptions(items, selectedValue, filterByKey, filterByValue) {
   let list = items;
   if (filterByKey && filterByValue) list = items.filter(i => i[filterByKey] === filterByValue);
-  return list.map(i => `<option value="${i.key}" ${selectedValue === i.key ? 'selected' : ''}>${i.label}</option>`).join('');
+  return list.map(i => `<option value="${i.key}" ${selectedValue === i.key ? 'selected' : ''}>${lookupLabel(i)}</option>`).join('');
 }
 
 function getStatusBadgeClass(status) {
@@ -398,7 +478,7 @@ function renderGoogleRating(rating, count, size = 'card') {
   rating = rating ? parseFloat(rating) : null;
   count = count ? parseInt(count) : 0;
   if (!rating) {
-    return `<div class="google-rating"><span class="rating-na">No Google reviews yet</span></div>`;
+    return `<div class="google-rating"><span class="rating-na">${t('detail.no_reviews', 'No Google reviews yet')}</span></div>`;
   }
   const cls = size === 'detail' ? 'detail-google-rating' : 'google-rating';
   const numCls = size === 'detail' ? 'detail-rating-number' : 'rating-number';
@@ -640,11 +720,11 @@ async function renderHome(el) {
       <div class="hero-overlay"></div>
       <div class="hero-inner">
         <div class="container">
-          <h1 class="hero-title">BUILD IN LOMBOK</h1>
-          <p class="hero-subtitle">AI-powered tools to help you build &amp; invest in Lombok</p>
+          <h1 class="hero-title">${t('home.hero_title', 'BUILD IN LOMBOK')}</h1>
+          <p class="hero-subtitle">${t('home.hero_subtitle', 'AI-powered tools to help you build & invest in Lombok')}</p>
           <div class="hero-search">
             <svg class="hero-search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="search" class="hero-search-input" placeholder="Search providers, developers, projects..." autocomplete="off" id="hero-search-input">
+            <input type="search" class="hero-search-input" placeholder="${t('home.search_placeholder', 'Search providers, developers, projects...')}" autocomplete="off" id="hero-search-input">
             <button class="hero-search-btn" onclick="heroSearchSubmit()" aria-label="Search">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             </button>
@@ -664,41 +744,41 @@ async function renderHome(el) {
             <div class="category-card-icon">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
             </div>
-            <h3 class="category-card-title">Find Property</h3>
-            <p class="category-card-desc">Browse properties and find local agents.</p>
-            <span class="category-card-cta">Explore ${iconArrowRight()}</span>
+            <h3 class="category-card-title">${t('home.find_property', 'Find Property')}</h3>
+            <p class="category-card-desc">${t('home.find_property_desc', 'Browse properties and find local agents.')}</p>
+            <span class="category-card-cta">${t('home.explore_cta', 'Explore')} ${iconArrowRight()}</span>
           </a>
           <a href="#developers" class="category-card" onclick="navigate('developers'); return false;">
             <div class="category-card-icon">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 20h20"/><path d="M5 20V8l7-5 7 5v12"/><path d="M9 20v-4h6v4"/><path d="M9 12h.01"/><path d="M15 12h.01"/></svg>
             </div>
-            <h3 class="category-card-title">Find Developers &amp; Investments</h3>
-            <p class="category-card-desc">Discover development opportunities and partners.</p>
-            <span class="category-card-cta">Explore ${iconArrowRight()}</span>
+            <h3 class="category-card-title">${t('home.find_developers', 'Find Developers & Investments')}</h3>
+            <p class="category-card-desc">${t('home.find_developers_desc', 'Discover development opportunities and partners.')}</p>
+            <span class="category-card-cta">${t('home.explore_cta', 'Explore')} ${iconArrowRight()}</span>
           </a>
           <a href="#directory?group=builders_trades" class="category-card" onclick="navigate('directory?group=builders_trades'); return false;">
             <div class="category-card-icon">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 18.5A2.5 2.5 0 0 1 4.5 16H20"/><path d="M2 7h16a2 2 0 0 1 2 2v9.5A2.5 2.5 0 0 1 17.5 21H4.5A2.5 2.5 0 0 1 2 18.5z"/><path d="M6 12h4"/><path d="M6 16h8"/><circle cx="18" cy="4" r="3"/></svg>
             </div>
-            <h3 class="category-card-title">Find Builders &amp; Trades</h3>
-            <p class="category-card-desc">Connect with skilled builders and trades.</p>
-            <span class="category-card-cta">Explore ${iconArrowRight()}</span>
+            <h3 class="category-card-title">${t('home.find_builders', 'Find Builders & Trades')}</h3>
+            <p class="category-card-desc">${t('home.find_builders_desc', 'Connect with skilled builders and trades.')}</p>
+            <span class="category-card-cta">${t('home.explore_cta', 'Explore')} ${iconArrowRight()}</span>
           </a>
           <a href="#directory?group=professional_services" class="category-card" onclick="navigate('directory?group=professional_services'); return false;">
             <div class="category-card-icon">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
             </div>
-            <h3 class="category-card-title">Find Professional Services</h3>
-            <p class="category-card-desc">Locate architects, lawyers, and consultants.</p>
-            <span class="category-card-cta">Explore ${iconArrowRight()}</span>
+            <h3 class="category-card-title">${t('home.find_professionals', 'Find Professional Services')}</h3>
+            <p class="category-card-desc">${t('home.find_professionals_desc', 'Locate architects, lawyers, and consultants.')}</p>
+            <span class="category-card-cta">${t('home.explore_cta', 'Explore')} ${iconArrowRight()}</span>
           </a>
           <a href="#directory?group=suppliers_materials" class="category-card" onclick="navigate('directory?group=suppliers_materials'); return false;">
             <div class="category-card-icon">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
             </div>
-            <h3 class="category-card-title">Find Materials &amp; Suppliers</h3>
-            <p class="category-card-desc">Source quality materials and local suppliers.</p>
-            <span class="category-card-cta">Explore ${iconArrowRight()}</span>
+            <h3 class="category-card-title">${t('home.find_materials', 'Find Materials & Suppliers')}</h3>
+            <p class="category-card-desc">${t('home.find_materials_desc', 'Source quality materials and local suppliers.')}</p>
+            <span class="category-card-cta">${t('home.explore_cta', 'Explore')} ${iconArrowRight()}</span>
           </a>
         </div>
       </div>
@@ -755,10 +835,10 @@ async function renderHome(el) {
           <div class="help-cta-icon" style="background:rgba(255,255,255,0.08);color:rgba(212,209,202,0.8);">
             ${iconWhatsApp()}
           </div>
-          <h2 class="help-cta-title" style="color:#faf8f4;">Need Help With Your Project?</h2>
-          <p class="help-cta-desc" style="color:rgba(212,209,202,0.6);">Not sure where to start? Drop your details via WhatsApp and we'll point you in the right direction.</p>
+          <h2 class="help-cta-title" style="color:#faf8f4;">${t('home.help_title', 'Need Help With Your Project?')}</h2>
+          <p class="help-cta-desc" style="color:rgba(212,209,202,0.6);">${t('home.help_subtitle', "Not sure where to start? Drop your details via WhatsApp and we'll point you in the right direction.")}</p>
           <a href="https://wa.me/628123456789" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp">
-            ${iconWhatsApp()} Get in Touch on WhatsApp
+            ${iconWhatsApp()} ${t('footer.whatsapp_help', 'Get in Touch on WhatsApp')}
           </a>
         </div>
       </div>
@@ -921,9 +1001,9 @@ async function renderDirectory(el, params = {}) {
         grid.innerHTML = `
           <div class="empty-state" style="grid-column: 1/-1;">
             <div class="empty-state-icon">${iconSearch()}</div>
-            <h3 class="empty-state-title">No providers found</h3>
-            <p class="empty-state-desc">Try adjusting your filters or search terms.</p>
-            <button class="btn btn--secondary btn--sm" onclick="clearDirectoryFilters()">Clear all filters</button>
+            <h3 class="empty-state-title">${t('empty.no_providers_title', 'No providers found')}</h3>
+            <p class="empty-state-desc">${t('empty.no_providers_desc', 'Try adjusting your filters or search terms.')}</p>
+            <button class="btn btn--secondary btn--sm" onclick="clearDirectoryFilters()">${t('filter.clear_all', 'Clear all filters')}</button>
           </div>
         `;
       } else {
@@ -990,14 +1070,14 @@ async function renderDirectory(el, params = {}) {
         <div class="dir-filters">
           <div class="dir-primary-filters">
             <div class="dir-filter-pill">
-              <label class="dir-filter-pill-label">Where in Lombok?</label>
+              <label class="dir-filter-pill-label">${t('filter.where', 'Where in Lombok?')}</label>
               <select id="f-area" class="dir-filter-pill-select" onchange="updateDirectoryFilter('area', this.value)">
                 <option value="">All Areas</option>
                 ${buildAreaOptions(filters.area)}
               </select>
             </div>
             <div class="dir-filter-pill">
-              <label class="dir-filter-pill-label">What specialty?</label>
+              <label class="dir-filter-pill-label">${t('filter.specialty', 'What specialty?')}</label>
               <select id="f-category" class="dir-filter-pill-select" onchange="updateDirectoryFilter('category', this.value)">
                 <option value="">All Specialties</option>
                 ${filters.group
@@ -1020,7 +1100,7 @@ async function renderDirectory(el, params = {}) {
                   ${buildFilterOptions(FilterData.groups, filters.group)}
                 </select>
                 <div class="filter-group">
-                  <label class="filter-label">Language</label>
+                  <label class="filter-label">${t('filter.language', 'Language')}</label>
                   <select id="f-lang" class="filter-select" onchange="updateDirectoryFilter('languages', this.value)">
                     <option value="">Any language</option>
                     <option value="english" ${filters.languages === 'english' ? 'selected' : ''}>English</option>
@@ -1028,7 +1108,7 @@ async function renderDirectory(el, params = {}) {
                   </select>
                 </div>
                 <div class="filter-group">
-                  <label class="filter-label">Min Rating</label>
+                  <label class="filter-label">${t('filter.min_rating', 'Min Rating')}</label>
                   <select id="f-rating" class="filter-select" onchange="updateDirectoryFilter('min_rating', this.value)">
                     <option value="">Any</option>
                     <option value="4.0" ${filters.min_rating === '4.0' ? 'selected' : ''}>4.0+</option>
@@ -1036,14 +1116,14 @@ async function renderDirectory(el, params = {}) {
                   </select>
                 </div>
                 <div class="filter-group">
-                  <label class="filter-label">Status</label>
+                  <label class="filter-label">${t('filter.status', 'Status')}</label>
                   <select id="f-trusted" class="filter-select" onchange="updateDirectoryFilter('trusted', this.value)">
                     <option value="">All</option>
                     <option value="1" ${filters.trusted === '1' ? 'selected' : ''}>Trusted only</option>
                   </select>
                 </div>
                 <div class="filter-group">
-                  <label class="filter-label">Sort</label>
+                  <label class="filter-label">${t('filter.sort', 'Sort')}</label>
                   <select class="filter-select" onchange="updateDirectoryFilter('sort', this.value)">
                     <option value="confidence" ${filters.sort === 'confidence' ? 'selected' : ''}>Most Trusted</option>
                     <option value="rating" ${filters.sort === 'rating' ? 'selected' : ''}>Highest Rated</option>
@@ -1052,7 +1132,7 @@ async function renderDirectory(el, params = {}) {
                   </select>
                 </div>
               </div>
-              ${activeCount > 0 ? '<div style="margin-top:var(--space-3);text-align:right;"><button class="btn btn--ghost btn--sm" onclick="clearDirectoryFilters()">Clear all filters</button></div>' : ''}
+              ${activeCount > 0 ? `<div style="margin-top:var(--space-3);text-align:right;"><button class="btn btn--ghost btn--sm" onclick="clearDirectoryFilters()">${t('filter.clear_all', 'Clear all filters')}</button></div>` : ''}
             </div>
           </div>
         </div>
@@ -1574,7 +1654,7 @@ async function renderListings(el, params = {}) {
         <div class="card-grid listings-grid" id="listings-grid">
           ${listings.length > 0
             ? listings.map((l, i) => renderListingCard(l, i)).join('')
-            : '<div class="empty-state"><h3 class="empty-state-title">No listings found</h3><p class="empty-state-desc">Try adjusting your filters or check back soon for new properties.</p></div>'}
+            : `<div class="empty-state"><h3 class="empty-state-title">${t('empty.no_listings_title', 'No listings found')}</h3><p class="empty-state-desc">${t('empty.no_listings_desc', 'Try adjusting your filters or check back soon for new properties.')}</p></div>`}
         </div>
         ${total > (listRes.meta.per_page || 20) ? (
           '<div class="pagination" style="margin-top:var(--space-8);text-align:center;">' +
@@ -6044,7 +6124,7 @@ async function renderSearch(el, params = {}) {
 
         <div class="dir-primary-filters search-primary-filters" style="margin-top:var(--space-6);">
           <div class="dir-filter-pill">
-            <label class="dir-filter-pill-label" for="sf-area">Where in Lombok?</label>
+            <label class="dir-filter-pill-label" for="sf-area">${t('filter.where', 'Where in Lombok?')}</label>
             <select id="sf-area" class="dir-filter-pill-select">
               <option value="">All Areas</option>
               ${buildAreaOptions('')}
@@ -6058,7 +6138,7 @@ async function renderSearch(el, params = {}) {
             </select>
           </div>
           <div class="dir-filter-pill">
-            <label class="dir-filter-pill-label" for="sf-category">What specialty?</label>
+            <label class="dir-filter-pill-label" for="sf-category">${t('filter.specialty', 'What specialty?')}</label>
             <select id="sf-category" class="dir-filter-pill-select">
               <option value="">All Specialties</option>
             </select>
@@ -6411,7 +6491,7 @@ async function renderGetQuotes(el, params = {}) {
           <div class="dir-filters" style="margin-bottom:var(--space-5);">
             <div class="dir-primary-filters">
               <div class="dir-filter-pill">
-                <label class="dir-filter-pill-label">Where in Lombok?</label>
+                <label class="dir-filter-pill-label">${t('filter.where', 'Where in Lombok?')}</label>
                 <select class="dir-filter-pill-select" onchange="gqUpdateFilter('area', this.value)">
                   <option value="">All Areas</option>
                   ${buildAreaOptions(filters.area)}
@@ -6624,6 +6704,22 @@ if (document.readyState === 'interactive' || document.readyState === 'complete')
 function initApp() {
   if (initApp._done) return;
   initApp._done = true;
+
+  // Apply the initial language to all static markup + sync <html lang>
+  applyStaticTranslations();
+  updateLangToggleUI();
+
+  // Language toggle: each `.lang-toggle` contains two `.lang-opt` spans
+  // (one per language). Delegated click switches language.
+  document.querySelectorAll('.lang-toggle').forEach(tog => {
+    tog.addEventListener('click', e => {
+      const opt = e.target.closest('.lang-opt');
+      if (!opt) return;
+      const lang = opt.getAttribute('data-lang');
+      if (lang) setLanguage(lang);
+    });
+  });
+
   // Theme toggle
   document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
     const t = window.__getCurrentTheme();

@@ -510,6 +510,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!in_array($table, $allowed)) throw new Exception('Invalid table');
             $key = trim($_POST['key']);
             $label = trim($_POST['label']);
+            $label_id = trim($_POST['label_id'] ?? ''); // Indonesian translation (nullable)
+            if ($label_id === '') $label_id = null;
             $sort = (int)($_POST['sort_order'] ?? 0);
             $old_key = $_POST['_old_key'] ?? '';
 
@@ -538,10 +540,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
+            // Check whether this table has a label_id column (pre-migration safe).
+            $has_label_id = false;
+            try {
+                $chk = $db->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS
+                                     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'label_id'");
+                $chk->execute([$table]);
+                $has_label_id = (int)$chk->fetchColumn() > 0;
+            } catch (Exception $e) { $has_label_id = false; }
+
             if ($old_key) {
                 // Update
                 $sql = "UPDATE `{$table}` SET `key`=?, `label`=?, `sort_order`=?";
                 $params = [$key, $label, $sort];
+                if ($has_label_id) {
+                    $sql .= ", `label_id`=?";
+                    $params[] = $label_id;
+                }
                 if ($table === 'categories') {
                     $sql .= ", `group_key`=?";
                     $params[] = $_POST['group_key'];
@@ -557,14 +572,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 // Insert
                 if ($table === 'categories') {
-                    $db->prepare("INSERT INTO `{$table}` (`key`,`group_key`,`label`,`sort_order`) VALUES (?,?,?,?)")
-                        ->execute([$key, $_POST['group_key'], $label, $sort]);
+                    if ($has_label_id) {
+                        $db->prepare("INSERT INTO `{$table}` (`key`,`group_key`,`label`,`label_id`,`sort_order`) VALUES (?,?,?,?,?)")
+                            ->execute([$key, $_POST['group_key'], $label, $label_id, $sort]);
+                    } else {
+                        $db->prepare("INSERT INTO `{$table}` (`key`,`group_key`,`label`,`sort_order`) VALUES (?,?,?,?)")
+                            ->execute([$key, $_POST['group_key'], $label, $sort]);
+                    }
                 } elseif ($table === 'areas' && isset($_POST['region_key'])) {
-                    $db->prepare("INSERT INTO `{$table}` (`key`,`label`,`region_key`,`sort_order`) VALUES (?,?,?,?)")
-                        ->execute([$key, $label, $_POST['region_key'] ?: null, $sort]);
+                    if ($has_label_id) {
+                        $db->prepare("INSERT INTO `{$table}` (`key`,`label`,`label_id`,`region_key`,`sort_order`) VALUES (?,?,?,?,?)")
+                            ->execute([$key, $label, $label_id, $_POST['region_key'] ?: null, $sort]);
+                    } else {
+                        $db->prepare("INSERT INTO `{$table}` (`key`,`label`,`region_key`,`sort_order`) VALUES (?,?,?,?)")
+                            ->execute([$key, $label, $_POST['region_key'] ?: null, $sort]);
+                    }
                 } else {
-                    $db->prepare("INSERT INTO `{$table}` (`key`,`label`,`sort_order`) VALUES (?,?,?)")
-                        ->execute([$key, $label, $sort]);
+                    if ($has_label_id) {
+                        $db->prepare("INSERT INTO `{$table}` (`key`,`label`,`label_id`,`sort_order`) VALUES (?,?,?,?)")
+                            ->execute([$key, $label, $label_id, $sort]);
+                    } else {
+                        $db->prepare("INSERT INTO `{$table}` (`key`,`label`,`sort_order`) VALUES (?,?,?)")
+                            ->execute([$key, $label, $sort]);
+                    }
                 }
                 $msg = ucfirst($table).' entry created.';
             }
@@ -1856,7 +1886,7 @@ elseif ($section === 'lookups'):
         <a href="?s=lookups&et=<?= $tbl ?>&ek=_new#lookup-<?= $tbl ?>" class="btn btn-p btn-sm">+ Add</a>
     </div>
     <table style="margin-top:8px">
-        <tr><th>Key</th><th>Label</th><?php if ($cfg['has_group']): ?><th>Group</th><?php endif; ?><?php if (!empty($cfg['has_region'])): ?><th>Region</th><?php endif; ?><th>Sort</th><th style="width:120px">Actions</th></tr>
+        <tr><th>Key</th><th>Label (EN)</th><th>Label (ID)</th><?php if ($cfg['has_group']): ?><th>Group</th><?php endif; ?><?php if (!empty($cfg['has_region'])): ?><th>Region</th><?php endif; ?><th>Sort</th><th style="width:120px">Actions</th></tr>
         <?php foreach ($cfg['items'] as $it): ?>
         <?php if ($edit_table === $tbl && $edit_key === $it['key']): ?>
         <tr style="background:#fffff0">
@@ -1864,7 +1894,8 @@ elseif ($section === 'lookups'):
                 <input type="hidden" name="_table" value="<?= $tbl ?>">
                 <input type="hidden" name="_old_key" value="<?= htmlspecialchars($it['key']) ?>">
                 <td><input type="text" name="key" value="<?= htmlspecialchars($it['key']) ?>" style="width:140px" required></td>
-                <td><input type="text" name="label" value="<?= htmlspecialchars($it['label']) ?>" style="width:200px" required></td>
+                <td><input type="text" name="label" value="<?= htmlspecialchars($it['label']) ?>" style="width:180px" required></td>
+                <td><input type="text" name="label_id" value="<?= htmlspecialchars($it['label_id'] ?? '') ?>" placeholder="Bahasa Indonesia" style="width:180px"></td>
                 <?php if ($cfg['has_group']): ?>
                 <td><select name="group_key" style="width:140px">
                     <?php foreach ($groups_list as $g): ?><option value="<?= $g['key'] ?>" <?= ($it['group_key']??'')===$g['key']?'selected':'' ?>><?= htmlspecialchars($g['label']) ?></option><?php endforeach; ?>
@@ -1884,6 +1915,7 @@ elseif ($section === 'lookups'):
         <tr id="lookup-row-<?= $tbl ?>-<?= htmlspecialchars($it['key']) ?>">
             <td><code style="font-size:12px;color:#666"><?= htmlspecialchars($it['key']) ?></code></td>
             <td><?= htmlspecialchars($it['label']) ?></td>
+            <td><?php if (!empty($it['label_id'])): ?><?= htmlspecialchars($it['label_id']) ?><?php else: ?><span style="color:#bbb;font-style:italic">—</span><?php endif; ?></td>
             <?php if ($cfg['has_group']): ?>
             <td><span class="badge b-blue"><?= htmlspecialchars($it['group_key'] ?? '') ?></span></td>
             <?php endif; ?>
@@ -1904,7 +1936,8 @@ elseif ($section === 'lookups'):
                 <input type="hidden" name="_table" value="<?= $tbl ?>">
                 <input type="hidden" name="_old_key" value="">
                 <td><input type="text" name="key" placeholder="snake_case_key" style="width:140px" required></td>
-                <td><input type="text" name="label" placeholder="Display Label" style="width:200px" required></td>
+                <td><input type="text" name="label" placeholder="Display Label (EN)" style="width:180px" required></td>
+                <td><input type="text" name="label_id" placeholder="Bahasa Indonesia" style="width:180px"></td>
                 <?php if ($cfg['has_group']): ?>
                 <td><select name="group_key" style="width:140px">
                     <?php foreach ($groups_list as $g): ?><option value="<?= $g['key'] ?>"><?= htmlspecialchars($g['label']) ?></option><?php endforeach; ?>

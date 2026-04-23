@@ -26,14 +26,14 @@
 <body>
 
   <!-- Skip to content -->
-  <a href="#main-content" class="skip-link">Skip to content</a>
+  <a href="#main-content" class="skip-link" data-i18n="meta.skip_to_content">Skip to content</a>
 
   <!-- ===================== HEADER ===================== -->
   <header class="site-header" role="banner">
     <nav class="container nav-inner" aria-label="Main navigation">
 
       <!-- Logo -->
-      <a href="#home" class="nav-logo" onclick="navigate('home');return false;" aria-label="Build in Lombok — home">
+      <a href="#home" class="nav-logo" onclick="navigate('home');return false;" aria-label="Build in Lombok — home" data-i18n-aria="meta.home_aria">
         <span class="nav-brand">BUILD IN LOMBOK</span>
       </a>
 
@@ -43,59 +43,66 @@
         <!-- Find Property dropdown -->
         <li class="nav-dropdown" id="nav-dd-property">
           <button class="nav-dropdown-toggle" aria-haspopup="true" aria-expanded="false">
-            Find Property
+            <span data-i18n="nav.find_property">Find Property</span>
             <svg class="nav-dd-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
           <ul class="nav-dropdown-menu" role="menu">
             <li><a href="#listings" onclick="navigate('listings');return false;" role="menuitem">
-              <span class="nav-dd-label">Land &amp; Villas</span>
-              <span class="nav-dd-desc">Search property listings</span>
+              <span class="nav-dd-label" data-i18n="nav.find_property.land_villas">Land &amp; Villas</span>
+              <span class="nav-dd-desc" data-i18n="nav.find_property.land_villas_desc">Search property listings</span>
             </a></li>
             <li><a href="#developers" onclick="navigate('developers');return false;" role="menuitem">
-              <span class="nav-dd-label">Developments</span>
-              <span class="nav-dd-desc">Browse investment developments</span>
+              <span class="nav-dd-label" data-i18n="nav.find_property.developments">Developments</span>
+              <span class="nav-dd-desc" data-i18n="nav.find_property.developments_desc">Browse investment developments</span>
             </a></li>
             <li><a href="#agents" onclick="navigate('agents');return false;" role="menuitem">
-              <span class="nav-dd-label">Agents</span>
-              <span class="nav-dd-desc">Find a local property agent</span>
+              <span class="nav-dd-label" data-i18n="nav.find_property.agents">Agents</span>
+              <span class="nav-dd-desc" data-i18n="nav.find_property.agents_desc">Find a local property agent</span>
             </a></li>
           </ul>
         </li>
 
         <!-- Direct directory links -->
-        <li><a href="#directory?group=builders_trades" onclick="navigate('directory?group=builders_trades');return false;">Builders &amp; Trades</a></li>
-        <li><a href="#directory?group=professional_services" onclick="navigate('directory?group=professional_services');return false;">Professionals</a></li>
-        <li><a href="#directory?group=suppliers_materials" onclick="navigate('directory?group=suppliers_materials');return false;">Suppliers</a></li>
+        <li><a href="#directory?group=builders_trades" onclick="navigate('directory?group=builders_trades');return false;" data-i18n="nav.builders_trades">Builders &amp; Trades</a></li>
+        <li><a href="#directory?group=professional_services" onclick="navigate('directory?group=professional_services');return false;" data-i18n="nav.professionals">Professionals</a></li>
+        <li><a href="#directory?group=suppliers_materials" onclick="navigate('directory?group=suppliers_materials');return false;" data-i18n="nav.suppliers">Suppliers</a></li>
 
         <!-- Tools dropdown -->
         <li class="nav-dropdown" id="nav-dd-tools">
           <button class="nav-dropdown-toggle" aria-haspopup="true" aria-expanded="false">
-            Tools
+            <span data-i18n="nav.tools">Tools</span>
             <svg class="nav-dd-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
           <ul class="nav-dropdown-menu" role="menu">
             <li><a href="#get-quotes" onclick="navigate('get-quotes');return false;" role="menuitem">
-              <span class="nav-dd-label">Get Quotes</span>
-              <span class="nav-dd-desc">WhatsApp quote requests</span>
+              <span class="nav-dd-label" data-i18n="nav.tools.get_quotes">Get Quotes</span>
+              <span class="nav-dd-desc" data-i18n="nav.tools.get_quotes_desc">WhatsApp quote requests</span>
             </a></li>
             <li><a href="#rab-calculator" onclick="navigate('rab-calculator');return false;" role="menuitem">
-              <span class="nav-dd-label">RAB Tools</span>
-              <span class="nav-dd-desc">Cost estimation &amp; budgeting</span>
+              <span class="nav-dd-label" data-i18n="nav.tools.rab">RAB Tools</span>
+              <span class="nav-dd-desc" data-i18n="nav.tools.rab_desc">Cost estimation &amp; budgeting</span>
             </a></li>
           </ul>
         </li>
 
-        <li><a href="#guides" onclick="navigate('guides');return false;">Guides</a></li>
-        <li><a href="#about" onclick="navigate('about');return false;">About</a></li>
+        <li><a href="#guides" onclick="navigate('guides');return false;" data-i18n="nav.guides">Guides</a></li>
+        <li><a href="#about" onclick="navigate('about');return false;" data-i18n="nav.about">About</a></li>
       </ul>
 
       <!-- Right actions -->
       <div class="nav-actions">
+        <!-- Language toggle (EN | ID) -->
+        <button type="button" class="lang-toggle" id="lang-toggle-desktop" aria-label="Change language" data-i18n-aria="nav.change_language_aria">
+          <span class="lang-opt" data-lang="en">EN</span>
+          <span class="lang-sep" aria-hidden="true">|</span>
+          <span class="lang-opt" data-lang="id">ID</span>
+        </button>
         <div class="nav-login-wrap" id="nav-login-area"></div>
         <button
           class="btn-icon hamburger"
           id="hamburger-btn"
           aria-label="Open navigation menu"
+          data-i18n-aria="nav.open_menu_aria"
           aria-expanded="false"
           aria-controls="mobile-menu"
         >
@@ -116,47 +123,56 @@
     <!-- Mobile search -->
     <div class="mobile-search-wrap">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mobile-search-icon" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input type="search" id="mobile-search" class="nav-search-input" placeholder="Search providers, projects&#x2026;" autocomplete="off">
+      <input type="search" id="mobile-search" class="nav-search-input" placeholder="Search providers, projects&#x2026;" data-i18n-placeholder="nav.search_placeholder" autocomplete="off">
     </div>
 
-    <a href="#home" onclick="navigate('home');return false;">Home</a>
+    <!-- Mobile language toggle -->
+    <div style="display:flex;justify-content:center;padding:var(--space-3) 0;">
+      <button type="button" class="lang-toggle" id="lang-toggle-mobile" aria-label="Change language" data-i18n-aria="nav.change_language_aria">
+        <span class="lang-opt" data-lang="en">EN</span>
+        <span class="lang-sep" aria-hidden="true">|</span>
+        <span class="lang-opt" data-lang="id">ID</span>
+      </button>
+    </div>
+
+    <a href="#home" onclick="navigate('home');return false;" data-i18n="nav.home">Home</a>
 
     <!-- Find Property group -->
     <div class="mobile-nav-group">
       <button class="mobile-nav-group-toggle" onclick="this.parentElement.classList.toggle('open')" aria-expanded="false">
-        Find Property
+        <span data-i18n="nav.find_property">Find Property</span>
         <svg class="mobile-nav-group-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <div class="mobile-nav-group-items">
-        <a href="#listings" onclick="navigate('listings');return false;">Land &amp; Villas</a>
-        <a href="#developers" onclick="navigate('developers');return false;">Developments</a>
-        <a href="#agents" onclick="navigate('agents');return false;">Agents</a>
+        <a href="#listings" onclick="navigate('listings');return false;" data-i18n="nav.find_property.land_villas">Land &amp; Villas</a>
+        <a href="#developers" onclick="navigate('developers');return false;" data-i18n="nav.find_property.developments">Developments</a>
+        <a href="#agents" onclick="navigate('agents');return false;" data-i18n="nav.find_property.agents">Agents</a>
       </div>
     </div>
 
-    <a href="#directory?group=builders_trades" onclick="navigate('directory?group=builders_trades');return false;">Builders &amp; Trades</a>
-    <a href="#directory?group=professional_services" onclick="navigate('directory?group=professional_services');return false;">Professional Services</a>
-    <a href="#directory?group=suppliers_materials" onclick="navigate('directory?group=suppliers_materials');return false;">Suppliers</a>
+    <a href="#directory?group=builders_trades" onclick="navigate('directory?group=builders_trades');return false;" data-i18n="nav.builders_trades">Builders &amp; Trades</a>
+    <a href="#directory?group=professional_services" onclick="navigate('directory?group=professional_services');return false;" data-i18n="nav.professional_services">Professional Services</a>
+    <a href="#directory?group=suppliers_materials" onclick="navigate('directory?group=suppliers_materials');return false;" data-i18n="nav.suppliers">Suppliers</a>
 
     <!-- Tools group -->
     <div class="mobile-nav-group">
       <button class="mobile-nav-group-toggle" onclick="this.parentElement.classList.toggle('open')" aria-expanded="false">
-        Tools
+        <span data-i18n="nav.tools">Tools</span>
         <svg class="mobile-nav-group-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <div class="mobile-nav-group-items">
-        <a href="#get-quotes" onclick="navigate('get-quotes');return false;">Get Quotes</a>
-        <a href="#rab-calculator" onclick="navigate('rab-calculator');return false;">RAB Tools</a>
+        <a href="#get-quotes" onclick="navigate('get-quotes');return false;" data-i18n="nav.tools.get_quotes">Get Quotes</a>
+        <a href="#rab-calculator" onclick="navigate('rab-calculator');return false;" data-i18n="nav.tools.rab">RAB Tools</a>
       </div>
     </div>
 
-    <a href="#guides" onclick="navigate('guides');return false;">Guides</a>
-    <a href="#about" onclick="navigate('about');return false;">About</a>
+    <a href="#guides" onclick="navigate('guides');return false;" data-i18n="nav.guides">Guides</a>
+    <a href="#about" onclick="navigate('about');return false;" data-i18n="nav.about">About</a>
 
     <div style="margin-top:auto;padding-top:var(--space-8);">
       <a href="https://wa.me/628123456789" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--full" style="display:flex;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="flex-shrink:0"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-        Get Help on WhatsApp
+        <span data-i18n="footer.whatsapp_help">Get Help on WhatsApp</span>
       </a>
     </div>
   </nav>
@@ -165,7 +181,7 @@
   <main id="main-content" role="main">
     <!-- Content injected by router -->
     <div style="min-height:60vh;display:flex;align-items:center;justify-content:center;">
-      <p style="color:var(--color-text-faint);font-size:var(--text-sm);">Loading…</p>
+      <p style="color:var(--color-text-faint);font-size:var(--text-sm);" data-i18n="meta.loading">Loading…</p>
     </div>
   </main>
 
@@ -176,45 +192,45 @@
         <!-- Brand -->
         <div>
           <div class="footer-brand-name">Build in Lombok</div>
-          <p class="footer-brand-desc">
+          <p class="footer-brand-desc" data-i18n="footer.brand_desc">
             A directory connecting foreign investors and builders with trusted local contractors, architects, engineers, developers, and investment projects across Lombok, Indonesia.
           </p>
           <a href="https://wa.me/628123456789" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--sm">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-            WhatsApp
+            <span data-i18n="footer.whatsapp">WhatsApp</span>
           </a>
         </div>
 
         <!-- Directory links -->
         <div>
-          <div class="footer-heading">Explore</div>
+          <div class="footer-heading" data-i18n="footer.heading_explore">Explore</div>
           <ul class="footer-links" role="list">
-            <li><a href="#listings" onclick="navigate('listings');return false;">Property &amp; Agents</a></li>
-            <li><a href="#developers" onclick="navigate('developers');return false;">Developers &amp; Investing</a></li>
-            <li><a href="#directory?group=builders_trades" onclick="navigate('directory?group=builders_trades');return false;">Builders &amp; Trades</a></li>
-            <li><a href="#directory?group=professional_services" onclick="navigate('directory?group=professional_services');return false;">Professionals</a></li>
-            <li><a href="#directory?group=suppliers_materials" onclick="navigate('directory?group=suppliers_materials');return false;">Materials &amp; Suppliers</a></li>
-            <li><a href="#agents" onclick="navigate('agents');return false;">Agents</a></li>
+            <li><a href="#listings" onclick="navigate('listings');return false;" data-i18n="footer.link.property_agents">Property &amp; Agents</a></li>
+            <li><a href="#developers" onclick="navigate('developers');return false;" data-i18n="footer.link.developers_investing">Developers &amp; Investing</a></li>
+            <li><a href="#directory?group=builders_trades" onclick="navigate('directory?group=builders_trades');return false;" data-i18n="footer.link.builders_trades">Builders &amp; Trades</a></li>
+            <li><a href="#directory?group=professional_services" onclick="navigate('directory?group=professional_services');return false;" data-i18n="footer.link.professionals">Professionals</a></li>
+            <li><a href="#directory?group=suppliers_materials" onclick="navigate('directory?group=suppliers_materials');return false;" data-i18n="footer.link.materials_suppliers">Materials &amp; Suppliers</a></li>
+            <li><a href="#agents" onclick="navigate('agents');return false;" data-i18n="footer.link.agents">Agents</a></li>
           </ul>
         </div>
 
         <!-- Resources links -->
         <div>
-          <div class="footer-heading">Resources</div>
+          <div class="footer-heading" data-i18n="footer.heading_resources">Resources</div>
           <ul class="footer-links" role="list">
-            <li><a href="#guides" onclick="navigate('guides');return false;">All Guides</a></li>
-            <li><a href="#guide/how-to-build-in-lombok" onclick="navigate('guide/how-to-build-in-lombok');return false;">How to Build</a></li>
-            <li><a href="#guide/understanding-land-titles-lombok" onclick="navigate('guide/understanding-land-titles-lombok');return false;">Land Titles</a></li>
-            <li><a href="#guide/lombok-investment-yields-guide" onclick="navigate('guide/lombok-investment-yields-guide');return false;">Investment Yields</a></li>
-            <li><a href="#rab-calculator" onclick="navigate('rab-calculator');return false;">RAB Cost Calculator</a></li>
-            <li><a href="#rab-estimates" onclick="navigate('rab-estimates');return false;">My Saved Estimates</a></li>
+            <li><a href="#guides" onclick="navigate('guides');return false;" data-i18n="footer.link.all_guides">All Guides</a></li>
+            <li><a href="#guide/how-to-build-in-lombok" onclick="navigate('guide/how-to-build-in-lombok');return false;" data-i18n="footer.link.how_to_build">How to Build</a></li>
+            <li><a href="#guide/understanding-land-titles-lombok" onclick="navigate('guide/understanding-land-titles-lombok');return false;" data-i18n="footer.link.land_titles">Land Titles</a></li>
+            <li><a href="#guide/lombok-investment-yields-guide" onclick="navigate('guide/lombok-investment-yields-guide');return false;" data-i18n="footer.link.investment_yields">Investment Yields</a></li>
+            <li><a href="#rab-calculator" onclick="navigate('rab-calculator');return false;" data-i18n="footer.link.rab_calculator">RAB Cost Calculator</a></li>
+            <li><a href="#rab-estimates" onclick="navigate('rab-estimates');return false;" data-i18n="footer.link.my_saved_estimates">My Saved Estimates</a></li>
           </ul>
         </div>
       </div>
 
       <!-- Footer bottom -->
       <div class="footer-bottom">
-        <p class="footer-copyright">
+        <p class="footer-copyright" data-i18n="footer.copyright">
           &copy; 2026 Build in Lombok. Information provided for general guidance only — always seek independent legal and financial advice.
         </p>
         <div style="display:flex;align-items:center;gap:var(--space-4);">
@@ -222,7 +238,9 @@
             data-theme-toggle
             class="btn-icon"
             aria-label="Toggle dark mode"
+            data-i18n-aria="footer.toggle_theme_aria"
             title="Toggle dark/light mode"
+            data-i18n-title="footer.toggle_theme_title"
             style="color:var(--color-text-faint);"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -237,6 +255,11 @@
 
   <!-- Facebook SDK (for social login) -->
   <script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
+
+  <!-- ===================== i18n DICTIONARIES ===================== -->
+  <!-- Must load before app.js; app.js reads window.I18N_EN / window.I18N_ID -->
+  <script src="./i18n/en.js"></script>
+  <script src="./i18n/id.js"></script>
 
   <!-- ===================== APP SCRIPT ===================== -->
   <script src="./app.js"></script>

@@ -1,0 +1,132 @@
+/* Build in Lombok — English dictionary
+ * Flat key→string map. Keys are namespaced with dots.
+ * Add a key here AND in id.js to support a new string. Missing keys
+ * fall back to the English default passed into t(key, fallback) at
+ * the call-site, so un-migrated strings still render.
+ */
+window.I18N_EN = {
+  // Document / meta
+  'meta.title': 'Build in Lombok — Find Builders, Specialists & Investment Projects',
+  'meta.skip_to_content': 'Skip to content',
+  'meta.loading': 'Loading…',
+  'meta.home_aria': 'Build in Lombok — home',
+
+  // Header / navigation
+  'nav.find_property': 'Find Property',
+  'nav.find_property.land_villas': 'Land & Villas',
+  'nav.find_property.land_villas_desc': 'Search property listings',
+  'nav.find_property.developments': 'Developments',
+  'nav.find_property.developments_desc': 'Browse investment developments',
+  'nav.find_property.agents': 'Agents',
+  'nav.find_property.agents_desc': 'Find a local property agent',
+  'nav.builders_trades': 'Builders & Trades',
+  'nav.professionals': 'Professionals',
+  'nav.professional_services': 'Professional Services',
+  'nav.suppliers': 'Suppliers',
+  'nav.tools': 'Tools',
+  'nav.tools.get_quotes': 'Get Quotes',
+  'nav.tools.get_quotes_desc': 'WhatsApp quote requests',
+  'nav.tools.rab': 'RAB Tools',
+  'nav.tools.rab_desc': 'Cost estimation & budgeting',
+  'nav.guides': 'Guides',
+  'nav.about': 'About',
+  'nav.home': 'Home',
+  'nav.open_menu_aria': 'Open navigation menu',
+  'nav.search_placeholder': 'Search providers, projects…',
+  'nav.change_language_aria': 'Change language',
+
+  // Footer
+  'footer.brand_desc': 'A directory connecting foreign investors and builders with trusted local contractors, architects, engineers, developers, and investment projects across Lombok, Indonesia.',
+  'footer.whatsapp': 'WhatsApp',
+  'footer.whatsapp_help': 'Get Help on WhatsApp',
+  'footer.heading_explore': 'Explore',
+  'footer.heading_resources': 'Resources',
+  'footer.link.property_agents': 'Property & Agents',
+  'footer.link.developers_investing': 'Developers & Investing',
+  'footer.link.builders_trades': 'Builders & Trades',
+  'footer.link.professionals': 'Professionals',
+  'footer.link.materials_suppliers': 'Materials & Suppliers',
+  'footer.link.agents': 'Agents',
+  'footer.link.all_guides': 'All Guides',
+  'footer.link.how_to_build': 'How to Build',
+  'footer.link.land_titles': 'Land Titles',
+  'footer.link.investment_yields': 'Investment Yields',
+  'footer.link.rab_calculator': 'RAB Cost Calculator',
+  'footer.link.my_saved_estimates': 'My Saved Estimates',
+  'footer.copyright': '© 2026 Build in Lombok. Information provided for general guidance only — always seek independent legal and financial advice.',
+  'footer.toggle_theme_aria': 'Toggle dark mode',
+  'footer.toggle_theme_title': 'Toggle dark/light mode',
+
+  // Home / hero
+  'home.hero_title': 'BUILD IN LOMBOK',
+  'home.hero_subtitle': 'AI-powered tools to help you build & invest in Lombok',
+  'home.search_placeholder': 'Search providers, developers, projects...',
+  'home.find_property': 'Find Property',
+  'home.find_property_desc': 'Browse properties and find local agents.',
+  'home.find_developers': 'Find Developers & Investments',
+  'home.find_developers_desc': 'Explore developers and investment opportunities.',
+  'home.find_builders': 'Find Builders & Trades',
+  'home.find_builders_desc': 'Connect with trusted local builders and tradespeople.',
+  'home.find_professionals': 'Find Professional Services',
+  'home.find_professionals_desc': 'Architects, engineers, lawyers, and more.',
+  'home.find_materials': 'Find Materials & Suppliers',
+  'home.find_materials_desc': 'Source quality materials from local suppliers.',
+  'home.explore_cta': 'Explore',
+  'home.help_title': 'Need Help With Your Project?',
+  'home.help_subtitle': 'Not sure where to start? Chat with us on WhatsApp and we will point you to the right people.',
+
+  // Directory / listings common
+  'filter.where': 'Where in Lombok?',
+  'filter.specialty': 'What specialty?',
+  'filter.status': 'Status',
+  'filter.sort': 'Sort',
+  'filter.language': 'Language',
+  'filter.min_rating': 'Min Rating',
+  'filter.clear_all': 'Clear all filters',
+  'empty.no_providers_title': 'No providers found',
+  'empty.no_providers_desc': 'Try adjusting your filters or search terms.',
+  'empty.no_listings_title': 'No listings found',
+  'empty.no_listings_desc': 'Try adjusting your filters or check back soon for new listings.',
+
+  // Detail pages / contact
+  'detail.contact': 'Contact',
+  'detail.address': 'Address',
+  'detail.call_now': 'Call Now',
+  'detail.whatsapp': 'WhatsApp',
+  'detail.save_favourites': 'Save to favourites',
+  'detail.check_reviews': 'Check for Review Updates',
+  'detail.no_projects': 'No active projects listed yet.',
+  'detail.no_reviews': 'No Google reviews yet',
+
+  // Forms / auth / generic buttons
+  'form.display_name': 'Display Name',
+  'form.agency': 'Agency / Company Name',
+  'form.phone': 'Phone',
+  'form.whatsapp_number': 'WhatsApp Number',
+  'form.primary_area': 'Primary Area',
+  'form.bio': 'Bio',
+  'form.google_link': 'Google Maps / Business Link',
+  'form.listing_title': 'Listing Title',
+  'form.listing_type': 'Listing Type',
+  'form.area': 'Area',
+  'btn.save_changes': 'Save changes',
+  'btn.cancel': 'Cancel',
+  'btn.submit': 'Submit',
+  'btn.submitting': 'Submitting...',
+  'btn.saving': 'Saving…',
+  'btn.saved': 'Saved',
+  'btn.save_failed': 'Save failed.',
+  'btn.loading': 'Loading…',
+
+  // Agent registration / listing posting (forms)
+  'agent.register_title': 'Register as a Property Agent',
+  'agent.register_subtitle': 'Create your agent profile to reach foreign buyers and investors.',
+  'agent.register_button': 'Register as Agent',
+  'agent.register_success': 'Your agent profile has been submitted for review.',
+  'listing.post_title': 'Post a Property Listing',
+  'listing.post_subtitle': 'Create a listing to reach foreign investors and buyers.',
+
+  // Theme
+  'theme.switch_light_aria': 'Switch to light mode',
+  'theme.switch_dark_aria': 'Switch to dark mode',
+};

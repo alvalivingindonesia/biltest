@@ -611,21 +611,54 @@ function handle_guide_detail(string $slug): void {
 function handle_filters(): void {
     $db = get_db();
 
-    $groups = $db->query("SELECT `key`, label FROM `groups` ORDER BY sort_order")->fetchAll();
-    $categories = $db->query("SELECT `key`, group_key, label FROM categories ORDER BY sort_order")->fetchAll();
-    $areas = $db->query("SELECT `key`, label, region_key FROM areas ORDER BY sort_order")->fetchAll();
+    // Each lookup now also returns an optional `label_id` (Indonesian).
+    // Client falls back to English `label` when `label_id` is NULL.
+    // Wrapped in try/catch so pre-migration databases still work.
+    try {
+        $groups = $db->query("SELECT `key`, label, label_id FROM `groups` ORDER BY sort_order")->fetchAll();
+    } catch (Exception $e) {
+        $groups = $db->query("SELECT `key`, label FROM `groups` ORDER BY sort_order")->fetchAll();
+    }
+    try {
+        $categories = $db->query("SELECT `key`, group_key, label, label_id FROM categories ORDER BY sort_order")->fetchAll();
+    } catch (Exception $e) {
+        $categories = $db->query("SELECT `key`, group_key, label FROM categories ORDER BY sort_order")->fetchAll();
+    }
+    try {
+        $areas = $db->query("SELECT `key`, label, label_id, region_key FROM areas ORDER BY sort_order")->fetchAll();
+    } catch (Exception $e) {
+        $areas = $db->query("SELECT `key`, label, region_key FROM areas ORDER BY sort_order")->fetchAll();
+    }
 
     // Regions
     $regions = [];
     try {
-        $regions = $db->query("SELECT region_key, label, sort_order FROM area_regions ORDER BY sort_order")->fetchAll();
-    } catch (Exception $e) { /* table may not exist yet */ }
-    $project_types = $db->query("SELECT `key`, label FROM project_types ORDER BY sort_order")->fetchAll();
-    $project_statuses = $db->query("SELECT `key`, label FROM project_statuses ORDER BY sort_order")->fetchAll();
+        $regions = $db->query("SELECT region_key, label, label_id, sort_order FROM area_regions ORDER BY sort_order")->fetchAll();
+    } catch (Exception $e) {
+        try {
+            $regions = $db->query("SELECT region_key, label, sort_order FROM area_regions ORDER BY sort_order")->fetchAll();
+        } catch (Exception $e2) { /* table may not exist yet */ }
+    }
+    try {
+        $project_types = $db->query("SELECT `key`, label, label_id FROM project_types ORDER BY sort_order")->fetchAll();
+    } catch (Exception $e) {
+        $project_types = $db->query("SELECT `key`, label FROM project_types ORDER BY sort_order")->fetchAll();
+    }
+    try {
+        $project_statuses = $db->query("SELECT `key`, label, label_id FROM project_statuses ORDER BY sort_order")->fetchAll();
+    } catch (Exception $e) {
+        $project_statuses = $db->query("SELECT `key`, label FROM project_statuses ORDER BY sort_order")->fetchAll();
+    }
     $listing_types = [];
-    try { $listing_types = $db->query("SELECT `key`, label FROM listing_types ORDER BY sort_order")->fetchAll(); } catch (Exception $e) {}
+    try { $listing_types = $db->query("SELECT `key`, label, label_id FROM listing_types ORDER BY sort_order")->fetchAll(); }
+    catch (Exception $e) {
+        try { $listing_types = $db->query("SELECT `key`, label FROM listing_types ORDER BY sort_order")->fetchAll(); } catch (Exception $e2) {}
+    }
     $land_certificate_types = [];
-    try { $land_certificate_types = $db->query("SELECT `key`, label FROM land_certificate_types ORDER BY sort_order")->fetchAll(); } catch (Exception $e) {}
+    try { $land_certificate_types = $db->query("SELECT `key`, label, label_id FROM land_certificate_types ORDER BY sort_order")->fetchAll(); }
+    catch (Exception $e) {
+        try { $land_certificate_types = $db->query("SELECT `key`, label FROM land_certificate_types ORDER BY sort_order")->fetchAll(); } catch (Exception $e2) {}
+    }
 
     // Currency rates for frontend conversion
     $currency_rates = [];
