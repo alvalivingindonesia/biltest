@@ -3740,7 +3740,7 @@ const UserAuth = (() => {
       btn.className = 'btn-icon login-btn';
       btn.setAttribute('aria-label', 'Sign in');
       btn.title = 'Sign in';
-      btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Sign In`;
+      btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
       btn.addEventListener('click', () => showAuthModal('login'));
       loginArea.appendChild(btn);
     }

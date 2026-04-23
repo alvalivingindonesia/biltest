@@ -589,21 +589,20 @@
   background: rgba(255,255,255,0.1);
 }
 
-/* Login button — pill with text */
+/* Login button — icon-only circle, matched to .lang-toggle height */
 .login-btn.login-btn {
-  width: auto;
-  height: auto;
-  padding: 0.4rem 1rem;
-  gap: 0.4rem;
-  font-family: var(--font-body);
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  gap: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1.5px solid var(--color-primary);
+  border-radius: 50%;
   color: var(--color-primary);
   background: transparent;
   cursor: pointer;
-  white-space: nowrap;
   flex-shrink: 0;
 }
 .login-btn.login-btn:hover {
@@ -6385,12 +6384,14 @@ a.rab-tool-card:hover {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 3px;
+  height: 32px;
+  padding: 0 4px;
   border: 1.5px solid var(--color-divider);
   border-radius: var(--radius-full);
   background: transparent;
   cursor: pointer;
   line-height: 0;
+  box-sizing: border-box;
   transition: border-color var(--transition-interactive), background var(--transition-interactive);
 }
 .lang-toggle:hover {
