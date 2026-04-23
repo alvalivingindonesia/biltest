@@ -30,6 +30,31 @@
 
   <!-- ===================== HEADER ===================== -->
   <header class="site-header" role="banner">
+
+    <!-- Top utility bar: language + sign in (above the main nav) -->
+    <div class="nav-utility">
+      <div class="container nav-utility-inner">
+        <button type="button" class="lang-toggle" id="lang-toggle-desktop" aria-label="Change language" data-i18n-aria="nav.change_language_aria">
+          <span class="lang-opt" data-lang="en" aria-label="English" title="English">
+            <svg class="lang-flag" viewBox="0 0 60 30" width="22" height="14" aria-hidden="true">
+              <rect width="60" height="30" fill="#012169"/>
+              <path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" stroke-width="6"/>
+              <path d="M0,0 L60,30 M60,0 L0,30" stroke="#C8102E" stroke-width="3.5"/>
+              <path d="M30,0 v30 M0,15 h60" stroke="#fff" stroke-width="10"/>
+              <path d="M30,0 v30 M0,15 h60" stroke="#C8102E" stroke-width="6"/>
+            </svg>
+          </span>
+          <span class="lang-opt" data-lang="id" aria-label="Bahasa Indonesia" title="Bahasa Indonesia">
+            <svg class="lang-flag" viewBox="0 0 30 20" width="22" height="14" aria-hidden="true">
+              <rect width="30" height="10" fill="#CE1126"/>
+              <rect y="10" width="30" height="10" fill="#FFFFFF"/>
+            </svg>
+          </span>
+        </button>
+        <div class="nav-login-wrap" id="nav-login-area"></div>
+      </div>
+    </div>
+
     <nav class="container nav-inner" aria-label="Main navigation">
 
       <!-- Logo -->
@@ -89,15 +114,8 @@
         <li><a href="#about" onclick="navigate('about');return false;" data-i18n="nav.about">About</a></li>
       </ul>
 
-      <!-- Right actions -->
+      <!-- Right actions (hamburger only — lang + login moved to top utility bar) -->
       <div class="nav-actions">
-        <!-- Language toggle (EN | ID) -->
-        <button type="button" class="lang-toggle" id="lang-toggle-desktop" aria-label="Change language" data-i18n-aria="nav.change_language_aria">
-          <span class="lang-opt" data-lang="en">EN</span>
-          <span class="lang-sep" aria-hidden="true">|</span>
-          <span class="lang-opt" data-lang="id">ID</span>
-        </button>
-        <div class="nav-login-wrap" id="nav-login-area"></div>
         <button
           class="btn-icon hamburger"
           id="hamburger-btn"
@@ -129,9 +147,21 @@
     <!-- Mobile language toggle -->
     <div style="display:flex;justify-content:center;padding:var(--space-3) 0;">
       <button type="button" class="lang-toggle" id="lang-toggle-mobile" aria-label="Change language" data-i18n-aria="nav.change_language_aria">
-        <span class="lang-opt" data-lang="en">EN</span>
-        <span class="lang-sep" aria-hidden="true">|</span>
-        <span class="lang-opt" data-lang="id">ID</span>
+        <span class="lang-opt" data-lang="en" aria-label="English" title="English">
+          <svg class="lang-flag" viewBox="0 0 60 30" width="26" height="17" aria-hidden="true">
+            <rect width="60" height="30" fill="#012169"/>
+            <path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" stroke-width="6"/>
+            <path d="M0,0 L60,30 M60,0 L0,30" stroke="#C8102E" stroke-width="3.5"/>
+            <path d="M30,0 v30 M0,15 h60" stroke="#fff" stroke-width="10"/>
+            <path d="M30,0 v30 M0,15 h60" stroke="#C8102E" stroke-width="6"/>
+          </svg>
+        </span>
+        <span class="lang-opt" data-lang="id" aria-label="Bahasa Indonesia" title="Bahasa Indonesia">
+          <svg class="lang-flag" viewBox="0 0 30 20" width="26" height="17" aria-hidden="true">
+            <rect width="30" height="10" fill="#CE1126"/>
+            <rect y="10" width="30" height="10" fill="#FFFFFF"/>
+          </svg>
+        </span>
       </button>
     </div>
 

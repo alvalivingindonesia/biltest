@@ -28,6 +28,9 @@
   --space-16: 4rem;
   --space-20: 5rem;
   --space-24: 6rem;
+
+  /* --- Header height (main nav bar only; utility strip adds +36px on desktop) --- */
+  --nav-height: 64px;
   --space-32: 8rem;
 
   /* --- Surfaces (warm sandy beige) --- */
@@ -191,6 +194,11 @@
     --shadow-md: 0 4px 12px oklch(0 0 0 / 0.35);
     --shadow-lg: 0 12px 32px oklch(0 0 0 / 0.45);
   }
+}
+
+/* On desktop the utility bar (36px) sits above the main nav — grow the total */
+@media (min-width: 768px) {
+  :root { --nav-height: 100px; }
 }
 
 /* =====================================================
@@ -753,7 +761,7 @@
   position: relative;
   z-index: 2;
   width: 100%;
-  padding-top: 100px;
+  padding-top: calc(var(--nav-height) + var(--space-6));
   padding-bottom: clamp(var(--space-16), 8vw, var(--space-32));
 }
 
@@ -2229,7 +2237,7 @@
 
 .page-header {
   padding-block: clamp(80px, 9vw, 120px);
-  padding-top: calc(clamp(80px, 9vw, 120px) + 64px); /* account for fixed nav */
+  padding-top: calc(clamp(80px, 9vw, 120px) + var(--nav-height)); /* account for fixed nav */
   border-bottom: 1px solid var(--color-divider);
   margin-bottom: var(--space-10);
   background: var(--color-surface-offset);
@@ -2273,7 +2281,7 @@
 .dir-hero {
   position: relative;
   padding-block: clamp(48px, 6vw, 80px);
-  padding-top: calc(clamp(48px, 6vw, 80px) + 64px);
+  padding-top: calc(clamp(48px, 6vw, 80px) + var(--nav-height));
   background: linear-gradient(135deg, #1a1814 0%, #2a2620 50%, #1a1814 100%);
   color: #faf8f4;
   overflow: hidden;
@@ -2448,7 +2456,7 @@
 .detail-hero {
   position: relative;
   padding-block: clamp(48px, 6vw, 80px);
-  padding-top: calc(clamp(48px, 6vw, 80px) + 64px);
+  padding-top: calc(clamp(48px, 6vw, 80px) + var(--nav-height));
   background: linear-gradient(135deg, #1a1814 0%, #2a2620 50%, #1a1814 100%);
   color: #faf8f4;
   overflow: hidden;
@@ -6345,50 +6353,73 @@ a.rab-tool-card:hover {
 }
 
 /* =============================================================
-   Language toggle (EN | ID)
-   Lives in the header .nav-actions and in the mobile drawer.
-   Pattern mirrors .btn-icon for colour handling over the hero.
+   Header utility bar (top strip above the main nav)
+   Holds the language toggle and the sign-in button. Sits above the
+   main .nav-inner row. Matches the hero/scrolled/solid states.
+   ============================================================= */
+.nav-utility {
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--transition-interactive);
+}
+.site-header.scrolled .nav-utility,
+.site-header.solid .nav-utility {
+  border-bottom-color: var(--color-divider);
+}
+.nav-utility-inner {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  height: 36px;
+}
+/* Collapse to zero height on mobile — hamburger handles it all */
+@media (max-width: 767px) {
+  .nav-utility-inner { display: none; }
+}
+
+/* =============================================================
+   Language toggle — two country flags, the active one highlighted.
+   Lives in the header utility bar and in the mobile drawer.
    ============================================================= */
 .lang-toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 0.3rem 0.6rem;
+  padding: 3px;
   border: 1.5px solid var(--color-divider);
   border-radius: var(--radius-full);
   background: transparent;
-  color: var(--color-text);
-  font-family: var(--font-body);
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
   cursor: pointer;
+  line-height: 0;
   transition: border-color var(--transition-interactive), background var(--transition-interactive);
-  line-height: 1;
 }
 .lang-toggle:hover {
   border-color: var(--color-text-muted);
   background: var(--color-surface-offset);
 }
 .lang-toggle .lang-opt {
-  padding: 0.15rem 0.35rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
   border-radius: var(--radius-full);
-  color: var(--color-text-faint);
-  transition: color var(--transition-interactive), background var(--transition-interactive);
+  opacity: 0.45;
+  transition: opacity var(--transition-interactive), background var(--transition-interactive), box-shadow var(--transition-interactive);
 }
+.lang-toggle .lang-opt:hover { opacity: 0.8; }
 .lang-toggle .lang-opt.active {
-  color: var(--color-primary);
+  opacity: 1;
   background: var(--color-surface-dynamic);
+  box-shadow: 0 0 0 1.5px var(--color-primary);
 }
-.lang-toggle .lang-sep {
-  color: var(--color-divider);
-  font-weight: 400;
-  pointer-events: none;
+.lang-toggle .lang-flag {
+  display: block;
+  border-radius: 2px;
+  overflow: hidden; /* crop Union-Jack diagonals drawn outside the viewBox */
 }
 
-/* Transparent (hero) header state — match .btn-icon contrast */
+/* Transparent (hero) header state */
 .site-header:not(.scrolled):not(.solid) .lang-toggle {
-  color: rgba(250,248,244,0.85);
   border-color: rgba(250,248,244,0.35);
 }
 .site-header:not(.scrolled):not(.solid) .lang-toggle:hover {
@@ -6396,17 +6427,10 @@ a.rab-tool-card:hover {
   background: rgba(255,255,255,0.1);
 }
 .site-header:not(.scrolled):not(.solid) .lang-toggle .lang-opt {
-  color: rgba(250,248,244,0.6);
+  opacity: 0.55;
 }
 .site-header:not(.scrolled):not(.solid) .lang-toggle .lang-opt.active {
-  color: #fff;
+  opacity: 1;
   background: rgba(255,255,255,0.18);
-}
-.site-header:not(.scrolled):not(.solid) .lang-toggle .lang-sep {
-  color: rgba(250,248,244,0.35);
-}
-
-/* Hide the desktop toggle on narrow screens — the mobile drawer has its own */
-@media (max-width: 768px) {
-  #lang-toggle-desktop { display: none; }
+  box-shadow: 0 0 0 1.5px rgba(255,255,255,0.85);
 }
