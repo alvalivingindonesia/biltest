@@ -30,10 +30,65 @@
 
   <!-- ===================== HEADER ===================== -->
   <header class="site-header" role="banner">
+    <nav class="container nav-inner" aria-label="Main navigation">
 
-    <!-- Top utility bar: language + sign in (above the main nav) -->
-    <div class="nav-utility">
-      <div class="container nav-utility-inner">
+      <!-- Logo -->
+      <a href="#home" class="nav-logo" onclick="navigate('home');return false;" aria-label="Build in Lombok — home" data-i18n-aria="meta.home_aria">
+        <span class="nav-brand">BUILD IN LOMBOK</span>
+      </a>
+
+      <!-- Desktop nav links — 5 items, centred -->
+      <ul class="nav-links" role="list">
+
+        <!-- Find Property dropdown -->
+        <li class="nav-dropdown" id="nav-dd-property">
+          <button class="nav-dropdown-toggle" aria-haspopup="true" aria-expanded="false">
+            <span data-i18n="nav.find_property">Find Property</span>
+            <svg class="nav-dd-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <ul class="nav-dropdown-menu" role="menu">
+            <li><a href="#listings" onclick="navigate('listings');return false;" role="menuitem">
+              <span class="nav-dd-label" data-i18n="nav.find_property.land_villas">Land &amp; Villas</span>
+              <span class="nav-dd-desc" data-i18n="nav.find_property.land_villas_desc">Search property listings</span>
+            </a></li>
+            <li><a href="#agents" onclick="navigate('agents');return false;" role="menuitem">
+              <span class="nav-dd-label" data-i18n="nav.find_property.agents">Agents</span>
+              <span class="nav-dd-desc" data-i18n="nav.find_property.agents_desc">Find a local property agent</span>
+            </a></li>
+          </ul>
+        </li>
+
+        <!-- Developments — direct link -->
+        <li><a href="#developers" onclick="navigate('developers');return false;" data-i18n="nav.developments">Developments</a></li>
+
+        <!-- Builders dropdown (includes trades, professionals, suppliers) -->
+        <li class="nav-dropdown" id="nav-dd-builders">
+          <button class="nav-dropdown-toggle" aria-haspopup="true" aria-expanded="false">
+            <span data-i18n="nav.builders">Builders</span>
+            <svg class="nav-dd-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <ul class="nav-dropdown-menu" role="menu">
+            <li><a href="#directory?group=builders_trades" onclick="navigate('directory?group=builders_trades');return false;" role="menuitem">
+              <span class="nav-dd-label" data-i18n="nav.builders_trades">Builders &amp; Trades</span>
+              <span class="nav-dd-desc" data-i18n="nav.builders_trades_desc">Contractors, carpenters, electricians</span>
+            </a></li>
+            <li><a href="#directory?group=professional_services" onclick="navigate('directory?group=professional_services');return false;" role="menuitem">
+              <span class="nav-dd-label" data-i18n="nav.professional_services">Professional Services</span>
+              <span class="nav-dd-desc" data-i18n="nav.professional_services_desc">Architects, engineers, lawyers</span>
+            </a></li>
+            <li><a href="#directory?group=suppliers_materials" onclick="navigate('directory?group=suppliers_materials');return false;" role="menuitem">
+              <span class="nav-dd-label" data-i18n="nav.suppliers">Suppliers &amp; Materials</span>
+              <span class="nav-dd-desc" data-i18n="nav.suppliers_desc">Local material suppliers</span>
+            </a></li>
+          </ul>
+        </li>
+
+        <li><a href="#guides" onclick="navigate('guides');return false;" data-i18n="nav.guides">Guides</a></li>
+        <li><a href="#about" onclick="navigate('about');return false;" data-i18n="nav.about">About</a></li>
+      </ul>
+
+      <!-- Right actions: language, account, primary CTA, hamburger -->
+      <div class="nav-actions">
         <button type="button" class="lang-toggle" id="lang-toggle-desktop" aria-label="Change language" data-i18n-aria="nav.change_language_aria">
           <span class="lang-opt" data-lang="en" aria-label="English" title="English">
             <svg class="lang-flag" viewBox="0 0 60 30" width="22" height="14" aria-hidden="true">
@@ -52,70 +107,10 @@
           </span>
         </button>
         <div class="nav-login-wrap" id="nav-login-area"></div>
-      </div>
-    </div>
 
-    <nav class="container nav-inner" aria-label="Main navigation">
+        <!-- Primary CTA -->
+        <a href="#submit-listing" onclick="navigate('submit-listing');return false;" class="nav-cta" data-i18n="nav.cta.list_business">List Your Business</a>
 
-      <!-- Logo -->
-      <a href="#home" class="nav-logo" onclick="navigate('home');return false;" aria-label="Build in Lombok — home" data-i18n-aria="meta.home_aria">
-        <span class="nav-brand">BUILD IN LOMBOK</span>
-      </a>
-
-      <!-- Desktop nav links -->
-      <ul class="nav-links" role="list">
-
-        <!-- Find Property dropdown -->
-        <li class="nav-dropdown" id="nav-dd-property">
-          <button class="nav-dropdown-toggle" aria-haspopup="true" aria-expanded="false">
-            <span data-i18n="nav.find_property">Find Property</span>
-            <svg class="nav-dd-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
-          </button>
-          <ul class="nav-dropdown-menu" role="menu">
-            <li><a href="#listings" onclick="navigate('listings');return false;" role="menuitem">
-              <span class="nav-dd-label" data-i18n="nav.find_property.land_villas">Land &amp; Villas</span>
-              <span class="nav-dd-desc" data-i18n="nav.find_property.land_villas_desc">Search property listings</span>
-            </a></li>
-            <li><a href="#developers" onclick="navigate('developers');return false;" role="menuitem">
-              <span class="nav-dd-label" data-i18n="nav.find_property.developments">Developments</span>
-              <span class="nav-dd-desc" data-i18n="nav.find_property.developments_desc">Browse investment developments</span>
-            </a></li>
-            <li><a href="#agents" onclick="navigate('agents');return false;" role="menuitem">
-              <span class="nav-dd-label" data-i18n="nav.find_property.agents">Agents</span>
-              <span class="nav-dd-desc" data-i18n="nav.find_property.agents_desc">Find a local property agent</span>
-            </a></li>
-          </ul>
-        </li>
-
-        <!-- Direct directory links -->
-        <li><a href="#directory?group=builders_trades" onclick="navigate('directory?group=builders_trades');return false;" data-i18n="nav.builders_trades">Builders &amp; Trades</a></li>
-        <li><a href="#directory?group=professional_services" onclick="navigate('directory?group=professional_services');return false;" data-i18n="nav.professionals">Professionals</a></li>
-        <li><a href="#directory?group=suppliers_materials" onclick="navigate('directory?group=suppliers_materials');return false;" data-i18n="nav.suppliers">Suppliers</a></li>
-
-        <!-- Tools dropdown -->
-        <li class="nav-dropdown" id="nav-dd-tools">
-          <button class="nav-dropdown-toggle" aria-haspopup="true" aria-expanded="false">
-            <span data-i18n="nav.tools">Tools</span>
-            <svg class="nav-dd-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
-          </button>
-          <ul class="nav-dropdown-menu" role="menu">
-            <li><a href="#get-quotes" onclick="navigate('get-quotes');return false;" role="menuitem">
-              <span class="nav-dd-label" data-i18n="nav.tools.get_quotes">Get Quotes</span>
-              <span class="nav-dd-desc" data-i18n="nav.tools.get_quotes_desc">WhatsApp quote requests</span>
-            </a></li>
-            <li><a href="#rab-calculator" onclick="navigate('rab-calculator');return false;" role="menuitem">
-              <span class="nav-dd-label" data-i18n="nav.tools.rab">RAB Tools</span>
-              <span class="nav-dd-desc" data-i18n="nav.tools.rab_desc">Cost estimation &amp; budgeting</span>
-            </a></li>
-          </ul>
-        </li>
-
-        <li><a href="#guides" onclick="navigate('guides');return false;" data-i18n="nav.guides">Guides</a></li>
-        <li><a href="#about" onclick="navigate('about');return false;" data-i18n="nav.about">About</a></li>
-      </ul>
-
-      <!-- Right actions (hamburger only — lang + login moved to top utility bar) -->
-      <div class="nav-actions">
         <button
           class="btn-icon hamburger"
           id="hamburger-btn"
@@ -175,29 +170,32 @@
       </button>
       <div class="mobile-nav-group-items">
         <a href="#listings" onclick="navigate('listings');return false;" data-i18n="nav.find_property.land_villas">Land &amp; Villas</a>
-        <a href="#developers" onclick="navigate('developers');return false;" data-i18n="nav.find_property.developments">Developments</a>
         <a href="#agents" onclick="navigate('agents');return false;" data-i18n="nav.find_property.agents">Agents</a>
       </div>
     </div>
 
-    <a href="#directory?group=builders_trades" onclick="navigate('directory?group=builders_trades');return false;" data-i18n="nav.builders_trades">Builders &amp; Trades</a>
-    <a href="#directory?group=professional_services" onclick="navigate('directory?group=professional_services');return false;" data-i18n="nav.professional_services">Professional Services</a>
-    <a href="#directory?group=suppliers_materials" onclick="navigate('directory?group=suppliers_materials');return false;" data-i18n="nav.suppliers">Suppliers</a>
+    <a href="#developers" onclick="navigate('developers');return false;" data-i18n="nav.developments">Developments</a>
 
-    <!-- Tools group -->
+    <!-- Builders group -->
     <div class="mobile-nav-group">
       <button class="mobile-nav-group-toggle" onclick="this.parentElement.classList.toggle('open')" aria-expanded="false">
-        <span data-i18n="nav.tools">Tools</span>
+        <span data-i18n="nav.builders">Builders</span>
         <svg class="mobile-nav-group-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <div class="mobile-nav-group-items">
-        <a href="#get-quotes" onclick="navigate('get-quotes');return false;" data-i18n="nav.tools.get_quotes">Get Quotes</a>
-        <a href="#rab-calculator" onclick="navigate('rab-calculator');return false;" data-i18n="nav.tools.rab">RAB Tools</a>
+        <a href="#directory?group=builders_trades" onclick="navigate('directory?group=builders_trades');return false;" data-i18n="nav.builders_trades">Builders &amp; Trades</a>
+        <a href="#directory?group=professional_services" onclick="navigate('directory?group=professional_services');return false;" data-i18n="nav.professional_services">Professional Services</a>
+        <a href="#directory?group=suppliers_materials" onclick="navigate('directory?group=suppliers_materials');return false;" data-i18n="nav.suppliers">Suppliers &amp; Materials</a>
       </div>
     </div>
 
     <a href="#guides" onclick="navigate('guides');return false;" data-i18n="nav.guides">Guides</a>
     <a href="#about" onclick="navigate('about');return false;" data-i18n="nav.about">About</a>
+
+    <!-- Primary CTA inside the drawer -->
+    <div style="padding:var(--space-3) 0;">
+      <a href="#submit-listing" onclick="navigate('submit-listing');return false;" class="nav-cta nav-cta--block" data-i18n="nav.cta.list_business">List Your Business</a>
+    </div>
 
     <div style="margin-top:auto;padding-top:var(--space-8);">
       <a href="https://wa.me/628123456789" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--full" style="display:flex;">
