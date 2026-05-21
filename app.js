@@ -668,6 +668,7 @@ async function router() {
     case 'rab-editor': await renderRABEditor(view, segments[1]); break;
     case 'get-quotes': await renderGetQuotes(view, params); break;
     case 'search': await renderSearch(view, params); break;
+    case 'list-your-business': await renderListYourBusiness(view); break;
     default: await renderHome(view);
   }
 
@@ -675,6 +676,11 @@ async function router() {
   main.innerHTML = '';
   main.appendChild(view);
   window.scrollTo({ top: 0, behavior: 'instant' });
+
+  // Mobile filter button availability depends on the route
+  if (typeof MobileFilterDrawer !== 'undefined') {
+    MobileFilterDrawer.updateAvailability(page, view);
+  }
 }
 
 // =====================================================
@@ -722,12 +728,31 @@ async function renderHome(el) {
         <div class="container">
           <h1 class="hero-title">${t('home.hero_title', 'BUILD IN LOMBOK')}</h1>
           <p class="hero-subtitle">${t('home.hero_subtitle', 'AI-powered tools to help you build & invest in Lombok')}</p>
+
+          <div class="hero-segments" role="tablist" aria-label="${t('home.hero_segments_label', 'What are you looking for?')}">
+            <button class="hero-segment active" data-intent="property" role="tab" aria-selected="true">${t('home.intent_property', 'Property')}</button>
+            <button class="hero-segment" data-intent="builders" role="tab" aria-selected="false">${t('home.intent_builders', 'Builders')}</button>
+            <button class="hero-segment" data-intent="materials" role="tab" aria-selected="false">${t('home.intent_materials', 'Materials')}</button>
+          </div>
+
           <div class="hero-search">
             <svg class="hero-search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="search" class="hero-search-input" placeholder="${t('home.search_placeholder', 'Search providers, developers, projects...')}" autocomplete="off" id="hero-search-input">
+            <input type="search" class="hero-search-input" placeholder="${t('home.search_placeholder_property', 'Search land, villas, agents...')}" autocomplete="off" id="hero-search-input" data-intent="property">
+
             <button class="hero-search-btn" onclick="heroSearchSubmit()" aria-label="Search">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             </button>
+          </div>
+
+          <div class="hero-cta-row">
+            <a href="#directory" class="hero-cta-btn hero-cta-btn--primary" onclick="navigate('directory');return false;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+              ${t('home.cta_explore_directory', 'Explore Directory')}
+            </a>
+            <a href="#rab-calculator" class="hero-cta-btn hero-cta-btn--ghost" onclick="navigate('rab-calculator');return false;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h8M8 14h4"/></svg>
+              ${t('home.cta_calculate_costs', 'Calculate Build Costs')}
+            </a>
           </div>
         </div>
       </div>
@@ -848,15 +873,103 @@ async function renderHome(el) {
   // Animate cards
   requestAnimationFrame(() => animateCards(el));
 
-  // Hero search handler
+  // Hero search handler — intent-aware
   const heroInput = document.getElementById('hero-search-input');
+  const heroSegments = document.querySelectorAll('.hero-segment');
+  const INTENT_PLACEHOLDERS = {
+    property:  'Search land, villas, agents...',
+    builders:  'Search builders, architects, trades...',
+    materials: 'Search suppliers and building materials...'
+  };
+  const INTENT_ROUTES = {
+    property:  (q) => 'listings' + (q ? '?q=' + encodeURIComponent(q) : ''),
+    builders:  (q) => 'directory?group=builders_trades' + (q ? '&q=' + encodeURIComponent(q) : ''),
+    materials: (q) => 'directory?group=suppliers_materials' + (q ? '&q=' + encodeURIComponent(q) : '')
+  };
+  heroSegments.forEach((seg) => {
+    seg.addEventListener('click', () => {
+      heroSegments.forEach((s) => { s.classList.remove('active'); s.setAttribute('aria-selected', 'false'); });
+      seg.classList.add('active');
+      seg.setAttribute('aria-selected', 'true');
+      const intent = seg.dataset.intent;
+      if (heroInput) {
+        heroInput.dataset.intent = intent;
+        heroInput.placeholder = INTENT_PLACEHOLDERS[intent] || INTENT_PLACEHOLDERS.property;
+      }
+    });
+  });
   if (heroInput) {
     heroInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && heroInput.value.trim()) {
-        navigate('directory?q=' + encodeURIComponent(heroInput.value.trim()));
+      if (e.key === 'Enter') {
+        const intent = heroInput.dataset.intent || 'property';
+        const q = heroInput.value.trim();
+        navigate((INTENT_ROUTES[intent] || INTENT_ROUTES.property)(q));
       }
     });
   }
+  // Expose for the hero search button
+  window.heroSearchSubmit = function() {
+    if (!heroInput) return;
+    const intent = heroInput.dataset.intent || 'property';
+    const q = heroInput.value.trim();
+    navigate((INTENT_ROUTES[intent] || INTENT_ROUTES.property)(q));
+  };
+}
+
+// =====================================================
+// UI HELPERS — verified badge, relative timestamp, skeletons
+// =====================================================
+
+function renderVerifiedBadge(label) {
+  return '<span class="verified-badge" title="Verified by Build in Lombok">'
+    + '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>'
+    + (label || 'Verified')
+    + '</span>';
+}
+
+function renderRelativeTimestamp(input) {
+  if (!input) return '';
+  let d;
+  try { d = (input instanceof Date) ? input : new Date(input); } catch(_) { return ''; }
+  if (!d || isNaN(d.getTime())) return '';
+  const diffSec = Math.floor((Date.now() - d.getTime()) / 1000);
+  let label;
+  if (diffSec < 60)            label = 'just now';
+  else if (diffSec < 3600)     label = Math.floor(diffSec / 60) + 'm ago';
+  else if (diffSec < 86400)    label = Math.floor(diffSec / 3600) + 'h ago';
+  else if (diffSec < 86400*7)  label = Math.floor(diffSec / 86400) + ' day' + (diffSec >= 86400*2 ? 's' : '') + ' ago';
+  else if (diffSec < 86400*30) label = Math.floor(diffSec / (86400*7)) + ' week' + (diffSec >= 86400*14 ? 's' : '') + ' ago';
+  else if (diffSec < 86400*365)label = Math.floor(diffSec / (86400*30)) + ' month' + (diffSec >= 86400*60 ? 's' : '') + ' ago';
+  else                         label = Math.floor(diffSec / (86400*365)) + ' year' + (diffSec >= 86400*730 ? 's' : '') + ' ago';
+  const iso = d.toISOString();
+  return '<span class="ts-relative" title="' + iso + '">'
+    + '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'
+    + 'Updated ' + label
+    + '</span>';
+}
+
+function renderCardSkeletonGrid(count) {
+  const n = count || 6;
+  let html = '<div class="skeleton-grid">';
+  for (let i = 0; i < n; i++) {
+    html += '<div class="skeleton-card">'
+      + '<div class="skeleton-row">'
+      + '  <div class="skeleton skeleton-avatar"></div>'
+      + '  <div style="flex:1;display:flex;flex-direction:column;gap:8px;">'
+      + '    <div class="skeleton skeleton-line skeleton-line--title"></div>'
+      + '    <div class="skeleton skeleton-line skeleton-line--meta"></div>'
+      + '  </div>'
+      + '</div>'
+      + '<div class="skeleton skeleton-line skeleton-line--mid"></div>'
+      + '<div class="skeleton skeleton-line skeleton-line--short"></div>'
+      + '<div class="skeleton-row" style="margin-top:8px;">'
+      + '  <div class="skeleton skeleton-line" style="width:32%;"></div>'
+      + '  <div class="skeleton skeleton-line" style="width:24%;margin-left:auto;"></div>'
+      + '</div>'
+      + '</div>';
+  }
+  html += '</div>';
+  return html;
 }
 
 // =====================================================
@@ -883,7 +996,8 @@ function renderProviderCard(b, index = 0) {
     ? `<span class="card-badge">${renderBadge(b.badge)}</span>`
     : '';
 
-  const trustedBadge = b.is_trusted ? '<span class="card-badge card-badge--trusted">✓ Trusted</span>' : '';
+  const trustedBadge = b.is_trusted ? renderVerifiedBadge('Verified') : '';
+  const updatedTs = (b.updated_at || b.last_updated_at) ? renderRelativeTimestamp(b.updated_at || b.last_updated_at) : '';
 
   var langParts = (b.languages || '').split(/[,+]+/).map(function(s){ return s.trim(); }).filter(Boolean);
   var langShort = langParts.length === 0 ? 'Bahasa' : langParts.join(' · ');
@@ -911,6 +1025,7 @@ function renderProviderCard(b, index = 0) {
         <span class="card-meta-item">${iconMapPin()} ${formatAreaLabel(b.area)}</span>
         <span class="card-meta-sep"></span>
         <span class="card-meta-item">${langShort}</span>
+        ${updatedTs ? '<span class="card-meta-sep"></span><span class="card-meta-item">' + updatedTs + '</span>' : ''}
       </div>
       <div class="card-tags-line">
         ${b.tags.slice(0, 3).map(t => `<span class="card-tag">${t}</span>`).join('<span class="card-tag-dot">·</span>')}
@@ -948,6 +1063,10 @@ async function renderDirectory(el, params = {}) {
     const grid = el.querySelector('#provider-grid');
     const countEl = el.querySelector('#results-count');
     if (!grid) return;
+
+    // Show skeleton placeholders while fetching
+    grid.innerHTML = renderCardSkeletonGrid(6);
+    if (countEl) countEl.innerHTML = '<span class="skeleton skeleton-line" style="display:inline-block;width:140px;height:14px;"></span>';
 
     // Build API params
     const apiParams = {};
@@ -1651,10 +1770,20 @@ async function renderListings(el, params = {}) {
             </div>
           </div>
         </div>
-        <div class="card-grid listings-grid" id="listings-grid">
-          ${listings.length > 0
-            ? listings.map((l, i) => renderListingCard(l, i)).join('')
-            : `<div class="empty-state"><h3 class="empty-state-title">${t('empty.no_listings_title', 'No listings found')}</h3><p class="empty-state-desc">${t('empty.no_listings_desc', 'Try adjusting your filters or check back soon for new properties.')}</p></div>`}
+        <div class="split-view" id="listings-split">
+          <div class="split-view-map" aria-label="${t('listings.map_label', 'Map of listings')}">
+            <div class="split-view-map-placeholder">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
+              <strong style="font-family:var(--font-display);font-size:1.1rem;color:var(--color-text);">${t('listings.map_title', 'Map view')}</strong>
+              <span style="font-size:0.85rem;">${listings.length} ${listings.length === 1 ? t('listings.property_singular', 'property') : t('listings.property_plural', 'properties')} ${t('listings.in_this_search', 'in this search')}</span>
+              <span style="font-size:0.75rem;color:var(--color-text-faint);">${t('listings.map_coming_soon', 'Interactive map coming soon')}</span>
+            </div>
+          </div>
+          <div class="split-view-list card-grid listings-grid" id="listings-grid">
+            ${listings.length > 0
+              ? listings.map((l, i) => renderListingCard(l, i)).join('')
+              : `<div class="empty-state"><h3 class="empty-state-title">${t('empty.no_listings_title', 'No listings found')}</h3><p class="empty-state-desc">${t('empty.no_listings_desc', 'Try adjusting your filters or check back soon for new properties.')}</p></div>`}
+          </div>
         </div>
         ${total > (listRes.meta.per_page || 20) ? (
           '<div class="pagination" style="margin-top:var(--space-8);text-align:center;">' +
@@ -4240,85 +4369,260 @@ async function renderRABCalculator(el) {
     + '</div>'
     + '<div class="section">'
     + '  <div class="container">'
-    + '    <div class="rab-tool-chooser">'
-    + '      <div class="rab-tool-card rab-tool-card--active">'
-    + '        <div class="rab-tool-card-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h8M8 14h4"/></svg></div>'
-    + '        <h3 class="rab-tool-card-title">Quick Estimate Calculator</h3>'
-    + '        <p class="rab-tool-card-desc">Enter floor areas, quality level, and optional extras to get an instant cost estimate in seconds.</p>'
-    + '        <span class="rab-tool-card-badge">Free</span>'
-    + '      </div>'
-    + '      <a href="#rab-projects" class="rab-tool-card" onclick="navigate(\'rab-projects\');return false;">'
-    + '        <div class="rab-tool-card-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3h18v18H3z"/><path d="M3 9h18M9 3v18M15 3v18"/><path d="M3 15h18"/></svg></div>'
-    + '        <h3 class="rab-tool-card-title">Detailed RAB Tool</h3>'
-    + '        <p class="rab-tool-card-desc">Full bill of quantities with Architecture, MEP, and Structure disciplines. Create projects, manage line items, and export to Excel.</p>'
-    + '        <span class="rab-tool-card-badge rab-tool-card-badge--pro">Pro</span>'
-    + '        <span class="rab-tool-card-cta">Open RAB Tool <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>'
-    + '      </a>'
-    + '    </div>'
     + (presets.length === 0
        ? '<div class="card" style="padding:var(--space-8);text-align:center;"><p style="color:var(--color-text-faint)">No calculator presets available yet. Please check back soon.</p></div>'
-       : '<div class="rab-calc-layout">' + buildCalcForm(presets, defaultPreset) + buildPresetSidebar(defaultPreset) + '</div>')
+       : '<div class="rab-calc-layout">' + buildWizardShell(presets, defaultPreset) + buildPresetSidebar(defaultPreset) + '</div>')
     + '  </div>'
     + '</div>';
 
   if (presets.length === 0) return;
 
-  // Wire up events
-  var form = el.querySelector('#rab-calc-form');
-  var presetSel = el.querySelector('#rab-preset-sel');
-  var storeysSel = el.querySelector('#rab-storeys-sel');
+  initRABWizard(el, presets);
+}
 
+// --- RAB Wizard: shell, state, reactive total ---
+
+function buildWizardShell(presets, dp) {
+  var presetOpts = presets.map(function(p) {
+    return '<option value="' + p.id + '"' + (p.is_default == 1 ? ' selected' : '') + '>' + escHtml(p.name) + '</option>';
+  }).join('');
+
+  return ''
+    + '<div class="rab-calc-main">'
+    + '<form id="rab-calc-form" class="wizard" autocomplete="off">'
+    + '  <div class="wizard-stepper" role="tablist">'
+    + '    <button type="button" class="wizard-step-tab is-active" data-step="1" role="tab"><span class="wizard-step-num">1</span><span class="wizard-step-label"><small>Step 1</small>Location &amp; preset</span></button>'
+    + '    <button type="button" class="wizard-step-tab is-disabled" data-step="2" role="tab"><span class="wizard-step-num">2</span><span class="wizard-step-label"><small>Step 2</small>Size &amp; dimensions</span></button>'
+    + '    <button type="button" class="wizard-step-tab is-disabled" data-step="3" role="tab"><span class="wizard-step-num">3</span><span class="wizard-step-label"><small>Step 3</small>Material tier</span></button>'
+    + '  </div>'
+    + '  <div class="wizard-body">'
+    /* STEP 1 */
+    + '    <div class="wizard-pane is-active" data-pane="1">'
+    + '      <h4>Where will you build?</h4>'
+    + '      <p class="wizard-hint">Choose a regional cost preset. This sets the base rates and location factor used in your estimate.</p>'
+    + '      <div class="rab-field">'
+    + '        <label class="rab-label">Regional Rate Preset</label>'
+    + '        <select id="rab-preset-sel" name="preset_id" class="rab-select">' + presetOpts + '</select>'
+    + '      </div>'
+    + '    </div>'
+    /* STEP 2 */
+    + '    <div class="wizard-pane" data-pane="2">'
+    + '      <h4>How big is the build?</h4>'
+    + '      <p class="wizard-hint">Tell us how many storeys and the floor area for each level.</p>'
+    + '      <div class="rab-field">'
+    + '        <label class="rab-label">Number of Storeys</label>'
+    + '        <select id="rab-storeys-sel" name="num_storeys" class="rab-select">'
+    + '          <option value="1">1 Storey</option>'
+    + '          <option value="2">2 Storeys</option>'
+    + '          <option value="3">3 Storeys</option>'
+    + '          <option value="4">4+ Storeys</option>'
+    + '        </select>'
+    + '      </div>'
+    + '      <div class="rab-fields-grid">'
+    + '        <div class="rab-field" id="rab-fa-1"><label class="rab-label">Ground Floor (m²)</label><input type="number" name="floor_area_1" class="rab-input" min="0" step="0.5" placeholder="e.g. 150"></div>'
+    + '        <div class="rab-field" id="rab-fa-2" style="display:none"><label class="rab-label">1st Floor (m²)</label><input type="number" name="floor_area_2" class="rab-input" min="0" step="0.5" placeholder="e.g. 120" value="0"></div>'
+    + '        <div class="rab-field" id="rab-fa-3" style="display:none"><label class="rab-label">2nd Floor (m²)</label><input type="number" name="floor_area_3" class="rab-input" min="0" step="0.5" placeholder="e.g. 100" value="0"></div>'
+    + '        <div class="rab-field" id="rab-fa-4" style="display:none"><label class="rab-label">Other Levels (m²)</label><input type="number" name="floor_area_4" class="rab-input" min="0" step="0.5" placeholder="e.g. 80" value="0"></div>'
+    + '      </div>'
+    + '    </div>'
+    /* STEP 3 */
+    + '    <div class="wizard-pane" data-pane="3">'
+    + '      <h4>Pick a material tier &amp; extras</h4>'
+    + '      <p class="wizard-hint">Quality level drives the cost-per-m². Add optional extras to refine your estimate.</p>'
+    + '      <label class="rab-label" style="margin-bottom:var(--space-2)">Quality Level</label>'
+    + '      <div class="rab-quality-row">'
+    + '        <label class="rab-quality-opt"><input type="radio" name="quality" value="low"><span class="rab-quality-inner"><span class="rab-quality-name">Economy</span><span class="rab-quality-desc">Budget finish</span></span></label>'
+    + '        <label class="rab-quality-opt selected"><input type="radio" name="quality" value="mid" checked><span class="rab-quality-inner"><span class="rab-quality-name">Standard</span><span class="rab-quality-desc">Mid-range</span></span></label>'
+    + '        <label class="rab-quality-opt"><input type="radio" name="quality" value="high"><span class="rab-quality-inner"><span class="rab-quality-name">Premium</span><span class="rab-quality-desc">High-end finish</span></span></label>'
+    + '      </div>'
+    + '      <label class="rab-check-label" style="margin-top:var(--space-5)"><input type="checkbox" name="walkable_rooftop" id="rab-ck-rooftop"><span>Walkable Rooftop / Roof Deck</span></label>'
+    + '      <div id="rab-rooftop-wrap" style="display:none;margin-left:28px;margin-bottom:var(--space-4)">'
+    + '        <div class="rab-field"><label class="rab-label">Rooftop Area (m²)</label><input type="number" name="rooftop_area" class="rab-input" min="0" step="0.5" placeholder="e.g. 80"></div>'
+    + '      </div>'
+    + '      <label class="rab-check-label"><input type="checkbox" name="has_pool" id="rab-ck-pool"><span>Swimming Pool</span></label>'
+    + '      <div id="rab-pool-wrap" style="display:none;margin-left:28px;margin-bottom:var(--space-4)">'
+    + '        <div class="rab-fields-grid">'
+    + '          <div class="rab-field"><label class="rab-label">Pool Area (m²)</label><input type="number" name="pool_area" class="rab-input" min="0" step="0.5" placeholder="e.g. 30"></div>'
+    + '          <div class="rab-field"><label class="rab-label">Pool Type</label><div class="rab-radio-row"><label class="rab-check-label"><input type="radio" name="pool_type" value="standard" checked><span>Standard</span></label><label class="rab-check-label"><input type="radio" name="pool_type" value="infinity"><span>Infinity</span></label></div></div>'
+    + '        </div>'
+    + '      </div>'
+    + '      <div class="rab-field" style="margin-top:var(--space-3)"><label class="rab-label">Deck / Terrace Area (m²)</label><input type="number" name="deck_area" class="rab-input" min="0" step="0.5" placeholder="e.g. 40"></div>'
+    + '    </div>'
+    + '  </div>'
+    + '  <div class="wizard-footer">'
+    + '    <div class="wizard-total">'
+    + '      <span class="wizard-total-label">Live estimate</span>'
+    + '      <span class="wizard-total-value" id="rab-live-total">' + fmtIDR(0) + '</span>'
+    + '    </div>'
+    + '    <div class="wizard-nav">'
+    + '      <button type="button" class="btn btn--ghost btn--sm" id="rab-wiz-back" disabled>Back</button>'
+    + '      <button type="button" class="btn btn--primary" id="rab-wiz-next">Next</button>'
+    + '      <button type="submit" class="btn btn--primary btn--lg" id="rab-calc-submit" style="display:none;">'
+    + '        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h8M8 14h4"/></svg>'
+    + '        Calculate Estimate'
+    + '      </button>'
+    + '    </div>'
+    + '  </div>'
+    + '</form>'
+    + '<div id="rab-result-area" style="display:none;margin-top:var(--space-6);"></div>'
+    + '</div>';
+}
+
+function initRABWizard(el, presets) {
+  var form = el.querySelector('#rab-calc-form');
+  if (!form) return;
+  var TOTAL_STEPS = 3;
+  var currentStep = 1;
+
+  var tabs    = form.querySelectorAll('.wizard-step-tab');
+  var panes   = form.querySelectorAll('.wizard-pane');
+  var backBtn = form.querySelector('#rab-wiz-back');
+  var nextBtn = form.querySelector('#rab-wiz-next');
+  var submit  = form.querySelector('#rab-calc-submit');
+  var totalEl = form.querySelector('#rab-live-total');
+
+  function setStep(n) {
+    currentStep = Math.max(1, Math.min(TOTAL_STEPS, n));
+    tabs.forEach(function(t) {
+      var step = parseInt(t.dataset.step);
+      t.classList.remove('is-active', 'is-disabled', 'is-complete');
+      if (step === currentStep) t.classList.add('is-active');
+      else if (step < currentStep) t.classList.add('is-complete');
+      else t.classList.add('is-disabled');
+    });
+    panes.forEach(function(p) {
+      p.classList.toggle('is-active', parseInt(p.dataset.pane) === currentStep);
+    });
+    backBtn.disabled = (currentStep === 1);
+    if (currentStep === TOTAL_STEPS) {
+      nextBtn.style.display = 'none';
+      submit.style.display = '';
+    } else {
+      nextBtn.style.display = '';
+      submit.style.display = 'none';
+    }
+  }
+
+  tabs.forEach(function(t) {
+    t.addEventListener('click', function() {
+      var step = parseInt(t.dataset.step);
+      // Allow clicking already-completed or current step (not future steps unless via Next)
+      if (step <= currentStep || t.classList.contains('is-complete')) setStep(step);
+    });
+  });
+  nextBtn.addEventListener('click', function() { setStep(currentStep + 1); });
+  backBtn.addEventListener('click', function() { setStep(currentStep - 1); });
+
+  // Preset selector: update sidebar and recompute total
+  var presetSel = form.querySelector('#rab-preset-sel');
   if (presetSel) {
     presetSel.addEventListener('change', function() {
-      var pid = parseInt(this.value);
-      var p = presets.find(function(x) { return x.id == pid; });
+      var p = presets.find(function(x) { return x.id == parseInt(this.value); }, this);
       if (p) updatePresetSidebar(p);
+      recomputeTotal();
     });
   }
 
+  // Storeys: show/hide floor inputs
+  var storeysSel = form.querySelector('#rab-storeys-sel');
   if (storeysSel) {
     storeysSel.addEventListener('change', function() {
       var n = parseInt(this.value);
       for (var i = 2; i <= 4; i++) {
-        var wrap = el.querySelector('#rab-fa-' + i);
+        var wrap = form.querySelector('#rab-fa-' + i);
         if (wrap) wrap.style.display = i <= n ? '' : 'none';
       }
+      recomputeTotal();
     });
   }
 
-  // Toggle optional fields
-  var ckRooftop = el.querySelector('#rab-ck-rooftop');
-  if (ckRooftop) {
-    ckRooftop.addEventListener('change', function() {
-      el.querySelector('#rab-rooftop-wrap').style.display = this.checked ? '' : 'none';
-    });
-  }
-  var ckPool = el.querySelector('#rab-ck-pool');
-  if (ckPool) {
-    ckPool.addEventListener('change', function() {
-      el.querySelector('#rab-pool-wrap').style.display = this.checked ? '' : 'none';
-    });
-  }
+  // Optional extras toggles
+  var ckRooftop = form.querySelector('#rab-ck-rooftop');
+  if (ckRooftop) ckRooftop.addEventListener('change', function() {
+    form.querySelector('#rab-rooftop-wrap').style.display = this.checked ? '' : 'none';
+    recomputeTotal();
+  });
+  var ckPool = form.querySelector('#rab-ck-pool');
+  if (ckPool) ckPool.addEventListener('change', function() {
+    form.querySelector('#rab-pool-wrap').style.display = this.checked ? '' : 'none';
+    recomputeTotal();
+  });
 
-  // Quality radio styling
-  el.querySelectorAll('.rab-quality-opt input[type=radio]').forEach(function(r) {
+  // Quality radio styling + recompute
+  form.querySelectorAll('.rab-quality-opt input[type=radio]').forEach(function(r) {
     r.addEventListener('change', function() {
-      el.querySelectorAll('.rab-quality-opt').forEach(function(o) { o.classList.remove('selected'); });
+      form.querySelectorAll('.rab-quality-opt').forEach(function(o) { o.classList.remove('selected'); });
       if (r.checked) r.closest('.rab-quality-opt').classList.add('selected');
+      recomputeTotal();
     });
     if (r.checked) r.closest('.rab-quality-opt').classList.add('selected');
   });
 
-  // Form submit
-  if (form) {
-    form.addEventListener('submit', function(e) {
-      e.preventDefault();
-      runRABCalculation(el, form, presets);
-    });
+  // Recompute on any number input change
+  form.querySelectorAll('input[type=number], input[type=radio]').forEach(function(inp) {
+    inp.addEventListener('input', recomputeTotal);
+    inp.addEventListener('change', recomputeTotal);
+  });
+
+  // Reactive total — local estimate so we don't hammer the API
+  function recomputeTotal() {
+    var presetId = parseInt(form.querySelector('[name=preset_id]').value);
+    var p = presets.find(function(x) { return x.id == presetId; }) || presets[0];
+    if (!p) return;
+    var quality = (form.querySelector('input[name=quality]:checked') || { value: 'mid' }).value;
+    var rate = quality === 'low'  ? Number(p.base_cost_per_m2_low)
+             : quality === 'high' ? Number(p.base_cost_per_m2_high)
+             :                       Number(p.base_cost_per_m2_mid);
+    var storeys = parseInt(form.querySelector('[name=num_storeys]').value) || 1;
+    var floorArea = 0;
+    for (var i = 1; i <= storeys; i++) {
+      var v = parseFloat((form.querySelector('[name=floor_area_' + i + ']') || {}).value) || 0;
+      floorArea += v;
+    }
+    var building = floorArea * rate;
+    var roof = 0;
+    if (form.querySelector('[name=walkable_rooftop]').checked) {
+      var rA = parseFloat(form.querySelector('[name=rooftop_area]').value) || 0;
+      roof = rA * Number(p.rooftop_cost_per_m2 || 0);
+    }
+    var pool = 0;
+    if (form.querySelector('[name=has_pool]').checked) {
+      var pA = parseFloat(form.querySelector('[name=pool_area]').value) || 0;
+      var poolType = (form.querySelector('input[name=pool_type]:checked') || { value: 'standard' }).value;
+      var poolRate = poolType === 'infinity'
+        ? Number(p.pool_cost_per_m2_infinity || 0)
+        : Number(p.pool_cost_per_m2_standard || 0);
+      pool = pA * poolRate;
+    }
+    var deck = (parseFloat(form.querySelector('[name=deck_area]').value) || 0) * Number(p.deck_cost_per_m2 || 0);
+    var subtotal = (building + roof + pool + deck) * Number(p.location_factor || 1);
+    var contingency = subtotal * (Number(p.contingency_percent || 0) / 100);
+    var total = subtotal + contingency;
+
+    var prev = totalEl.textContent;
+    var next = fmtIDR(total);
+    totalEl.textContent = next;
+    if (prev !== next) {
+      totalEl.classList.remove('is-pulsing');
+      // Force reflow to restart animation
+      void totalEl.offsetWidth;
+      totalEl.classList.add('is-pulsing');
+    }
   }
+
+  // Submit — same as before, calls server for authoritative number
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    runRABCalculation(el, form, presets);
+  });
+
+  // Initial paint
+  setStep(1);
+  recomputeTotal();
 }
 
-function buildCalcForm(presets, dp) {
+/* legacy single-page form removed — see buildWizardShell()
+function buildCalcForm__legacy(presets, dp) {
   var presetOpts = presets.map(function(p) {
     return '<option value="' + p.id + '"' + (p.is_default == 1 ? ' selected' : '') + '>' + escHtml(p.name) + (p.description ? ' — ' + escHtml(p.description.substring(0, 60)) : '') + '</option>';
   }).join('');
@@ -4380,6 +4684,7 @@ function buildCalcForm(presets, dp) {
     + '<div id="rab-result-area" style="display:none"></div>'
     + '</div>';
 }
+*/
 
 function buildPresetSidebar(dp) {
   if (!dp) return '';
@@ -6754,4 +7059,111 @@ function initApp() {
   // Router
   window.addEventListener('hashchange', router);
   router();
+}
+
+// =====================================================
+// MOBILE FILTER DRAWER — slide-up filter UI on phones
+// =====================================================
+
+var MobileFilterDrawer = (function() {
+  var FILTER_PAGES = { directory: true, listings: true, developers: true, agents: true };
+  var filterEl = null;       // The original filter element we'll re-parent
+  var placeholder = null;    // Marker node so we can put it back
+  var drawer, panel, body, btn;
+
+  function $() {
+    drawer = document.getElementById('mobile-filter-drawer');
+    panel  = drawer && drawer.querySelector('.mobile-filter-drawer-panel');
+    body   = document.getElementById('mobile-filter-drawer-body');
+    btn    = document.getElementById('mobile-filter-btn');
+  }
+
+  function updateAvailability(page, view) {
+    $();
+    if (!btn) return;
+    var show = !!FILTER_PAGES[page];
+    btn.hidden = !show;
+    document.body.classList.toggle('has-mobile-filter', show);
+    // Look for known filter containers in the rendered view
+    filterEl = view && (view.querySelector('.dir-filters') || view.querySelector('.filters-bar'));
+  }
+
+  function open() {
+    $();
+    if (!drawer || !filterEl) return;
+    // Replace the filter element with a placeholder, move it into the drawer
+    placeholder = document.createComment('mobile-filter-placeholder');
+    filterEl.parentNode.replaceChild(placeholder, filterEl);
+    body.innerHTML = '';
+    body.appendChild(filterEl);
+    drawer.classList.add('open');
+    drawer.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('drawer-open');
+  }
+
+  function close() {
+    $();
+    if (!drawer || !filterEl || !placeholder) {
+      if (drawer) {
+        drawer.classList.remove('open');
+        drawer.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('drawer-open');
+      }
+      return;
+    }
+    placeholder.parentNode.replaceChild(filterEl, placeholder);
+    placeholder = null;
+    drawer.classList.remove('open');
+    drawer.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('drawer-open');
+  }
+
+  function clearAll() {
+    if (typeof window.clearDirectoryFilters === 'function') window.clearDirectoryFilters();
+    else if (typeof window.applyListingFilters === 'function') window.location.hash = '#listings';
+  }
+
+  // Init once on first call
+  function init() {
+    $();
+    if (btn && !btn._bound) {
+      btn.addEventListener('click', open);
+      btn._bound = true;
+    }
+  }
+
+  return {
+    updateAvailability: function(page, view) { init(); updateAvailability(page, view); },
+    open: open,
+    close: close,
+    clearAll: clearAll
+  };
+})();
+
+window.openMobileFilterDrawer  = function() { MobileFilterDrawer.open(); };
+window.closeMobileFilterDrawer = function() { MobileFilterDrawer.close(); };
+window.clearMobileFilters      = function() { MobileFilterDrawer.clearAll(); MobileFilterDrawer.close(); };
+
+// =====================================================
+// PAGE: List Your Business (placeholder funnel target)
+// =====================================================
+
+async function renderListYourBusiness(el) {
+  el.innerHTML = ''
+    + '<div class="dir-hero">'
+    + '  <div class="container">'
+    + '    <h1 class="dir-hero-title">List Your Business</h1>'
+    + '    <p class="dir-hero-desc">Get in front of buyers, builders, and investors searching for trades, services, and suppliers across Lombok.</p>'
+    + '  </div>'
+    + '</div>'
+    + '<div class="section"><div class="container container--narrow list-your-biz-page">'
+    + '  <p style="color:var(--color-text-muted);margin-bottom:var(--space-6);max-width:54ch;margin-inline:auto;">Tell us about your business and we’ll get you live in the directory. The fastest way is a WhatsApp introduction — we’ll do the rest.</p>'
+    + '  <div style="display:flex;gap:var(--space-3);justify-content:center;flex-wrap:wrap;">'
+    + '    <a href="https://wa.me/628123456789?text=' + encodeURIComponent("Hi, I'd like to list my business on Build in Lombok.") + '" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--lg">'
+    + '      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>'
+    + '      Get listed via WhatsApp'
+    + '    </a>'
+    + '    <a href="#agent-signup" onclick="navigate(\'agent-signup\');return false;" class="btn btn--ghost btn--lg">Sign up as an agent</a>'
+    + '  </div>'
+    + '</div></div>';
 }
