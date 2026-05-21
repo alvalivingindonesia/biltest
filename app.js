@@ -736,23 +736,11 @@ async function renderHome(el) {
           </div>
 
           <div class="hero-search">
-            <svg class="hero-search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="search" class="hero-search-input" placeholder="${t('home.search_placeholder_property', 'Search land, villas, agents...')}" autocomplete="off" id="hero-search-input" data-intent="property">
+            <input type="search" class="hero-search-input hero-search-input--no-left-icon" placeholder="${t('home.search_placeholder_property', 'Search land, villas, agents...')}" autocomplete="off" id="hero-search-input" data-intent="property">
 
-            <button class="hero-search-btn" onclick="heroSearchSubmit()" aria-label="Search">
+            <button class="hero-search-btn" onclick="heroSearchSubmit()" aria-label="${t('home.search_btn_aria', 'Search')}" title="${t('home.search_btn_aria', 'Search')}">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             </button>
-          </div>
-
-          <div class="hero-cta-row">
-            <a href="#directory" class="hero-cta-btn hero-cta-btn--primary" onclick="navigate('directory');return false;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-              ${t('home.cta_explore_directory', 'Explore Directory')}
-            </a>
-            <a href="#rab-calculator" class="hero-cta-btn hero-cta-btn--ghost" onclick="navigate('rab-calculator');return false;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h8M8 14h4"/></svg>
-              ${t('home.cta_calculate_costs', 'Calculate Build Costs')}
-            </a>
           </div>
         </div>
       </div>
@@ -806,6 +794,24 @@ async function renderHome(el) {
             <span class="category-card-cta">${t('home.explore_cta', 'Explore')} ${iconArrowRight()}</span>
           </a>
         </div>
+      </div>
+    </section>
+
+    <!-- RAB CALCULATOR — secondary CTA, below the fold -->
+    <section class="rab-callout-section">
+      <div class="container container--narrow">
+        <a href="#rab-calculator" class="rab-callout-card" onclick="navigate('rab-calculator');return false;">
+          <div class="rab-callout-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h8M8 14h4"/></svg>
+          </div>
+          <div class="rab-callout-text">
+            <h3 class="rab-callout-title">${t('home.cta_calculate_costs', 'Calculate Build Costs')}</h3>
+            <p class="rab-callout-desc">${t('home.calculate_costs_desc', 'Estimate the cost of your build with our free RAB tool.')}</p>
+          </div>
+          <span class="rab-callout-arrow" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"/></svg>
+          </span>
+        </a>
       </div>
     </section>
 
