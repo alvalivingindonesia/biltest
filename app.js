@@ -7198,7 +7198,9 @@ var CommandPalette = (function() {
 
     // Wire events
     overlay.addEventListener('click', function(e) {
-      if (e.target.getAttribute && e.target.getAttribute('data-cmd-action') === 'close') {
+      // Use closest() so clicks land on inner SVG/line elements still resolve to the button/backdrop
+      var actionEl = e.target.closest ? e.target.closest('[data-cmd-action="close"]') : null;
+      if (actionEl) {
         e.preventDefault();
         close();
       }
