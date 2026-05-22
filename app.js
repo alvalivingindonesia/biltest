@@ -729,19 +729,14 @@ async function renderHome(el) {
           <h1 class="hero-title">${t('home.hero_title', 'BUILD IN LOMBOK')}</h1>
           <p class="hero-subtitle">${t('home.hero_subtitle', 'AI-powered tools to help you build & invest in Lombok')}</p>
 
-          <div class="hero-segments" role="tablist" aria-label="${t('home.hero_segments_label', 'What are you looking for?')}">
-            <button class="hero-segment active" data-intent="property" role="tab" aria-selected="true">${t('home.intent_property', 'Property')}</button>
-            <button class="hero-segment" data-intent="builders" role="tab" aria-selected="false">${t('home.intent_builders', 'Builders')}</button>
-            <button class="hero-segment" data-intent="materials" role="tab" aria-selected="false">${t('home.intent_materials', 'Materials')}</button>
-          </div>
-
-          <div class="hero-search">
-            <input type="search" class="hero-search-input hero-search-input--no-left-icon" placeholder="${t('home.search_placeholder_property', 'Search land, villas, agents...')}" autocomplete="off" id="hero-search-input" data-intent="property">
-
-            <button class="hero-search-btn" onclick="heroSearchSubmit()" aria-label="${t('home.search_btn_aria', 'Search')}" title="${t('home.search_btn_aria', 'Search')}">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            </button>
-          </div>
+          <button type="button" class="hero-search hero-search--trigger" data-cmd-trigger aria-label="${t('palette.open_aria', 'Open search')}">
+            <svg class="hero-search-icon-left" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <span class="hero-search-trigger-label">${t('palette.placeholder', 'What are you looking for?')}</span>
+            <kbd class="hero-search-kbd" aria-hidden="true">
+              <span class="kbd-mac">&#x2318;K</span>
+              <span class="kbd-pc">Ctrl K</span>
+            </kbd>
+          </button>
         </div>
       </div>
       <div class="hero-scroll-hint" aria-hidden="true">
@@ -879,47 +874,8 @@ async function renderHome(el) {
   // Animate cards
   requestAnimationFrame(() => animateCards(el));
 
-  // Hero search handler — intent-aware
-  const heroInput = document.getElementById('hero-search-input');
-  const heroSegments = document.querySelectorAll('.hero-segment');
-  const INTENT_PLACEHOLDERS = {
-    property:  'Search land, villas, agents...',
-    builders:  'Search builders, architects, trades...',
-    materials: 'Search suppliers and building materials...'
-  };
-  const INTENT_ROUTES = {
-    property:  (q) => 'listings' + (q ? '?q=' + encodeURIComponent(q) : ''),
-    builders:  (q) => 'directory?group=builders_trades' + (q ? '&q=' + encodeURIComponent(q) : ''),
-    materials: (q) => 'directory?group=suppliers_materials' + (q ? '&q=' + encodeURIComponent(q) : '')
-  };
-  heroSegments.forEach((seg) => {
-    seg.addEventListener('click', () => {
-      heroSegments.forEach((s) => { s.classList.remove('active'); s.setAttribute('aria-selected', 'false'); });
-      seg.classList.add('active');
-      seg.setAttribute('aria-selected', 'true');
-      const intent = seg.dataset.intent;
-      if (heroInput) {
-        heroInput.dataset.intent = intent;
-        heroInput.placeholder = INTENT_PLACEHOLDERS[intent] || INTENT_PLACEHOLDERS.property;
-      }
-    });
-  });
-  if (heroInput) {
-    heroInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        const intent = heroInput.dataset.intent || 'property';
-        const q = heroInput.value.trim();
-        navigate((INTENT_ROUTES[intent] || INTENT_ROUTES.property)(q));
-      }
-    });
-  }
-  // Expose for the hero search button
-  window.heroSearchSubmit = function() {
-    if (!heroInput) return;
-    const intent = heroInput.dataset.intent || 'property';
-    const q = heroInput.value.trim();
-    navigate((INTENT_ROUTES[intent] || INTENT_ROUTES.property)(q));
-  };
+  // The hero search trigger is wired by CommandPalette.bindTriggers()
+  // which runs on init() and after every hashchange.
 }
 
 // =====================================================
@@ -3643,135 +3599,9 @@ function initSectionAnimations(container) {
 }
 
 // =====================================================
-// GLOBAL SEARCH
+// GLOBAL SEARCH — see CommandPalette (ADR-0001) at the bottom of this file.
+// The legacy initSearch() was retired when the command palette shipped.
 // =====================================================
-
-function initSearch() {
-  // Hero search submit — defined first so it's always reachable regardless of nav state
-  window.heroSearchSubmit = function() {
-    const input = document.getElementById('hero-search-input');
-    if (!input) return;
-    const q = input.value.trim();
-    if (q.length >= 1) {
-      navigate('search?q=' + encodeURIComponent(q));
-      input.value = '';
-    }
-  };
-
-  const inputs = document.querySelectorAll('.nav-search-input, #hero-search');
-  const wrapper = document.querySelector('.nav-search-wrapper');
-  if (!wrapper) return;
-
-  let dropdown = wrapper.querySelector('.search-dropdown');
-  if (!dropdown) {
-    dropdown = document.createElement('div');
-    dropdown.className = 'search-dropdown';
-    wrapper.appendChild(dropdown);
-  }
-
-  inputs.forEach(input => {
-    input.addEventListener('input', async () => {
-      const q = input.value.trim().toLowerCase();
-      if (q.length < 2) { dropdown.classList.remove('visible'); return; }
-
-      let provMatches = [], devMatches = [], projMatches = [];
-      try {
-        const results = await DataLayer.search(q);
-        provMatches = results.filter(r => r.type === 'provider').slice(0, 3);
-        devMatches = results.filter(r => r.type === 'developer').slice(0, 2);
-        projMatches = results.filter(r => r.type === 'project').slice(0, 2);
-      } catch(e) { console.error('Search error:', e); }
-
-      const total = provMatches.length + devMatches.length + projMatches.length;
-
-      if (total === 0) {
-        dropdown.innerHTML = `<div class="search-no-results">No results for "<strong>${q}</strong>"</div>`;
-      } else {
-        let html = '';
-        if (provMatches.length) {
-          html += `<div class="search-group-label">Providers</div>`;
-          html += provMatches.map(b => `
-            <div class="search-result-item" data-nav="provider/${b.slug}" tabindex="0">
-              <div>
-                <div class="search-result-item-name">${b.name}</div>
-                <div class="search-result-item-meta">${b.excerpt || ''}</div>
-              </div>
-            </div>
-          `).join('');
-        }
-        if (devMatches.length) {
-          html += `<div class="search-group-label">Developers</div>`;
-          html += devMatches.map(d => `
-            <div class="search-result-item" data-nav="developer/${d.slug}" tabindex="0">
-              <div>
-                <div class="search-result-item-name">${d.name}</div>
-                <div class="search-result-item-meta">${d.excerpt || ''}</div>
-              </div>
-            </div>
-          `).join('');
-        }
-        if (projMatches.length) {
-          html += `<div class="search-group-label">Projects</div>`;
-          html += projMatches.map(p => `
-            <div class="search-result-item" data-nav="project/${p.slug}" tabindex="0">
-              <div>
-                <div class="search-result-item-name">${p.name}</div>
-                <div class="search-result-item-meta">${p.excerpt || ''}</div>
-              </div>
-            </div>
-          `).join('');
-        }
-        dropdown.innerHTML = html;
-      }
-
-      // Fix onclick references
-      dropdown.querySelectorAll('.search-result-item').forEach(item => {
-        item.addEventListener('click', function() {
-          const nav = this.getAttribute('data-nav');
-          if (nav) navigate(nav);
-          inputs.forEach(i => i.value = '');
-          if (dropdown) dropdown.classList.remove('visible');
-        });
-      });
-
-      dropdown.classList.add('visible');
-    });
-
-    input.addEventListener('blur', () => {
-      setTimeout(() => dropdown.classList.remove('visible'), 200);
-    });
-  });
-
-  document.addEventListener('click', e => {
-    if (!wrapper.contains(e.target)) dropdown.classList.remove('visible');
-  });
-
-  // Hero search: Enter key also triggers submit
-  const heroSearch = document.getElementById('hero-search-input');
-  if (heroSearch) {
-    heroSearch.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') window.heroSearchSubmit();
-    });
-  }
-
-  // Mobile search: Enter key navigates to the search results page
-  const mobileSearch = document.getElementById('mobile-search');
-  if (mobileSearch) {
-    mobileSearch.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') {
-        const q = mobileSearch.value.trim();
-        if (q.length >= 1) {
-          const mobileMenu = document.getElementById('mobile-menu');
-          const hamburger = document.getElementById('hamburger-btn');
-          if (mobileMenu) mobileMenu.classList.remove('open');
-          if (hamburger) hamburger.setAttribute('aria-expanded', 'false');
-          navigate('search?q=' + encodeURIComponent(q));
-          mobileSearch.value = '';
-        }
-      }
-    });
-  }
-}
 
 // =====================================================
 // USER AUTH LAYER
@@ -6201,16 +6031,42 @@ async function renderSearch(el, params = {}) {
   const initialQuery = params.q ? decodeURIComponent(params.q) : '';
   let debounceTimer = null;
   let allResults = [];           // raw API results, updated on each search
-  let activeGroup    = '';       // selected group_key filter
-  let activeCategory = '';       // selected category_key filter
+  let activeType     = params.type || '';   // 'provider' | 'developer' | 'project' | 'listing' | 'agent' | 'guide' | ''
   let activeArea     = '';       // selected area_key / region:key filter
 
+  // Areas only matter for types that have area data. Hide the area
+  // dropdown when the active chip is Guides (no area), Projects, or All.
+  function typeSupportsArea(type) {
+    return type === 'listing' || type === 'provider' || type === 'agent';
+  }
+
+  function renderGuideCard(item, index) {
+    var nav = 'guide/' + item.slug;
+    var meta = [];
+    if (item.category)  meta.push(escHtml(item.category));
+    if (item.read_time) meta.push(item.read_time + ' min read');
+    return '<article class="card card-animate search-card-guide" style="animation-delay:' + ((index || 0) * 50) + 'ms">'
+      + '<div class="card-header-info" style="margin-bottom:var(--space-2);">'
+      + '<span class="card-category-label">' + escHtml(t('palette.type.guide', 'Guide')) + '</span>'
+      + '</div>'
+      + '<h3 class="card-name"><a href="#' + nav + '" onclick="navigate(\'' + nav + '\');return false;">' + escHtml(item.name) + '</a></h3>'
+      + (item.excerpt ? '<p class="card-desc">' + escHtml(item.excerpt) + '</p>' : '')
+      + (meta.length ? '<div class="card-meta-line"><span class="card-meta-item">' + meta.join(' · ') + '</span></div>' : '')
+      + '<div class="card-footer"><button class="card-view-btn" onclick="navigate(\'' + nav + '\')">'
+      + escHtml(t('search.read_guide', 'Read guide')) + ' ' + iconArrowRight()
+      + '</button></div>'
+      + '</article>';
+  }
+
   function renderSearchCard(item, index) {
+    if (item.type === 'guide') return renderGuideCard(item, index);
+
     var typeMap = {
       provider:  { label: 'Provider',  nav: 'provider/'  + item.slug },
       developer: { label: 'Developer', nav: 'developer/' + item.slug },
       project:   { label: 'Project',   nav: 'project/'   + item.slug },
       listing:   { label: 'Property',  nav: 'listing/'   + item.slug },
+      agent:     { label: 'Agent',     nav: 'agent/'     + item.slug },
     };
     var cfg = typeMap[item.type] || { label: item.type, nav: item.type + '/' + item.slug };
 
@@ -6291,21 +6147,27 @@ async function renderSearch(el, params = {}) {
       + '</article>';
   }
 
-  // ── Build category <option> tags for the given group ──────────────────
-  function buildSearchCategoryOptions(groupKey) {
-    var cats = groupKey
-      ? FilterData.categories.filter(function(c) { return c.group_key === groupKey; })
-      : FilterData.categories;
-    return cats.map(function(c) {
-      return '<option value="' + c.key + '"' + (activeCategory === c.key ? ' selected' : '') + '>' + c.label + '</option>';
-    }).join('');
-  }
+  // Section configuration matches the command palette (same order).
+  var SEARCH_TYPES = [
+    { key: '',          label: 'All' },
+    { key: 'listing',   label: 'Properties' },
+    { key: 'provider',  label: 'Builders' },
+    { key: 'agent',     label: 'Agents' },
+    { key: 'developer', label: 'Developers' },
+    { key: 'project',   label: 'Projects' },
+    { key: 'guide',     label: 'Guides' },
+  ];
 
-  // ── Refresh the Specialty dropdown when Type changes ──────────────────
-  function refreshCategoryDropdown() {
-    var sel = el.querySelector('#sf-category');
-    if (!sel) return;
-    sel.innerHTML = '<option value="">All Specialties</option>' + buildSearchCategoryOptions(activeGroup);
+  function sectionLabelFor(typeKey) {
+    var labels = {
+      listing:   'Properties',
+      provider:  'Builders',
+      agent:     'Agents',
+      developer: 'Developers',
+      project:   'Projects',
+      guide:     'Guides',
+    };
+    return t('palette.section.' + typeKey, labels[typeKey] || typeKey);
   }
 
   // ── Client-side filter + render ───────────────────────────────────────
@@ -6327,30 +6189,32 @@ async function renderSearch(el, params = {}) {
       return itemArea === activeArea;
     }
 
-    // Helper: does a provider match the active group/category filters?
-    function providerMatchesFilter(item) {
-      if (!activeGroup && !activeCategory) return true;
-      var cats = item.categories || [];
-      if (activeCategory) {
-        return cats.some(function(c) { return (c.key || c) === activeCategory; });
-      }
-      // group only — look up group_key for each category key in FilterData
-      var catMap = {};
-      FilterData.categories.forEach(function(c) { catMap[c.key] = c.group_key; });
-      return cats.some(function(c) { return catMap[c.key || c] === activeGroup; });
-    }
-
     var filtered = allResults.filter(function(r) {
-      if (!areaMatches(r)) return false;
-      if (r.type === 'provider') return providerMatchesFilter(r);
-      return true; // developers/projects/listings pass group/category filter
+      if (activeType && r.type !== activeType) return false;
+      if (!typeSupportsArea(r.type)) return true;  // guides/projects/developers ignore area
+      return areaMatches(r);
     });
 
-    var providers  = filtered.filter(function(r) { return r.type === 'provider'; });
-    var developers = filtered.filter(function(r) { return r.type === 'developer'; });
-    var projects   = filtered.filter(function(r) { return r.type === 'project'; });
-    var listings   = filtered.filter(function(r) { return r.type === 'listing'; });
+    var bucketsByType = { listing: [], provider: [], agent: [], developer: [], project: [], guide: [] };
+    filtered.forEach(function(r) {
+      if (bucketsByType[r.type]) bucketsByType[r.type].push(r);
+    });
     var total = filtered.length;
+
+    // Update chip counts
+    var chipsEl = el.querySelector('#search-type-chips');
+    if (chipsEl) {
+      SEARCH_TYPES.forEach(function(typ) {
+        var chip = chipsEl.querySelector('[data-chip-type="' + typ.key + '"]');
+        if (!chip) return;
+        var n = (typ.key === '')
+          ? allResults.length
+          : (allResults.filter(function(r) { return r.type === typ.key; }).length);
+        var countSpan = chip.querySelector('.search-chip-count');
+        if (countSpan) countSpan.textContent = n;
+        chip.classList.toggle('is-active', activeType === typ.key);
+      });
+    }
 
     if (countEl) {
       countEl.innerHTML = total > 0
@@ -6358,20 +6222,26 @@ async function renderSearch(el, params = {}) {
         : 'No results for \u201c' + escHtml(currentQuery) + '\u201d';
     }
 
+    // Area dropdown visibility: only for area-aware types
+    var areaWrap = el.querySelector('#sf-area-wrap');
+    if (areaWrap) areaWrap.style.display = (activeType && typeSupportsArea(activeType)) ? '' : 'none';
+
     if (total === 0) {
       resultsEl.innerHTML = '<div class="empty-state">'
         + '<div class="empty-state-icon">' + iconSearch() + '</div>'
-        + '<h3 class="empty-state-title">No results found</h3>'
-        + '<p class="empty-state-desc">Try different keywords or adjust the filters.</p>'
-        + '<a href="#directory" class="btn btn--primary btn--sm" onclick="navigate(\'directory\');return false;">Browse Directory</a>'
+        + '<h3 class="empty-state-title">' + escHtml(t('search.no_results_title', 'No results found')) + '</h3>'
+        + '<p class="empty-state-desc">' + escHtml(t('search.no_results_desc', 'Try different keywords or switch type.')) + '</p>'
+        + '<a href="#directory" class="btn btn--primary btn--sm" onclick="navigate(\'directory\');return false;">' + escHtml(t('search.browse_directory', 'Browse Directory')) + '</a>'
         + '</div>';
       return;
     }
 
-    function renderGroup(items, label) {
+    function renderGroup(typeKey) {
+      var items = bucketsByType[typeKey] || [];
       if (!items.length) return '';
+      var label = sectionLabelFor(typeKey);
       return '<div class="search-group">'
-        + '<h2 class="search-group-title">' + label + ' <span class="search-group-count">' + items.length + '</span></h2>'
+        + '<h2 class="search-group-title">' + escHtml(label) + ' <span class="search-group-count">' + items.length + '</span></h2>'
         + '<div class="card-grid">'
         + items.map(renderSearchCard).join('')
         + '</div>'
@@ -6379,10 +6249,12 @@ async function renderSearch(el, params = {}) {
     }
 
     resultsEl.innerHTML = ''
-      + renderGroup(providers,  'Providers &amp; Suppliers')
-      + renderGroup(developers, 'Developers')
-      + renderGroup(projects,   'Projects')
-      + renderGroup(listings,   'Property Listings');
+      + renderGroup('listing')
+      + renderGroup('provider')
+      + renderGroup('agent')
+      + renderGroup('developer')
+      + renderGroup('project')
+      + renderGroup('guide');
   }
 
   // ── Fetch from API, store raw results, then apply filters ─────────────
@@ -6393,70 +6265,65 @@ async function renderSearch(el, params = {}) {
 
     if (!q || q.length < 2) {
       allResults = [];
-      resultsEl.innerHTML = '<div class="search-hint"><p>Type at least 2 characters to search providers, developers, projects and listings.</p></div>';
+      resultsEl.innerHTML = '<div class="search-hint"><p>'
+        + escHtml(t('search.type_hint', 'Type at least 2 characters to search across properties, builders, agents, developers, projects, and guides.'))
+        + '</p></div>';
       if (countEl) countEl.innerHTML = '';
       return;
     }
 
-    resultsEl.innerHTML = '<div class="gq-loading"><div class="page-loading-spinner" style="width:22px;height:22px;border-width:3px;margin:0;"></div><span>Searching\u2026</span></div>';
+    resultsEl.innerHTML = '<div class="gq-loading"><div class="page-loading-spinner" style="width:22px;height:22px;border-width:3px;margin:0;"></div><span>'
+      + escHtml(t('search.searching', 'Searching')) + '\u2026</span></div>';
     if (countEl) countEl.innerHTML = '';
 
     try {
-      allResults = await DataLayer.search(q);
+      // Full results (no palette cap) for the /search page
+      var res = await fetch('/api/index.php?action=search&q=' + encodeURIComponent(q));
+      var data = await res.json();
+      allResults = (data && data.data) || [];
       applyAndRender(q);
     } catch(e) {
       console.error('Search error:', e);
-      resultsEl.innerHTML = '<div class="empty-state"><p>Search failed. Please try again.</p></div>';
+      resultsEl.innerHTML = '<div class="empty-state"><p>' + escHtml(t('search.error', 'Search failed. Please try again.')) + '</p></div>';
     }
   }
 
-  // ── Build group options from FilterData ───────────────────────────────
-  var groupOptions = FilterData.groups.map(function(g) {
-    return '<option value="' + g.key + '">' + g.label + '</option>';
+  // ── Build type-chip strip ─────────────────────────────────────────────
+  var chipHtml = SEARCH_TYPES.map(function(typ) {
+    var lbl = (typ.key === '') ? t('search.chip_all', 'All') : sectionLabelFor(typ.key);
+    return '<button type="button" class="search-chip' + (activeType === typ.key ? ' is-active' : '') + '" data-chip-type="' + escHtml(typ.key) + '">'
+      + '<span class="search-chip-label">' + escHtml(lbl) + '</span>'
+      + '<span class="search-chip-count">0</span>'
+      + '</button>';
   }).join('');
 
   el.innerHTML = `
-    <div class="dir-hero">
-      <div class="container">
-        <h1 class="dir-hero-title">Search</h1>
-        <p class="dir-hero-desc">Search across providers, developers, projects, and property listings.</p>
-      </div>
-    </div>
-    <div class="section">
+    <div class="section section--search-page">
       <div class="container">
         <div class="search-page-bar">
           <div class="search-page-input-wrap">
             <svg class="search-page-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input type="search" id="search-page-input" class="search-page-input"
-                   placeholder="Search providers, projects, listings\u2026"
+                   placeholder="${escHtml(t('palette.placeholder', 'What are you looking for?'))}"
                    value="${escHtml(initialQuery)}" autocomplete="off" spellcheck="false">
           </div>
         </div>
 
-        <div class="dir-primary-filters search-primary-filters" style="margin-top:var(--space-6);">
-          <div class="dir-filter-pill">
+        <div class="search-chips-row" id="search-type-chips" role="tablist" aria-label="${escHtml(t('search.filter_by_type', 'Filter by type'))}" style="margin-top:var(--space-5);">
+          ${chipHtml}
+        </div>
+
+        <div class="search-secondary-filters" style="margin-top:var(--space-4);">
+          <div class="dir-filter-pill" id="sf-area-wrap" style="display:none;">
             <label class="dir-filter-pill-label" for="sf-area">${t('filter.where', 'Where in Lombok?')}</label>
             <select id="sf-area" class="dir-filter-pill-select">
-              <option value="">All Areas</option>
+              <option value="">${escHtml(t('filter.all_areas', 'All Areas'))}</option>
               ${buildAreaOptions('')}
-            </select>
-          </div>
-          <div class="dir-filter-pill">
-            <label class="dir-filter-pill-label" for="sf-group">What type?</label>
-            <select id="sf-group" class="dir-filter-pill-select">
-              <option value="">All Types</option>
-              ${groupOptions}
-            </select>
-          </div>
-          <div class="dir-filter-pill">
-            <label class="dir-filter-pill-label" for="sf-category">${t('filter.specialty', 'What specialty?')}</label>
-            <select id="sf-category" class="dir-filter-pill-select">
-              <option value="">All Specialties</option>
             </select>
           </div>
         </div>
 
-        <p class="results-count" id="search-count" style="margin-top:var(--space-6);margin-bottom:var(--space-6);min-height:1.4em;"></p>
+        <p class="results-count" id="search-count" style="margin-top:var(--space-5);margin-bottom:var(--space-5);min-height:1.4em;"></p>
         <div id="search-results"></div>
       </div>
     </div>
@@ -6473,33 +6340,23 @@ async function renderSearch(el, params = {}) {
     setTimeout(function() { if (input) input.focus(); }, 80);
   }
 
+  // ── Wire up type chips ────────────────────────────────────────────────
+  el.querySelectorAll('.search-chip').forEach(function(chip) {
+    chip.addEventListener('click', function() {
+      activeType = chip.getAttribute('data-chip-type') || '';
+      activeArea = '';  // reset area when type changes
+      var areaSelEl = el.querySelector('#sf-area');
+      if (areaSelEl) areaSelEl.value = '';
+      var q = (input ? input.value.trim() : initialQuery);
+      applyAndRender(q);
+    });
+  });
+
   // ── Wire up area dropdown ─────────────────────────────────────────────
   var areaSel = el.querySelector('#sf-area');
   if (areaSel) {
     areaSel.addEventListener('change', function() {
       activeArea = this.value;
-      var q = (input ? input.value.trim() : initialQuery);
-      if (allResults.length) applyAndRender(q);
-    });
-  }
-
-  // ── Wire up group dropdown ────────────────────────────────────────────
-  var groupSel = el.querySelector('#sf-group');
-  if (groupSel) {
-    groupSel.addEventListener('change', function() {
-      activeGroup    = this.value;
-      activeCategory = '';           // reset specialty when type changes
-      refreshCategoryDropdown();
-      var q = (input ? input.value.trim() : initialQuery);
-      if (allResults.length) applyAndRender(q);
-    });
-  }
-
-  // ── Wire up category dropdown ─────────────────────────────────────────
-  var catSel = el.querySelector('#sf-category');
-  if (catSel) {
-    catSel.addEventListener('change', function() {
-      activeCategory = this.value;
       var q = (input ? input.value.trim() : initialQuery);
       if (allResults.length) applyAndRender(q);
     });
@@ -7056,8 +6913,8 @@ function initApp() {
     });
   }
 
-  // Search
-  initSearch();
+  // Command palette (global search)
+  CommandPalette.init();
 
   // Check user session
   UserAuth.checkSession();
@@ -7173,3 +7030,593 @@ async function renderListYourBusiness(el) {
     + '  </div>'
     + '</div></div>';
 }
+
+// =====================================================
+// COMMAND PALETTE — global search overlay (ADR-0001)
+//
+// Single overlay component mounted in document.body. Summoned from:
+//   - any element with data-cmd-trigger (hero, nav pill, mobile menu)
+//   - ⌘K / Ctrl+K from anywhere
+//   - "/" key when no editable element has focus
+//
+// Renders empty state (Recent + Browse), debounced live search results
+// (sectioned top-3 desktop / top-2 mobile, with "View all N →" per
+// section that deep-links to /search), or "No results" state.
+//
+// Backend: /api/index.php?action=search&palette=1&q=...
+// Cache: in-memory LRU, 30 entries, per-session.
+// =====================================================
+
+var CommandPalette = (function() {
+
+  // Section configuration — top-down order matches Q6 spec
+  var SECTIONS = [
+    { type: 'listing',   label: 'Properties',   labelSing: 'Property',  route: function(it){ return 'listing/'  + it.slug; }, viewAll: 'listing'   },
+    { type: 'provider',  label: 'Builders',     labelSing: 'Builder',   route: function(it){ return 'provider/' + it.slug; }, viewAll: 'provider'  },
+    { type: 'agent',     label: 'Agents',       labelSing: 'Agent',     route: function(it){ return 'agent/'    + it.slug; }, viewAll: 'agent'     },
+    { type: 'developer', label: 'Developers',   labelSing: 'Developer', route: function(it){ return 'developer/'+ it.slug; }, viewAll: 'developer' },
+    { type: 'project',   label: 'Projects',     labelSing: 'Project',   route: function(it){ return 'project/'  + it.slug; }, viewAll: 'project'   },
+    { type: 'guide',     label: 'Guides',       labelSing: 'Guide',     route: function(it){ return 'guide/'    + it.slug; }, viewAll: 'guide'     },
+  ];
+
+  // Browse cards (empty-state fallback) — same 5 as home category section
+  var BROWSE_CARDS = [
+    { route: 'listings',                            labelKey: 'home.find_property',      label: 'Find Property',                icon: 'home'     },
+    { route: 'developers',                          labelKey: 'home.find_developers',    label: 'Find Developers & Investments',icon: 'building' },
+    { route: 'directory?group=builders_trades',     labelKey: 'home.find_builders',      label: 'Find Builders & Trades',       icon: 'tools'    },
+    { route: 'directory?group=professional_services',labelKey: 'home.find_professionals',label: 'Find Professional Services',   icon: 'layers'   },
+    { route: 'directory?group=suppliers_materials', labelKey: 'home.find_materials',     label: 'Find Materials & Suppliers',   icon: 'box'      },
+  ];
+
+  var RECENT_KEY  = 'bil_recent_searches';
+  var RECENT_MAX  = 5;
+  var DEBOUNCE_MS = 220;
+  var MIN_CHARS   = 2;
+  var CACHE_MAX   = 30;
+
+  // State
+  var overlay, panel, input, body, hintBar;
+  var isOpen = false;
+  var debounceTimer = null;
+  var abortCtl = null;
+  var queryCache = new Map();
+  var selectableEls = [];
+  var selectionIndex = -1;
+  var currentQuery = '';
+  var isMac = false;
+
+  // ── Recent searches (localStorage) ───────────────────────────────
+
+  function getRecent() {
+    try {
+      var raw = localStorage.getItem(RECENT_KEY);
+      if (!raw) return [];
+      var arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.slice(0, RECENT_MAX) : [];
+    } catch(e) { return []; }
+  }
+  function pushRecent(q) {
+    if (!q || q.length < MIN_CHARS) return;
+    try {
+      var arr = getRecent().filter(function(item) { return item !== q; });
+      arr.unshift(q);
+      arr = arr.slice(0, RECENT_MAX);
+      localStorage.setItem(RECENT_KEY, JSON.stringify(arr));
+    } catch(e) {}
+  }
+  function removeRecent(q) {
+    try {
+      var arr = getRecent().filter(function(item) { return item !== q; });
+      localStorage.setItem(RECENT_KEY, JSON.stringify(arr));
+    } catch(e) {}
+  }
+  function clearRecent() {
+    try { localStorage.removeItem(RECENT_KEY); } catch(e) {}
+  }
+
+  // ── LRU query cache ───────────────────────────────────────────────
+
+  function cacheGet(key) {
+    if (!queryCache.has(key)) return null;
+    var val = queryCache.get(key);
+    queryCache.delete(key);
+    queryCache.set(key, val);  // re-insert as newest
+    return val;
+  }
+  function cacheSet(key, val) {
+    if (queryCache.has(key)) queryCache.delete(key);
+    queryCache.set(key, val);
+    if (queryCache.size > CACHE_MAX) {
+      var oldest = queryCache.keys().next().value;
+      queryCache.delete(oldest);
+    }
+  }
+
+  // ── Highlighting matched substrings ───────────────────────────────
+
+  function highlight(text, query) {
+    var safe = escHtml(text || '');
+    if (!query) return safe;
+    var tokens = query.trim().split(/\s+/).filter(function(t) { return t.length >= 2; });
+    if (!tokens.length) return safe;
+    var pattern = tokens.map(function(t) {
+      return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }).join('|');
+    try {
+      return safe.replace(new RegExp('(' + pattern + ')', 'gi'), '<mark>$1</mark>');
+    } catch(e) {
+      return safe;
+    }
+  }
+
+  // ── Icons ─────────────────────────────────────────────────────────
+
+  function browseIcon(name) {
+    switch (name) {
+      case 'home':     return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>';
+      case 'building': return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 20h20"/><path d="M5 20V8l7-5 7 5v12"/><path d="M9 20v-4h6v4"/></svg>';
+      case 'tools':    return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 18.5A2.5 2.5 0 0 1 4.5 16H20"/><path d="M2 7h16a2 2 0 0 1 2 2v9.5A2.5 2.5 0 0 1 17.5 21H4.5A2.5 2.5 0 0 1 2 18.5z"/></svg>';
+      case 'layers':   return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>';
+      case 'box':      return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>';
+    }
+    return '';
+  }
+
+  function clockIcon() {
+    return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+  }
+
+  // ── DOM mount ─────────────────────────────────────────────────────
+
+  function mountOverlay() {
+    if (overlay) return;
+    overlay = document.createElement('div');
+    overlay.className = 'cmd-palette';
+    overlay.setAttribute('aria-hidden', 'true');
+    overlay.innerHTML = ''
+      + '<div class="cmd-palette-backdrop" data-cmd-action="close"></div>'
+      + '<div class="cmd-palette-panel" role="dialog" aria-modal="true" aria-label="' + escHtml(t('palette.aria_label', 'Search Build in Lombok')) + '">'
+      + '  <div class="cmd-palette-input-row">'
+      + '    <svg class="cmd-palette-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
+      + '    <input type="search" class="cmd-palette-input" id="cmd-palette-input" placeholder="' + escHtml(t('palette.placeholder', 'What are you looking for?')) + '" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" aria-label="' + escHtml(t('palette.input_aria', 'Search')) + '">'
+      + '    <button class="cmd-palette-close" type="button" data-cmd-action="close" aria-label="' + escHtml(t('palette.close_aria', 'Close search')) + '">'
+      + '      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+      + '    </button>'
+      + '  </div>'
+      + '  <div class="cmd-palette-body" id="cmd-palette-body" role="listbox" aria-label="' + escHtml(t('palette.results_aria', 'Search results')) + '"></div>'
+      + '  <div class="cmd-palette-hint" aria-hidden="true">'
+      + '    <span class="cmd-hint-item"><kbd class="cmd-kbd">↑</kbd><kbd class="cmd-kbd">↓</kbd> ' + escHtml(t('palette.hint.navigate', 'navigate')) + '</span>'
+      + '    <span class="cmd-hint-item"><kbd class="cmd-kbd">↵</kbd> ' + escHtml(t('palette.hint.select', 'select')) + '</span>'
+      + '    <span class="cmd-hint-item"><kbd class="cmd-kbd">esc</kbd> ' + escHtml(t('palette.hint.close', 'close')) + '</span>'
+      + '  </div>'
+      + '</div>';
+    document.body.appendChild(overlay);
+    panel   = overlay.querySelector('.cmd-palette-panel');
+    input   = overlay.querySelector('#cmd-palette-input');
+    body    = overlay.querySelector('#cmd-palette-body');
+    hintBar = overlay.querySelector('.cmd-palette-hint');
+
+    // Wire events
+    overlay.addEventListener('click', function(e) {
+      if (e.target.getAttribute && e.target.getAttribute('data-cmd-action') === 'close') {
+        e.preventDefault();
+        close();
+      }
+    });
+    input.addEventListener('input', onInput);
+    input.addEventListener('keydown', onKeydown);
+    body.addEventListener('click', onBodyClick);
+    body.addEventListener('mouseover', function(e) {
+      var row = e.target.closest('.cmd-row');
+      if (!row) return;
+      var idx = selectableEls.indexOf(row);
+      if (idx >= 0 && idx !== selectionIndex) setSelection(idx);
+    });
+  }
+
+  // ── Empty state ───────────────────────────────────────────────────
+
+  function renderEmptyState() {
+    var recent = getRecent();
+    var html = '';
+
+    if (recent.length) {
+      html += '<div class="cmd-section cmd-section--recent">';
+      html += '  <div class="cmd-section-head">';
+      html += '    <span class="cmd-section-title">' + escHtml(t('palette.section.recent', 'Recent')) + '</span>';
+      html += '    <button class="cmd-section-clear" type="button" data-cmd-action="clear-recent">' + escHtml(t('palette.clear_all', 'Clear all')) + '</button>';
+      html += '  </div>';
+      recent.forEach(function(q) {
+        html += '<div class="cmd-row cmd-row--recent" data-cmd-action="repeat-search" data-q="' + escHtml(q) + '" role="option" tabindex="-1">';
+        html += '  <span class="cmd-row-icon cmd-row-icon--recent" aria-hidden="true">' + clockIcon() + '</span>';
+        html += '  <span class="cmd-row-main">' + escHtml(q) + '</span>';
+        html += '  <button class="cmd-row-remove" type="button" data-cmd-action="remove-recent" data-q="' + escHtml(q) + '" aria-label="' + escHtml(t('palette.remove_aria', 'Remove')) + '">';
+        html += '    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+        html += '  </button>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+
+    html += '<div class="cmd-section cmd-section--browse">';
+    html += '  <div class="cmd-section-head"><span class="cmd-section-title">' + escHtml(t('palette.section.browse', 'Browse')) + '</span></div>';
+    BROWSE_CARDS.forEach(function(card) {
+      var label = t(card.labelKey, card.label);
+      html += '<a class="cmd-row cmd-row--browse" data-nav="' + escHtml(card.route) + '" role="option" tabindex="-1">';
+      html += '  <span class="cmd-row-icon cmd-row-icon--browse" aria-hidden="true">' + browseIcon(card.icon) + '</span>';
+      html += '  <span class="cmd-row-main">' + escHtml(label) + '</span>';
+      html += '  <span class="cmd-row-chev" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></span>';
+      html += '</a>';
+    });
+    html += '</div>';
+
+    body.innerHTML = html;
+    refreshSelectable();
+  }
+
+  // ── Loading state ─────────────────────────────────────────────────
+
+  function renderLoading(q) {
+    body.innerHTML = ''
+      + '<div class="cmd-loading">'
+      + '  <div class="cmd-spinner" aria-hidden="true"></div>'
+      + '  <span>' + escHtml(t('palette.searching', 'Searching')) + ' &ldquo;' + escHtml(q) + '&rdquo;…</span>'
+      + '</div>';
+    refreshSelectable();
+  }
+
+  // ── Results ───────────────────────────────────────────────────────
+
+  function renderResults(q, results) {
+    var topN = (window.innerWidth < 768) ? 2 : 3;
+    var buckets = {};
+    SECTIONS.forEach(function(s) { buckets[s.type] = []; });
+    results.forEach(function(r) {
+      if (buckets[r.type]) buckets[r.type].push(r);
+    });
+
+    var total = 0;
+    SECTIONS.forEach(function(s) { total += buckets[s.type].length; });
+
+    if (total === 0) {
+      body.innerHTML = ''
+        + '<div class="cmd-empty">'
+        + '  <div class="cmd-empty-icon" aria-hidden="true">'
+        + '    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
+        + '  </div>'
+        + '  <p class="cmd-empty-title">' + escHtml(t('palette.no_results_title', 'No matches for')) + ' &ldquo;' + escHtml(q) + '&rdquo;</p>'
+        + '  <p class="cmd-empty-desc">' + escHtml(t('palette.no_results_desc', 'Try different keywords, or browse a category instead.')) + '</p>'
+        + '</div>';
+      refreshSelectable();
+      return;
+    }
+
+    var html = '';
+    SECTIONS.forEach(function(sec) {
+      var items = buckets[sec.type];
+      if (!items.length) return;
+      var shown = items.slice(0, topN);
+      var sectionLabel = t('palette.section.' + sec.type, sec.label);
+
+      html += '<div class="cmd-section cmd-section--results">';
+      html += '  <div class="cmd-section-head">';
+      html += '    <span class="cmd-section-title">' + escHtml(sectionLabel) + '</span>';
+      html += '    <span class="cmd-section-count">' + items.length + '</span>';
+      html += '  </div>';
+
+      shown.forEach(function(it) {
+        var navHash = sec.route(it);
+        var sub = buildSubtitle(it, sec.type, q);
+        html += '<a class="cmd-row cmd-row--result" data-nav="' + escHtml(navHash) + '" data-q="' + escHtml(q) + '" role="option" tabindex="-1">';
+        html += '  <span class="cmd-row-thumb" aria-hidden="true">' + buildThumb(it) + '</span>';
+        html += '  <span class="cmd-row-body">';
+        html += '    <span class="cmd-row-main">' + highlight(it.name || '', q) + '</span>';
+        if (sub) html += '    <span class="cmd-row-meta">' + sub + '</span>';
+        html += '  </span>';
+        html += '  <span class="cmd-row-type-badge">' + escHtml(t('palette.type.' + sec.type, sec.labelSing)) + '</span>';
+        html += '</a>';
+      });
+
+      if (items.length > topN) {
+        html += '<a class="cmd-row cmd-row--viewall" data-nav="search?q=' + encodeURIComponent(q) + '&type=' + escHtml(sec.viewAll) + '" data-q="' + escHtml(q) + '" role="option" tabindex="-1">';
+        html += '  <span class="cmd-row-viewall-label">' + escHtml(t('palette.view_all', 'View all') + ' ' + items.length + ' ' + sectionLabel.toLowerCase()) + ' →</span>';
+        html += '</a>';
+      }
+
+      html += '</div>';
+    });
+
+    body.innerHTML = html;
+    refreshSelectable();
+  }
+
+  function buildSubtitle(it, type, q) {
+    if (type === 'guide') {
+      var parts = [];
+      if (it.category)  parts.push(escHtml(it.category));
+      if (it.read_time) parts.push(it.read_time + ' ' + escHtml(t('palette.read_time_min', 'min read')));
+      return parts.join(' · ');
+    }
+    var parts = [];
+    if (it.area_label)                       parts.push(escHtml(it.area_label));
+    if (type === 'agent' && it.agency_name)  parts.push(escHtml(it.agency_name));
+    if (it.excerpt) {
+      var trimmed = String(it.excerpt).substring(0, 80);
+      if (it.excerpt.length > 80) trimmed += '…';
+      parts.push(highlight(trimmed, q));
+    }
+    return parts.join(' · ');
+  }
+
+  function buildThumb(it) {
+    var img = it.profile_photo_url || it.logo_url || '';
+    if (img) return '<img src="' + escHtml(img) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">';
+    var letter = (it.name || '?').charAt(0).toUpperCase();
+    return '<span class="cmd-row-thumb-letter">' + escHtml(letter) + '</span>';
+  }
+
+  // ── Selection / keyboard nav ──────────────────────────────────────
+
+  function refreshSelectable() {
+    selectableEls = Array.prototype.slice.call(body.querySelectorAll('.cmd-row'));
+    selectionIndex = -1;
+    selectableEls.forEach(function(el) { el.classList.remove('cmd-row--selected'); });
+    if (selectableEls.length) setSelection(0);  // pre-select first row
+  }
+
+  function moveSelection(delta) {
+    if (!selectableEls.length) return;
+    var next = selectionIndex + delta;
+    if (next < 0) next = selectableEls.length - 1;
+    if (next >= selectableEls.length) next = 0;
+    setSelection(next);
+  }
+
+  function setSelection(idx) {
+    selectableEls.forEach(function(el) { el.classList.remove('cmd-row--selected'); });
+    selectionIndex = idx;
+    var el = selectableEls[idx];
+    if (!el) return;
+    el.classList.add('cmd-row--selected');
+    var rect = el.getBoundingClientRect();
+    var bodyRect = body.getBoundingClientRect();
+    if (rect.bottom > bodyRect.bottom) el.scrollIntoView({ block: 'end',   inline: 'nearest' });
+    else if (rect.top < bodyRect.top)  el.scrollIntoView({ block: 'start', inline: 'nearest' });
+  }
+
+  function activateSelection() {
+    if (selectionIndex < 0) return;
+    var el = selectableEls[selectionIndex];
+    if (el) activateRow(el);
+  }
+
+  function activateRow(el) {
+    var action = el.getAttribute('data-cmd-action');
+    var q = el.getAttribute('data-q') || '';
+
+    if (action === 'clear-recent') { clearRecent(); renderEmptyState(); return; }
+    if (action === 'remove-recent') { removeRecent(q); renderEmptyState(); return; }
+    if (action === 'repeat-search') {
+      input.value = q;
+      currentQuery = q;
+      pushRecent(q);
+      fireSearch(q);
+      input.focus();
+      return;
+    }
+
+    var nav = el.getAttribute('data-nav');
+    if (nav) {
+      var ctxQ = el.getAttribute('data-q');
+      if (ctxQ) pushRecent(ctxQ);
+      close();
+      navigate(nav);
+    }
+  }
+
+  // ── Search execution ─────────────────────────────────────────────
+
+  function onInput() {
+    var q = input.value.trim();
+    currentQuery = q;
+
+    if (q.length < MIN_CHARS) {
+      clearTimeout(debounceTimer);
+      if (abortCtl) { try { abortCtl.abort(); } catch(e) {} }
+      renderEmptyState();
+      return;
+    }
+
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function() { fireSearch(q); }, DEBOUNCE_MS);
+  }
+
+  function fireSearch(q) {
+    if (!q || q.length < MIN_CHARS) return;
+
+    var cached = cacheGet(q);
+    if (cached) { renderResults(q, cached); return; }
+
+    if (abortCtl) { try { abortCtl.abort(); } catch(e) {} }
+    abortCtl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+
+    renderLoading(q);
+
+    var url  = '/api/index.php?action=search&palette=1&q=' + encodeURIComponent(q);
+    var opts = abortCtl ? { signal: abortCtl.signal } : {};
+
+    fetch(url, opts)
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        var rows = (data && data.data) || [];
+        cacheSet(q, rows);
+        if (q === currentQuery) renderResults(q, rows);
+      })
+      .catch(function(err) {
+        if (err && err.name === 'AbortError') return;
+        console.error('Palette search error:', err);
+        if (q === currentQuery) {
+          body.innerHTML = '<div class="cmd-empty"><p class="cmd-empty-title">' + escHtml(t('palette.error', 'Search failed. Please try again.')) + '</p></div>';
+        }
+      });
+  }
+
+  // ── Keyboard handlers ────────────────────────────────────────────
+
+  function onKeydown(e) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault(); moveSelection(1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault(); moveSelection(-1);
+    } else if (e.key === 'Tab') {
+      e.preventDefault(); moveSelection(e.shiftKey ? -1 : 1);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (selectionIndex >= 0) {
+        activateSelection();
+      } else if (currentQuery.length >= MIN_CHARS) {
+        close();
+        pushRecent(currentQuery);
+        navigate('search?q=' + encodeURIComponent(currentQuery));
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault(); close();
+    }
+  }
+
+  function onBodyClick(e) {
+    var removeBtn = e.target.closest('.cmd-row-remove');
+    if (removeBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      removeRecent(removeBtn.getAttribute('data-q'));
+      renderEmptyState();
+      return;
+    }
+    var clearBtn = e.target.closest('.cmd-section-clear');
+    if (clearBtn) {
+      e.preventDefault();
+      clearRecent();
+      renderEmptyState();
+      return;
+    }
+    var row = e.target.closest('.cmd-row');
+    if (row) { e.preventDefault(); activateRow(row); }
+  }
+
+  // ── Lifecycle ────────────────────────────────────────────────────
+
+  function open(prefill) {
+    mountOverlay();
+    if (isOpen) {
+      if (typeof prefill === 'string' && prefill.length) {
+        input.value = prefill;
+        currentQuery = prefill;
+        fireSearch(prefill);
+      }
+      try { input.focus(); } catch(e) {}
+      return;
+    }
+    isOpen = true;
+    overlay.classList.add('cmd-palette--open');
+    overlay.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('cmd-palette-open');
+
+    if (typeof prefill === 'string' && prefill.length) {
+      input.value = prefill;
+      currentQuery = prefill;
+      renderEmptyState();
+      fireSearch(prefill);
+    } else {
+      input.value = '';
+      currentQuery = '';
+      renderEmptyState();
+    }
+
+    // Defer focus so iOS reliably opens the keyboard
+    setTimeout(function() { try { input.focus(); } catch(e) {} }, 30);
+  }
+
+  function close() {
+    if (!isOpen) return;
+    isOpen = false;
+    if (overlay) {
+      overlay.classList.remove('cmd-palette--open');
+      overlay.setAttribute('aria-hidden', 'true');
+    }
+    document.body.classList.remove('cmd-palette-open');
+    if (abortCtl) { try { abortCtl.abort(); } catch(e) {} }
+    abortCtl = null;
+    clearTimeout(debounceTimer);
+    if (input) try { input.blur(); } catch(e) {}
+  }
+
+  // ── Global shortcut handler ──────────────────────────────────────
+
+  function isEditable(el) {
+    if (!el) return false;
+    var tag = el.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    if (el.isContentEditable) return true;
+    return false;
+  }
+
+  function onGlobalKey(e) {
+    // ⌘K / Ctrl+K toggle from anywhere
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      if (isOpen) close(); else open();
+      return;
+    }
+    // `/` opens, guarded against editable focus
+    if (!isOpen && e.key === '/' && !isEditable(document.activeElement)) {
+      e.preventDefault();
+      open();
+      return;
+    }
+  }
+
+  // ── Trigger binding ──────────────────────────────────────────────
+
+  function bindTriggers() {
+    document.querySelectorAll('[data-cmd-trigger]').forEach(function(el) {
+      if (el._cmdBound) return;
+      el._cmdBound = true;
+      el.addEventListener('click', function(e) {
+        e.preventDefault();
+        open();
+      });
+      // For inputs that get focus (mobile menu): hijack and open instead
+      if (el.tagName === 'INPUT') {
+        el.addEventListener('focus', function(e) {
+          e.preventDefault();
+          el.blur();
+          open();
+        });
+      }
+    });
+  }
+
+  function init() {
+    isMac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || '');
+    document.body.classList.add(isMac ? 'platform-mac' : 'platform-not-mac');
+    document.addEventListener('keydown', onGlobalKey);
+    bindTriggers();
+    // Re-bind after each route render — new triggers appear in dynamic content
+    window.addEventListener('hashchange', function() {
+      setTimeout(bindTriggers, 80);
+    });
+  }
+
+  return {
+    init:          init,
+    open:          open,
+    close:         close,
+    bindTriggers:  bindTriggers,
+    isMac:         function() { return isMac; },
+  };
+})();
+
+window.CommandPalette    = CommandPalette;
+window.openSearchPalette = function(prefill) { CommandPalette.open(prefill); };
+

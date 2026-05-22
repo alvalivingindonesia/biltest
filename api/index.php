@@ -687,17 +687,40 @@ function handle_filters(): void {
 // CROSS-ENTITY SEARCH
 // =============================================================
 
+/**
+ * Unified search across 6 entity types:
+ *   providers, developers, projects, listings, agents, guides
+ *
+ * Each row carries a `score` = FULLTEXT relevance + small boosts for
+ * is_featured / is_trusted / is_verified (see ADR-0001).
+ *
+ * Modes:
+ *   default        — up to 100 rows per type (used by the /search page)
+ *   ?palette=1     — capped at 6 rows per type (used by the command palette;
+ *                    cuts backend work by ~94% on the high-volume path)
+ *
+ * Agents and guides use try/catch FULLTEXT-then-LIKE so the endpoint
+ * keeps working even before the FULLTEXT migration has run on prod.
+ *
+ * Telemetry: every successful search (q ≥ 3 chars) is logged to
+ * search_queries with a 2-second dedup window. Anonymous queries log
+ * user_id = NULL. Failures are silently ignored — telemetry never breaks
+ * the response.
+ */
 function handle_search(): void {
     $q = trim($_GET['q'] ?? '');
     if (strlen($q) < 2) json_error(400, 'Search query must be at least 2 characters');
 
     $db = get_db();
-    $limit = min(100, max(1, (int)($_GET['limit'] ?? 100)));
+    $is_palette = !empty($_GET['palette']);
+    $default_limit = $is_palette ? 6 : 100;
+    $limit = min(100, max(1, (int)($_GET['limit'] ?? $default_limit)));
 
     $results = [];
 
-    // Providers — full card fields
-    // Match on full-text (name/desc) OR category key/label OR tag
+    // ---------------------------------------------------------------
+    // Providers — FULLTEXT + category/tag fallbacks, with trust boost
+    // ---------------------------------------------------------------
     $like = '%' . $q . '%';
     $stmt = $db->prepare(
         "SELECT 'provider' AS type,
@@ -707,7 +730,10 @@ function handle_search(): void {
                 p.whatsapp_number, p.phone,
                 p.logo_url, p.profile_photo_url,
                 p.is_trusted, p.is_featured, p.badge,
-                a.label AS area_label
+                a.label AS area_label,
+                (MATCH(p.name, p.short_description, p.description) AGAINST(? IN BOOLEAN MODE)
+                 + IF(p.is_featured = 1, 0.5, 0)
+                 + IF(p.is_trusted = 1, 0.3, 0)) AS score
          FROM providers p
          LEFT JOIN areas a ON a.`key` = p.area_key
          WHERE p.is_active = 1 AND (
@@ -723,60 +749,209 @@ function handle_search(): void {
                  WHERE pt.provider_id = p.id AND pt.tag LIKE ?
              )
          )
+         ORDER BY score DESC
          LIMIT ?"
     );
-    $stmt->execute([$q, $like, $like, $like, $limit]);
+    $stmt->execute([$q, $q, $like, $like, $like, $limit]);
     $providers = $stmt->fetchAll();
     attach_tags($providers, 'provider_tags', 'provider_id');
     attach_categories($providers, 'provider_categories', 'provider_id');
     $results = array_merge($results, $providers);
 
-    // Developers — full card fields
+    // ---------------------------------------------------------------
+    // Developers — FULLTEXT with featured boost
+    // ---------------------------------------------------------------
     $stmt = $db->prepare(
         "SELECT 'developer' AS type,
                 d.id, d.slug, d.name, d.short_description AS excerpt,
                 d.google_rating, d.google_review_count,
                 d.languages, d.logo_url, d.profile_photo_url,
                 d.whatsapp_number, d.phone,
-                d.is_featured, d.badge
+                d.is_featured, d.badge,
+                (MATCH(d.name, d.short_description, d.description) AGAINST(? IN BOOLEAN MODE)
+                 + IF(d.is_featured = 1, 0.5, 0)) AS score
          FROM developers d
-         WHERE d.is_active = 1 AND MATCH(d.name, d.short_description, d.description) AGAINST(? IN BOOLEAN MODE)
+         WHERE d.is_active = 1
+           AND MATCH(d.name, d.short_description, d.description) AGAINST(? IN BOOLEAN MODE)
+         ORDER BY score DESC
          LIMIT ?"
     );
-    $stmt->execute([$q, $limit]);
+    $stmt->execute([$q, $q, $limit]);
     $results = array_merge($results, $stmt->fetchAll());
 
-    // Projects
+    // ---------------------------------------------------------------
+    // Projects — FULLTEXT with featured boost
+    // ---------------------------------------------------------------
     $stmt = $db->prepare(
         "SELECT 'project' AS type,
                 p.id, p.slug, p.name, p.short_description AS excerpt,
                 NULL AS google_rating, NULL AS google_review_count,
                 p.logo_url, p.logo_url AS profile_photo_url,
-                p.area_key AS area, a.label AS area_label
+                p.area_key AS area, a.label AS area_label,
+                (MATCH(p.name, p.short_description, p.description) AGAINST(? IN BOOLEAN MODE)
+                 + IF(p.is_featured = 1, 0.5, 0)) AS score
          FROM projects p
          LEFT JOIN areas a ON a.`key` = p.area_key
-         WHERE p.is_active = 1 AND MATCH(p.name, p.short_description, p.description) AGAINST(? IN BOOLEAN MODE)
+         WHERE p.is_active = 1
+           AND MATCH(p.name, p.short_description, p.description) AGAINST(? IN BOOLEAN MODE)
+         ORDER BY score DESC
          LIMIT ?"
     );
-    $stmt->execute([$q, $limit]);
+    $stmt->execute([$q, $q, $limit]);
     $results = array_merge($results, $stmt->fetchAll());
 
-    // Listings
+    // ---------------------------------------------------------------
+    // Listings — FULLTEXT with featured boost
+    // ---------------------------------------------------------------
     $stmt = $db->prepare(
         "SELECT 'listing' AS type,
                 l.id, l.slug, l.title AS name, l.short_description AS excerpt,
                 NULL AS google_rating, NULL AS google_review_count,
-                l.area_key AS area, a.label AS area_label
+                l.area_key AS area, a.label AS area_label,
+                l.is_featured,
+                (MATCH(l.title, l.short_description, l.description) AGAINST(? IN BOOLEAN MODE)
+                 + IF(l.is_featured = 1, 0.5, 0)) AS score
          FROM listings l
          LEFT JOIN areas a ON a.`key` = l.area_key
          WHERE l.status = 'active' AND l.is_approved = 1
            AND MATCH(l.title, l.short_description, l.description) AGAINST(? IN BOOLEAN MODE)
+         ORDER BY score DESC
          LIMIT ?"
     );
-    $stmt->execute([$q, $limit]);
+    $stmt->execute([$q, $q, $limit]);
     $results = array_merge($results, $stmt->fetchAll());
 
-    json_out(['data' => $results, 'query' => $q]);
+    // ---------------------------------------------------------------
+    // Agents — FULLTEXT with verified boost; LIKE fallback if no index
+    // ---------------------------------------------------------------
+    $agents = _search_agents($db, $q, $limit);
+    $results = array_merge($results, $agents);
+
+    // ---------------------------------------------------------------
+    // Guides — FULLTEXT then created_at; LIKE fallback if no index
+    // ---------------------------------------------------------------
+    $guides = _search_guides($db, $q, $limit);
+    $results = array_merge($results, $guides);
+
+    // Fire-and-forget telemetry — never blocks the response
+    _search_log_query($db, $q, count($results));
+
+    json_out(['data' => $results, 'query' => $q, 'palette' => $is_palette]);
+}
+
+/** Agents: try FULLTEXT, fall back to LIKE if the index isn't there yet. */
+function _search_agents(PDO $db, string $q, int $limit): array {
+    try {
+        $stmt = $db->prepare(
+            "SELECT 'agent' AS type,
+                    ag.id, ag.slug, ag.display_name AS name, ag.bio AS excerpt,
+                    ag.agency_name, ag.areas_served, ag.languages,
+                    ag.google_rating, ag.google_review_count,
+                    ag.whatsapp_number, ag.phone,
+                    NULL AS logo_url, ag.profile_photo_url,
+                    ag.is_verified,
+                    (MATCH(ag.display_name, ag.agency_name, ag.bio) AGAINST(? IN BOOLEAN MODE)
+                     + IF(ag.is_verified = 1, 0.3, 0)) AS score
+             FROM agents ag
+             WHERE ag.is_active = 1
+               AND MATCH(ag.display_name, ag.agency_name, ag.bio) AGAINST(? IN BOOLEAN MODE)
+             ORDER BY score DESC
+             LIMIT ?"
+        );
+        $stmt->execute([$q, $q, $limit]);
+        return $stmt->fetchAll();
+    } catch (PDOException $e) {
+        // FULLTEXT index missing — degrade to LIKE so search still works
+        $like = '%' . $q . '%';
+        $stmt = $db->prepare(
+            "SELECT 'agent' AS type,
+                    ag.id, ag.slug, ag.display_name AS name, ag.bio AS excerpt,
+                    ag.agency_name, ag.areas_served, ag.languages,
+                    ag.google_rating, ag.google_review_count,
+                    ag.whatsapp_number, ag.phone,
+                    NULL AS logo_url, ag.profile_photo_url,
+                    ag.is_verified,
+                    IF(ag.is_verified = 1, 0.3, 0) AS score
+             FROM agents ag
+             WHERE ag.is_active = 1
+               AND (ag.display_name LIKE ? OR ag.agency_name LIKE ? OR ag.bio LIKE ?)
+             ORDER BY ag.is_verified DESC, ag.display_name ASC
+             LIMIT ?"
+        );
+        $stmt->execute([$like, $like, $like, $limit]);
+        return $stmt->fetchAll();
+    }
+}
+
+/** Guides: try FULLTEXT, fall back to LIKE if the index isn't there yet. */
+function _search_guides(PDO $db, string $q, int $limit): array {
+    try {
+        $stmt = $db->prepare(
+            "SELECT 'guide' AS type,
+                    g.id, g.slug, g.title AS name, g.excerpt,
+                    g.category, g.read_time, g.created_at,
+                    MATCH(g.title, g.excerpt, g.content) AGAINST(? IN BOOLEAN MODE) AS score
+             FROM guides g
+             WHERE g.is_published = 1
+               AND MATCH(g.title, g.excerpt, g.content) AGAINST(? IN BOOLEAN MODE)
+             ORDER BY score DESC, g.created_at DESC
+             LIMIT ?"
+        );
+        $stmt->execute([$q, $q, $limit]);
+        return $stmt->fetchAll();
+    } catch (PDOException $e) {
+        $like = '%' . $q . '%';
+        $stmt = $db->prepare(
+            "SELECT 'guide' AS type,
+                    g.id, g.slug, g.title AS name, g.excerpt,
+                    g.category, g.read_time, g.created_at,
+                    0 AS score
+             FROM guides g
+             WHERE g.is_published = 1
+               AND (g.title LIKE ? OR g.excerpt LIKE ? OR g.content LIKE ?)
+             ORDER BY g.created_at DESC
+             LIMIT ?"
+        );
+        $stmt->execute([$like, $like, $like, $limit]);
+        return $stmt->fetchAll();
+    }
+}
+
+/**
+ * Log a search query for future "Popular Searches" analysis (ADR-0001, Q18).
+ * Skips short queries and 2-second duplicates from the same session.
+ * Silent on any failure — telemetry must never break the response.
+ */
+function _search_log_query(PDO $db, string $q, int $result_count): void {
+    if (strlen($q) < 3) return;
+    try {
+        // Pick up user_id from session if one is already open (login flows
+        // start the session in api/user.php). We don't open a new session
+        // here — anonymous searches log NULL.
+        $uid = null;
+        if (function_exists('session_status') && session_status() === PHP_SESSION_ACTIVE) {
+            $uid = $_SESSION['user_id'] ?? null;
+        }
+        // 2-second dedup: only INSERT if no matching row exists in the
+        // last 2 seconds. <=> is MySQL's NULL-safe equality operator.
+        $stmt = $db->prepare(
+            "INSERT INTO search_queries (query, result_count, user_id)
+             SELECT ?, ?, ?
+             FROM DUAL
+             WHERE NOT EXISTS (
+                 SELECT 1 FROM search_queries
+                 WHERE query = ?
+                   AND (user_id <=> ?)
+                   AND created_at > NOW() - INTERVAL 2 SECOND
+             )"
+        );
+        $stmt->execute([
+            mb_substr($q, 0, 200), $result_count, $uid,
+            mb_substr($q, 0, 200), $uid,
+        ]);
+    } catch (PDOException $e) {
+        // Table may not exist yet (migration not run). Stay silent.
+    }
 }
 
 

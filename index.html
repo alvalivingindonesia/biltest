@@ -106,6 +106,22 @@
             </svg>
           </span>
         </button>
+        <!-- Search trigger (opens command palette) -->
+        <button
+          type="button"
+          class="nav-search-pill"
+          data-cmd-trigger
+          aria-label="Open search"
+          data-i18n-aria="palette.open_aria"
+        >
+          <svg class="nav-search-pill-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <span class="nav-search-pill-label" data-i18n="palette.trigger_label">Search&hellip;</span>
+          <kbd class="nav-search-pill-kbd" aria-hidden="true">
+            <span class="kbd-mac">&#x2318;K</span>
+            <span class="kbd-pc">Ctrl K</span>
+          </kbd>
+        </button>
+
         <div class="nav-login-wrap" id="nav-login-area"></div>
 
         <!-- Primary CTA -->
@@ -133,11 +149,11 @@
   <!-- Mobile Menu -->
   <nav id="mobile-menu" class="mobile-menu" aria-label="Mobile navigation">
 
-    <!-- Mobile search -->
-    <div class="mobile-search-wrap">
+    <!-- Mobile search (opens command palette on tap) -->
+    <button type="button" id="mobile-search-trigger" class="mobile-search-wrap mobile-search-wrap--trigger" data-cmd-trigger aria-label="Open search" data-i18n-aria="palette.open_aria">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mobile-search-icon" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input type="search" id="mobile-search" class="nav-search-input" placeholder="Search providers, projects&#x2026;" data-i18n-placeholder="nav.search_placeholder" autocomplete="off">
-    </div>
+      <span class="mobile-search-trigger-label" data-i18n="palette.placeholder">What are you looking for?</span>
+    </button>
 
     <!-- Mobile language toggle -->
     <div style="display:flex;justify-content:center;padding:var(--space-3) 0;">
