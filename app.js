@@ -732,10 +732,6 @@ async function renderHome(el) {
           <button type="button" class="hero-search hero-search--trigger" data-cmd-trigger aria-label="${t('palette.open_aria', 'Open search')}">
             <svg class="hero-search-icon-left" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <span class="hero-search-trigger-label">${t('palette.placeholder', 'What are you looking for?')}</span>
-            <kbd class="hero-search-kbd" aria-hidden="true">
-              <span class="kbd-mac">&#x2318;K</span>
-              <span class="kbd-pc">Ctrl K</span>
-            </kbd>
           </button>
         </div>
       </div>
@@ -7579,23 +7575,26 @@ var CommandPalette = (function() {
   }
 
   // ── Trigger binding ──────────────────────────────────────────────
+  // Delegated on document so it works for any [data-cmd-trigger] that
+  // exists at boot OR gets injected later by async route renders.
 
   function bindTriggers() {
-    document.querySelectorAll('[data-cmd-trigger]').forEach(function(el) {
-      if (el._cmdBound) return;
-      el._cmdBound = true;
-      el.addEventListener('click', function(e) {
-        e.preventDefault();
-        open();
-      });
-      // For inputs that get focus (mobile menu): hijack and open instead
-      if (el.tagName === 'INPUT') {
-        el.addEventListener('focus', function(e) {
-          e.preventDefault();
-          el.blur();
-          open();
-        });
-      }
+    if (bindTriggers._done) return;
+    bindTriggers._done = true;
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest) return;
+      var trigger = e.target.closest('[data-cmd-trigger]');
+      if (!trigger) return;
+      e.preventDefault();
+      open();
+    });
+    // Hijack focus on any input-style trigger (rare; legacy mobile pattern)
+    document.addEventListener('focusin', function(e) {
+      var el = e.target;
+      if (!el || el.tagName !== 'INPUT') return;
+      if (!el.matches || !el.matches('[data-cmd-trigger]')) return;
+      try { el.blur(); } catch(err) {}
+      open();
     });
   }
 
@@ -7604,10 +7603,6 @@ var CommandPalette = (function() {
     document.body.classList.add(isMac ? 'platform-mac' : 'platform-not-mac');
     document.addEventListener('keydown', onGlobalKey);
     bindTriggers();
-    // Re-bind after each route render — new triggers appear in dynamic content
-    window.addEventListener('hashchange', function() {
-      setTimeout(bindTriggers, 80);
-    });
   }
 
   return {

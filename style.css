@@ -7089,12 +7089,6 @@ body.drawer-open { overflow: hidden; }
    or "/" (when no editable element has focus).
    =====================================================*/
 
-/* ── Platform kbd toggle ── */
-.platform-mac     .kbd-pc  { display: none; }
-.platform-mac     .kbd-mac { display: inline; }
-.platform-not-mac .kbd-pc  { display: inline; }
-.platform-not-mac .kbd-mac { display: none; }
-
 /* ── Hero search bar styled as palette TRIGGER ── */
 .hero-search--trigger {
   display: flex;
@@ -7132,23 +7126,7 @@ body.drawer-open { overflow: hidden; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.hero-search-kbd {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  font-family: var(--font-body);
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  color: rgba(250,248,244,0.7);
-  background: rgba(255,255,255,0.14);
-  border: 1px solid rgba(250,248,244,0.25);
-  border-radius: var(--radius-md);
-}
-/* Hide kbd hint on mobile (no keyboard shortcut on touch devices) */
 @media (max-width: 767px) {
-  .hero-search-kbd { display: none; }
   .hero-search--trigger { padding: 14px 18px; }
 }
 
@@ -7177,20 +7155,6 @@ body.drawer-open { overflow: hidden; }
 }
 .nav-search-pill-icon  { flex-shrink: 0; color: inherit; }
 .nav-search-pill-label { flex: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.nav-search-pill-kbd {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  font-family: var(--font-body);
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  color: var(--color-text-faint);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-}
 @media (min-width: 1024px) {
   .nav-search-pill { display: inline-flex; }
 }
@@ -7203,11 +7167,6 @@ body.drawer-open { overflow: hidden; }
 .site-header:not(.scrolled):not(.solid) .nav-search-pill:hover {
   background: rgba(255,255,255,0.16);
   border-color: rgba(250,248,244,0.55);
-}
-.site-header:not(.scrolled):not(.solid) .nav-search-pill-kbd {
-  background: rgba(255,255,255,0.12);
-  border-color: rgba(250,248,244,0.25);
-  color: rgba(250,248,244,0.75);
 }
 
 /* ── Mobile menu trigger button (replaces the old mobile-search input) ── */
