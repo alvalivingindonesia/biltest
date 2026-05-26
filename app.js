@@ -1578,7 +1578,7 @@ function renderListingCard(l, index) {
     + (l.is_featured ? '<span class="listing-card-featured">Featured</span>' : '')
     + '</div>'
     + '<div class="listing-card-body">'
-    + '<div class="listing-card-price">' + priceStr + (l.price_label ? ' <span class="listing-card-price-note">' + l.price_label + '</span>' : '') + '</div>'
+    + '<div class="listing-card-price">' + priceStr + '</div>'
     + '<h3 class="listing-card-title">' + (l.title || '') + '</h3>'
     + '<div class="listing-card-meta">'
     + (sizeStr ? '<span>' + sizeStr + '</span>' : '')
@@ -1895,7 +1895,7 @@ async function renderListingDetail(el, slug) {
             ) : ''}
 
             <h1 class="listing-detail-title" id="ldt-title">${listing.title}</h1>
-            <div class="listing-detail-price" id="ldt-price">${priceStr}${listing.price_label ? ' <span class="price-note">' + listing.price_label + '</span>' : ''}</div>
+            <div class="listing-detail-price" id="ldt-price">${priceStr}</div>
 
             <div class="listing-detail-tags">
               ${typeLabel ? '<span class="detail-tag">' + typeLabel + '</span>' : ''}
