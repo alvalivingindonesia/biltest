@@ -7020,6 +7020,7 @@ body.drawer-open { overflow: hidden; }
   font-size: var(--text-base);
   color: rgba(255,255,255,0.7);
   margin: 0;
+  max-width: none;
   text-align: center;
 }
 .rab-tools-grid {
