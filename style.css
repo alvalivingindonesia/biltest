@@ -466,6 +466,9 @@
 .nav-dropdown-menu li:first-child a { border-radius: calc(var(--radius-lg) - 2px) calc(var(--radius-lg) - 2px) 0 0 !important; }
 .nav-dropdown-menu li:last-child  a { border-radius: 0 0 calc(var(--radius-lg) - 2px) calc(var(--radius-lg) - 2px) !important; }
 .nav-dropdown-menu li + li { border-top: 1px solid var(--color-border); }
+/* Pin dropdown menu text to dark regardless of hero/transparent header state */
+.site-header:not(.scrolled):not(.solid) .nav-dropdown-menu a { color: var(--color-text); }
+.site-header:not(.scrolled):not(.solid) .nav-dropdown-menu a:hover { color: var(--color-primary); }
 
 .nav-dd-label {
   font-size: var(--text-sm);
