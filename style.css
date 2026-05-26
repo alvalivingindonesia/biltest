@@ -7025,47 +7025,50 @@ body.drawer-open { overflow: hidden; }
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-6);
-  max-width: 760px;
+  max-width: 860px;
   margin: 0 auto;
 }
-.rab-tool-card {
+/* Scope home-section card styles to avoid touching the RAB-page tool chooser */
+.rab-tools-section .rab-tool-card {
   position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: var(--space-7) var(--space-6);
+  padding: 28px;
   background: var(--color-bg);
+  border: none;
   border-radius: var(--radius-lg);
   text-decoration: none;
   color: var(--color-text);
-  box-shadow: 0 2px 12px rgba(0,0,0,0.16);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.10);
   transition: transform 200ms ease, box-shadow 200ms ease;
 }
-.rab-tool-card:hover {
+.rab-tools-section .rab-tool-card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 8px 28px rgba(0,0,0,0.22);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.16);
 }
-.rab-tool-card--pro {
-  box-shadow: 0 4px 20px rgba(0,0,0,0.24);
+.rab-tools-section .rab-tool-card--pro {
+  box-shadow: 0 6px 32px rgba(0,0,0,0.18);
 }
-.rab-tool-card--pro:hover {
-  box-shadow: 0 10px 36px rgba(0,0,0,0.28);
+.rab-tools-section .rab-tool-card--pro:hover {
+  box-shadow: 0 12px 40px rgba(0,0,0,0.24);
 }
 .rab-tool-pro-badge {
   position: absolute;
-  top: var(--space-4);
-  right: var(--space-4);
+  top: 0;
+  right: var(--space-5);
+  transform: translateY(-50%);
   font-size: 0.65rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   background: var(--color-star);
   color: #fff;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: var(--radius-full);
   line-height: 1.6;
 }
-.rab-tool-card-icon {
+.rab-tools-section .rab-tool-card-icon {
   width: 48px;
   height: 48px;
   display: flex;
@@ -7076,10 +7079,10 @@ body.drawer-open { overflow: hidden; }
   color: var(--color-accent);
   flex-shrink: 0;
 }
-.rab-tool-card-title {
+.rab-tools-section .rab-tool-card-title {
   font-family: var(--font-display);
   font-size: 1.05rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--color-text);
   margin: 0;
   display: flex;
@@ -7090,34 +7093,33 @@ body.drawer-open { overflow: hidden; }
   color: var(--color-text-muted);
   flex-shrink: 0;
 }
-.rab-tool-card-desc {
+.rab-tools-section .rab-tool-card-desc {
   font-size: 0.875rem;
   color: var(--color-text-muted);
-  margin: 0;
+  margin: 0 0 var(--space-4);
   line-height: 1.5;
-  flex: 1;
 }
 .rab-tool-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 38px;
+  height: 44px;
   padding: 0 var(--space-5);
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
   font-weight: 600;
   letter-spacing: 0.04em;
   white-space: nowrap;
-  margin-top: var(--space-2);
-  border: 1.5px solid transparent;
-  transition: background 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease;
+  margin-top: auto;
+  border: 2px solid transparent;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
 }
 .rab-tool-btn--outline {
   color: var(--color-accent);
   border-color: var(--color-accent);
   background: transparent;
 }
-.rab-tool-card:hover .rab-tool-btn--outline {
+.rab-tools-section .rab-tool-card:hover .rab-tool-btn--outline {
   background: color-mix(in oklab, var(--color-accent) 8%, transparent);
 }
 .rab-tool-btn--filled {
@@ -7125,7 +7127,7 @@ body.drawer-open { overflow: hidden; }
   border-color: var(--color-primary);
   color: #fff;
 }
-.rab-tool-card:hover .rab-tool-btn--filled {
+.rab-tools-section .rab-tool-card:hover .rab-tool-btn--filled {
   background: var(--color-primary-hover);
   border-color: var(--color-primary-hover);
 }
@@ -7133,7 +7135,7 @@ body.drawer-open { overflow: hidden; }
   .rab-tools-section { padding: 52px 0; }
   .rab-tools-grid {
     grid-template-columns: 1fr;
-    max-width: 400px;
+    max-width: 420px;
   }
   .rab-tools-heading { font-size: var(--text-xl); }
 }
