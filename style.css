@@ -7020,6 +7020,7 @@ body.drawer-open { overflow: hidden; }
   font-size: var(--text-base);
   color: rgba(255,255,255,0.7);
   margin: 0;
+  text-align: center;
 }
 .rab-tools-grid {
   display: grid;
@@ -7040,12 +7041,13 @@ body.drawer-open { overflow: hidden; }
   border-radius: var(--radius-lg);
   text-decoration: none;
   color: var(--color-text);
+  cursor: default;
   box-shadow: 0 4px 24px rgba(0,0,0,0.10);
-  transition: transform 200ms ease, box-shadow 200ms ease;
+  transition: all 200ms ease;
 }
 .rab-tools-section .rab-tool-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.16);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 36px rgba(0,0,0,0.18);
 }
 .rab-tools-section .rab-tool-card--pro {
   box-shadow: 0 6px 32px rgba(0,0,0,0.18);
@@ -7075,7 +7077,7 @@ body.drawer-open { overflow: hidden; }
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-md);
-  background: color-mix(in oklab, var(--color-accent) 12%, transparent);
+  background: rgba(12, 124, 132, 0.12);
   color: var(--color-accent);
   flex-shrink: 0;
 }
@@ -7085,9 +7087,7 @@ body.drawer-open { overflow: hidden; }
   font-weight: 700;
   color: var(--color-text);
   margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  text-decoration: none;
 }
 .rab-tool-lock {
   color: var(--color-text-muted);
@@ -7096,7 +7096,7 @@ body.drawer-open { overflow: hidden; }
 .rab-tools-section .rab-tool-card-desc {
   font-size: 0.875rem;
   color: var(--color-text-muted);
-  margin: 0 0 var(--space-4);
+  margin: 0;
   line-height: 1.5;
 }
 .rab-tool-btn {
@@ -7112,7 +7112,10 @@ body.drawer-open { overflow: hidden; }
   white-space: nowrap;
   margin-top: auto;
   border: 2px solid transparent;
-  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+  transition: all 200ms ease;
+}
+.rab-tools-section .rab-tool-btn {
+  margin-top: 8px;
 }
 .rab-tool-btn--outline {
   color: var(--color-accent);
@@ -7120,7 +7123,9 @@ body.drawer-open { overflow: hidden; }
   background: transparent;
 }
 .rab-tools-section .rab-tool-card:hover .rab-tool-btn--outline {
-  background: color-mix(in oklab, var(--color-accent) 8%, transparent);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
 }
 .rab-tool-btn--filled {
   background: var(--color-primary);
