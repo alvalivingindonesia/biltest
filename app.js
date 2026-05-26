@@ -788,21 +788,35 @@ async function renderHome(el) {
       </div>
     </section>
 
-    <!-- RAB CALCULATOR — secondary CTA, below the fold -->
-    <section class="rab-callout-section">
-      <div class="container container--narrow">
-        <a href="#rab-calculator" class="rab-callout-card" onclick="navigate('rab-calculator');return false;">
-          <div class="rab-callout-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h8M8 14h4"/></svg>
-          </div>
-          <div class="rab-callout-text">
-            <h3 class="rab-callout-title">${t('home.cta_calculate_costs', 'Calculate Build Costs')}</h3>
-            <p class="rab-callout-desc">${t('home.calculate_costs_desc', 'Estimate the cost of your build with our free RAB tool.')}</p>
-          </div>
-          <span class="rab-callout-arrow" aria-hidden="true">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 18 15 12 9 6"/></svg>
-          </span>
-        </a>
+    <!-- RAB CALCULATOR — two-card standalone section -->
+    <section class="rab-tools-section">
+      <div class="container">
+        <div class="rab-tools-header">
+          <h2 class="rab-tools-heading">${t('home.build_cost_tools', 'Build Cost Tools')}</h2>
+          <p class="rab-tools-subline">${t('home.build_cost_tools_desc', 'Estimate your project cost before you build')}</p>
+        </div>
+        <div class="rab-tools-grid">
+          <a href="#rab-calculator" class="rab-tool-card" onclick="navigate('rab-calculator');return false;">
+            <div class="rab-tool-card-icon" aria-hidden="true">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h8M8 14h4"/></svg>
+            </div>
+            <h3 class="rab-tool-card-title">${t('home.quick_calc_title', 'Quick Calculator')}</h3>
+            <p class="rab-tool-card-desc">${t('home.quick_calc_desc', 'Get a fast estimate of your build cost in minutes.')}</p>
+            <span class="rab-tool-btn rab-tool-btn--outline">${t('home.quick_calc_cta', 'Start Calculating')}</span>
+          </a>
+          <a href="#rab-projects" class="rab-tool-card rab-tool-card--pro" onclick="navigate('rab-projects');return false;">
+            <span class="rab-tool-pro-badge">${t('home.pro_badge', 'Pro')}</span>
+            <div class="rab-tool-card-icon" aria-hidden="true">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            </div>
+            <h3 class="rab-tool-card-title">
+              <svg class="rab-tool-lock" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              ${t('home.rab_gen_title', 'Detailed RAB Generator')}
+            </h3>
+            <p class="rab-tool-card-desc">${t('home.rab_gen_desc', 'Generate a full Rencana Anggaran Biaya breakdown for your project.')}</p>
+            <span class="rab-tool-btn rab-tool-btn--filled">${t('home.rab_gen_cta', 'Unlock Feature')}</span>
+          </a>
+        </div>
       </div>
     </section>
 

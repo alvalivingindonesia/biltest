@@ -6999,74 +6999,143 @@ body.drawer-open { overflow: hidden; }
   }
 }
 
-/* --- Secondary RAB CTA — below the fold, soft secondary styling --- */
-.rab-callout-section {
-  padding: var(--space-6) 0 var(--space-2);
+/* --- RAB Build Cost Tools — two-card standalone section --- */
+.rab-tools-section {
+  background: var(--color-primary);
+  padding: 72px 0;
 }
-.rab-callout-card {
+.rab-tools-header {
+  text-align: center;
+  margin-bottom: var(--space-10);
+}
+.rab-tools-heading {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.02em;
+  margin: 0 0 var(--space-3);
+}
+.rab-tools-subline {
+  font-size: var(--text-base);
+  color: rgba(255,255,255,0.7);
+  margin: 0;
+}
+.rab-tools-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-6);
+  max-width: 760px;
+  margin: 0 auto;
+}
+.rab-tool-card {
+  position: relative;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: var(--space-4);
-  padding: var(--space-4) var(--space-5);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  padding: var(--space-7) var(--space-6);
+  background: var(--color-bg);
   border-radius: var(--radius-lg);
   text-decoration: none;
-  color: inherit;
-  transition: border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  color: var(--color-text);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.16);
+  transition: transform 200ms ease, box-shadow 200ms ease;
 }
-.rab-callout-card:hover {
-  border-color: var(--color-accent);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-  background: var(--color-surface-offset);
+.rab-tool-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.22);
 }
-.rab-callout-icon {
-  flex-shrink: 0;
-  width: 44px;
-  height: 44px;
+.rab-tool-card--pro {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.24);
+}
+.rab-tool-card--pro:hover {
+  box-shadow: 0 10px 36px rgba(0,0,0,0.28);
+}
+.rab-tool-pro-badge {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--color-star);
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  line-height: 1.6;
+}
+.rab-tool-card-icon {
+  width: 48px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-md);
   background: color-mix(in oklab, var(--color-accent) 12%, transparent);
   color: var(--color-accent);
+  flex-shrink: 0;
 }
-.rab-callout-text {
-  flex: 1;
-  min-width: 0;
-}
-.rab-callout-title {
+.rab-tool-card-title {
   font-family: var(--font-display);
   font-size: 1.05rem;
   font-weight: 600;
-  margin: 0 0 2px;
   color: var(--color-text);
-  letter-spacing: 0.01em;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
-.rab-callout-desc {
-  font-size: 0.85rem;
+.rab-tool-lock {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+.rab-tool-card-desc {
+  font-size: 0.875rem;
   color: var(--color-text-muted);
   margin: 0;
-  line-height: 1.45;
+  line-height: 1.5;
+  flex: 1;
 }
-.rab-callout-arrow {
-  flex-shrink: 0;
-  color: var(--color-text-faint);
-  transition: color 180ms ease, transform 180ms ease;
+.rab-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  margin-top: var(--space-2);
+  border: 1.5px solid transparent;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease;
 }
-.rab-callout-card:hover .rab-callout-arrow {
+.rab-tool-btn--outline {
   color: var(--color-accent);
-  transform: translateX(3px);
+  border-color: var(--color-accent);
+  background: transparent;
 }
-@media (max-width: 480px) {
-  .rab-callout-card {
-    padding: var(--space-4);
-    gap: var(--space-3);
+.rab-tool-card:hover .rab-tool-btn--outline {
+  background: color-mix(in oklab, var(--color-accent) 8%, transparent);
+}
+.rab-tool-btn--filled {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+.rab-tool-card:hover .rab-tool-btn--filled {
+  background: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+}
+@media (max-width: 640px) {
+  .rab-tools-section { padding: 52px 0; }
+  .rab-tools-grid {
+    grid-template-columns: 1fr;
+    max-width: 400px;
   }
-  .rab-callout-title { font-size: 1rem; }
-  .rab-callout-desc { font-size: 0.8rem; }
+  .rab-tools-heading { font-size: var(--text-xl); }
 }
 
 /* WhatsApp FAB — safety margin: ensure it never overlaps inputs.
