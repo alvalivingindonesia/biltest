@@ -1076,124 +1076,312 @@
 }
 
 /* =====================================================
-   HOME SPLIT — Featured + Guides two-column
+   EDITORIAL — Featured Developers & Projects
    ===================================================== */
 
-.home-split {
-  display: grid;
-  grid-template-columns: 1.4fr 1fr;
-  gap: var(--space-12);
-  align-items: start;
+.editorial-projects-section {
+  padding-block: clamp(60px, 9vw, 120px);
+  background: var(--color-surface);
 }
 
-.home-split-heading {
+.editorial-guides-section {
+  padding-block: clamp(60px, 9vw, 120px);
+  background: var(--color-surface-offset);
+}
+
+/* Shared: muted uppercase eyebrow label */
+.editorial-eyebrow {
+  display: block;
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+  margin-bottom: var(--space-2);
+}
+
+/* Shared: large serif section heading */
+.editorial-section-title {
   font-family: var(--font-display);
-  font-size: clamp(1.2rem, 0.9rem + 0.6vw, 1.6rem);
-  font-weight: 500;
+  font-size: clamp(1.5rem, 1rem + 1.5vw, 2.5rem);
+  font-weight: 400;
   color: var(--color-text);
-  margin-bottom: var(--space-5);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0;
 }
 
-.home-featured-row {
-  display: flex;
-  gap: var(--space-4);
-}
-
-.home-featured-thumb {
-  flex: 1;
-  text-decoration: none;
-  color: var(--color-text);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  transition: transform 220ms ease, box-shadow 220ms ease;
-}
-
-.home-featured-thumb:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0,0,0,0.08);
-}
-
-.home-featured-img {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  background-size: cover;
-  background-position: center;
-  background-color: var(--color-border);
-  border-radius: var(--radius-lg);
-}
-
-.home-featured-label {
+/* Shared: minimal text link with animated arrow */
+.editorial-view-all-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   font-family: var(--font-body);
   font-size: var(--text-sm);
   font-weight: 500;
-  margin-top: var(--space-2);
-  line-height: 1.3;
-}
-
-.home-split-link {
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: #0c7c84;
+  color: var(--color-text-muted);
   text-decoration: none;
+  letter-spacing: 0.03em;
+  transition: color 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.editorial-view-all-link:hover {
+  color: var(--color-text);
+}
+
+.editorial-arrow-icon {
+  flex-shrink: 0;
+  transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.editorial-view-all-link:hover .editorial-arrow-icon {
+  transform: translateX(5px);
+}
+
+/* Section 1: header row — heading left, CTA right */
+.editorial-projects-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-6);
+  margin-bottom: clamp(var(--space-8), 4vw, var(--space-12));
+}
+
+.editorial-header-left {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Desktop CTA hidden on mobile */
+.editorial-view-all-link--desktop {
   display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  transition: opacity 200ms ease;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.home-split-link:hover {
-  opacity: 0.7;
+/* Section 1: two equal-width cards */
+.editorial-projects-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(var(--space-6), 3vw, var(--space-10));
 }
 
-.home-guides-list {
+/* Section 1: individual card */
+.editorial-project-card {
+  text-decoration: none;
+  color: var(--color-text);
+  display: block;
+}
+
+/* Section 1: image wrapper — clips the scale transform */
+.editorial-project-img-wrap {
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  aspect-ratio: 16 / 10;
+  background: var(--color-border);
+  margin-bottom: var(--space-4);
+}
+
+.editorial-project-img {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.editorial-project-card:hover .editorial-project-img {
+  transform: scale(1.03);
+}
+
+/* Section 1: card text */
+.editorial-project-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.1rem, 0.85rem + 0.6vw, 1.5rem);
+  font-weight: 500;
+  color: var(--color-text);
+  letter-spacing: 0.01em;
+  line-height: 1.25;
+  margin: 0 0 var(--space-1);
+}
+
+.editorial-project-meta {
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+  margin: 0;
+}
+
+/* Section 1: mobile-only CTA */
+.editorial-projects-mobile-cta {
+  margin-top: clamp(var(--space-8), 4vw, var(--space-10));
+  display: none;
+}
+
+/* =====================================================
+   EDITORIAL — Guides & Resources list
+   ===================================================== */
+
+/* Section 2: header */
+.editorial-guides-header {
+  margin-bottom: clamp(var(--space-6), 3vw, var(--space-10));
+}
+
+/* Section 2: editorial list — no bullets */
+.editorial-guides-list {
   list-style: none;
   padding: 0;
   margin: 0;
+}
+
+.editorial-guide-item:first-child .editorial-guide-row {
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="dark"] .editorial-guide-item:first-child .editorial-guide-row {
+  border-top-color: rgba(255, 255, 255, 0.07);
+}
+
+/* Section 2: row — full-width flex hit target */
+.editorial-guide-row {
+  position: relative;
   display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.home-guides-list li {
-  border-bottom: 1px solid var(--color-border);
-}
-
-.home-guides-list li:first-child {
-  border-top: 1px solid var(--color-border);
-}
-
-.home-guides-list a {
-  display: block;
-  padding: var(--space-3) var(--space-1);
-  color: var(--color-text);
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-5) var(--space-2);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   text-decoration: none;
-  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+
+[data-theme="dark"] .editorial-guide-row {
+  border-bottom-color: rgba(255, 255, 255, 0.07);
+}
+
+/* Hover: soft background tint via pseudo element */
+.editorial-guide-row::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklab, var(--color-primary) 4%, transparent);
+  opacity: 0;
+  transition: opacity 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+  pointer-events: none;
+  border-radius: 2px;
+}
+
+.editorial-guide-row:hover::before {
+  opacity: 1;
+}
+
+/* Row: muted index number */
+.editorial-guide-index {
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-text-faint);
+  letter-spacing: 0.08em;
+  min-width: 24px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+/* Row: guide title — shifts right on hover */
+.editorial-guide-title {
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: clamp(1rem, 0.85rem + 0.35vw, 1.2rem);
+  font-weight: 400;
+  color: var(--color-text);
   line-height: 1.4;
-  transition: color 150ms ease;
+  transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+  position: relative;
+  z-index: 1;
 }
 
-.home-guides-list a:hover {
-  color: #0c7c84;
+.editorial-guide-row:hover .editorial-guide-title {
+  transform: translateX(6px);
 }
 
-.home-guides-list a::before {
-  content: '\2022';
-  margin-right: var(--space-2);
-  color: #0c7c84;
+/* Row: reading time / category tag */
+.editorial-guide-meta {
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
 }
 
-@media (max-width: 768px) {
-  .home-split {
+/* Row: arrow — revealed on hover */
+.editorial-guide-arrow {
+  opacity: 0;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  transition: opacity 0.4s cubic-bezier(0.25, 1, 0.5, 1), transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+  position: relative;
+  z-index: 1;
+}
+
+.editorial-guide-row:hover .editorial-guide-arrow {
+  opacity: 1;
+  transform: translateX(3px);
+}
+
+/* Section 2: footer with "All guides" link */
+.editorial-guides-footer {
+  margin-top: clamp(var(--space-6), 3vw, var(--space-8));
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* =====================================================
+   EDITORIAL — Responsive / Mobile
+   ===================================================== */
+
+@media (max-width: 767px) {
+  /* Projects: stack cards vertically */
+  .editorial-projects-grid {
     grid-template-columns: 1fr;
-    gap: var(--space-8);
+    gap: var(--space-10);
   }
-  .home-featured-row {
-    flex-direction: column;
+
+  /* Projects: hide desktop CTA, show mobile CTA */
+  .editorial-view-all-link--desktop {
+    display: none;
   }
-  .home-featured-thumb {
-    flex: none;
-    width: 100%;
+
+  .editorial-projects-mobile-cta {
+    display: block;
+  }
+
+  /* Guides: hide index numbers to keep title clean */
+  .editorial-guide-index {
+    display: none;
+  }
+
+  .editorial-guide-row {
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-1);
+  }
+
+  /* Guides: slightly more line-height for readability */
+  .editorial-guide-title {
+    line-height: 1.55;
+  }
+
+  /* Guides: center the footer CTA */
+  .editorial-guides-footer {
+    justify-content: center;
   }
 }
 

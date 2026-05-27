@@ -817,46 +817,85 @@ async function renderHome(el) {
       </div>
     </section>
 
-    <!-- FEATURED + GUIDES — Two-column below categories -->
-    <section class="section section-animate" style="background:var(--color-surface-offset);">
+    <!-- SECTION 1: FEATURED DEVELOPERS & PROJECTS -->
+    <section class="section-animate editorial-projects-section">
       <div class="container">
-        <div class="home-split">
-          <!-- Left: Featured developers & projects -->
-          <div class="home-split-main">
-            <h2 class="home-split-heading">Featured developers &amp; projects</h2>
-            <div class="home-featured-row">
-              ${[...displayFeaturedDevs.slice(0, 2), ...featuredProjects.slice(0, 1)].map((item) => {
-                const isProject = !!item.developer_id;
-                const name = isProject ? item.project_name : (item.name || item.display_name || 'Unnamed');
-                const photo = item.profile_photo_url || item.hero_image_url || '';
-                const link = isProject ? '#project/' + (item.slug || item.id) : '#developer/' + (item.slug || item.id);
-                const route = isProject ? 'project/' + (item.slug || item.id) : 'developer/' + (item.slug || item.id);
-                return `
-                  <a href="${link}" class="home-featured-thumb" onclick="navigate('${route}'); return false;">
-                    <div class="home-featured-img" style="background-image:url('${photo}');"></div>
-                    <div class="home-featured-label">${name}</div>
-                  </a>
-                `;
-              }).join('')}
-            </div>
-            <div style="margin-top: var(--space-4);">
-              <a href="#developers" class="home-split-link" onclick="navigate('developers'); return false;">View all developers &amp; projects ${iconArrowRight()}</a>
-            </div>
+        <div class="editorial-projects-header">
+          <div class="editorial-header-left">
+            <span class="editorial-eyebrow">Featured</span>
+            <h2 class="editorial-section-title">Developers &amp; Projects</h2>
           </div>
-          <!-- Right: Guides & resources -->
-          <div class="home-split-side">
-            <h2 class="home-split-heading">Guides &amp; resources</h2>
-            <ul class="home-guides-list">
-              ${homeGuides.slice(0, 5).map((g) => `
-                <li>
-                  <a href="#guide/${g.slug}" onclick="navigate('guide/${g.slug}'); return false;">${g.title}</a>
-                </li>
-              `).join('')}
-            </ul>
-            <div style="margin-top: var(--space-4);">
-              <a href="#guides" class="home-split-link" onclick="navigate('guides'); return false;">All guides ${iconArrowRight()}</a>
-            </div>
-          </div>
+          <a href="#developers" class="editorial-view-all-link editorial-view-all-link--desktop" onclick="navigate('developers'); return false;">
+            View all developers &amp; projects
+            <svg class="editorial-arrow-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </a>
+        </div>
+        <div class="editorial-projects-grid">
+          ${([...displayFeaturedDevs.slice(0, 2), ...featuredProjects.slice(0, 2)]).slice(0, 2).map((item) => {
+            const isProject = !!item.developer_id;
+            const name = isProject ? item.project_name : (item.name || item.display_name || 'Unnamed');
+            const photo = item.profile_photo_url || item.hero_image_url || '';
+            const link = isProject ? '#project/' + (item.slug || item.id) : '#developer/' + (item.slug || item.id);
+            const route = isProject ? 'project/' + (item.slug || item.id) : 'developer/' + (item.slug || item.id);
+            const location = isProject
+              ? formatAreaLabel(item.location_area || '')
+              : ((item.areas_focus && item.areas_focus.length) ? formatAreaLabel(item.areas_focus[0]) : formatAreaLabel(item.location_area || ''));
+            const type = isProject
+              ? formatProjectType(item.project_type || '')
+              : ((item.project_types && item.project_types.length) ? formatProjectType(item.project_types[0]) : '');
+            const metaParts = [location, type].filter(Boolean);
+            const meta = metaParts.join('  •  ').toUpperCase();
+            const metaHtml = meta ? '<p class="editorial-project-meta">' + meta + '</p>' : '';
+            return `
+              <a href="${link}" class="editorial-project-card" onclick="navigate('${route}'); return false;">
+                <div class="editorial-project-img-wrap">
+                  <div class="editorial-project-img" style="background-image:url('${photo}');"></div>
+                </div>
+                <div class="editorial-project-info">
+                  <h3 class="editorial-project-title">${escHtml(name)}</h3>
+                  ${metaHtml}
+                </div>
+              </a>
+            `;
+          }).join('')}
+        </div>
+        <div class="editorial-projects-mobile-cta">
+          <a href="#developers" class="editorial-view-all-link" onclick="navigate('developers'); return false;">
+            View all developers &amp; projects
+            <svg class="editorial-arrow-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 2: GUIDES & RESOURCES -->
+    <section class="section-animate editorial-guides-section">
+      <div class="container container--narrow">
+        <div class="editorial-guides-header">
+          <span class="editorial-eyebrow">Resources</span>
+          <h2 class="editorial-section-title">Guides &amp; Resources</h2>
+        </div>
+        <ul class="editorial-guides-list">
+          ${homeGuides.slice(0, 5).map((g, i) => {
+            const idx = String(i + 1).padStart(2, '0');
+            const readTime = g.read_time ? g.read_time + ' MIN READ' : (g.category ? g.category.toUpperCase() : '');
+            return `
+              <li class="editorial-guide-item">
+                <a href="#guide/${g.slug}" class="editorial-guide-row" onclick="navigate('guide/${g.slug}'); return false;">
+                  <span class="editorial-guide-index">${idx}</span>
+                  <span class="editorial-guide-title">${escHtml(g.title)}</span>
+                  <span class="editorial-guide-meta">${escHtml(readTime)}</span>
+                  <svg class="editorial-guide-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                </a>
+              </li>
+            `;
+          }).join('')}
+        </ul>
+        <div class="editorial-guides-footer">
+          <a href="#guides" class="editorial-view-all-link" onclick="navigate('guides'); return false;">
+            All guides
+            <svg class="editorial-arrow-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </a>
         </div>
       </div>
     </section>
