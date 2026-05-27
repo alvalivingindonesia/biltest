@@ -1616,9 +1616,9 @@ async function renderDeveloperDetail(el, slug) {
                 ${dev.website_url   ? '<div class="dev-contact-row"><svg class="dev-contact-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg><a href="' + dev.website_url + '" target="_blank" rel="noopener noreferrer" class="dev-contact-link">Website</a></div>' : ''}
                 ${dev.google_maps_url ? '<div class="dev-contact-row"><svg class="dev-contact-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg><a href="' + dev.google_maps_url + '" target="_blank" rel="noopener noreferrer" class="dev-contact-link">View on Map</a></div>' : ''}
               </div>
-              ${socialHtml}
               ${dev.min_ticket_usd ? '<div class="dev-min-invest"><span class="dev-min-invest-label">From</span><span class="dev-min-invest-value">' + formatUSD(dev.min_ticket_usd) + '</span></div>' : ''}
               ${dev.whatsapp_number ? '<a href="https://wa.me/' + dev.whatsapp_number + '" target="_blank" rel="noopener noreferrer" class="dev-wa-btn">' + iconWhatsApp() + '<span>Inquire via WhatsApp</span></a>' : ''}
+              ${socialHtml}
               <div class="dev-fav-row">${renderFavBtn('developer', dev.id)}<span class="dev-fav-label">Save to favourites</span></div>
             </div>
           </div>
