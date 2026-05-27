@@ -1647,7 +1647,21 @@ function renderListingCard(l, index) {
   var sizeStr = formatLandSize(l.land_size_sqm, l.land_size_are);
   var typeLabel = l.listing_type_label || l.listing_type_key || '';
   var certLabel = l.certificate_type_label || '';
-  var locationStr = l.location_detail || l.area_label || '';
+  var areaLabel = l.area_label || '';
+  var locationDetail = l.location_detail || '';
+
+  // Editorial category tag: "TYPE • AREA" in card body (replaces image overlay badge)
+  var categoryParts = [];
+  if (typeLabel) categoryParts.push(typeLabel.toUpperCase());
+  if (areaLabel) categoryParts.push(areaLabel.toUpperCase());
+
+  // Single clean meta line: size • cert • specific location • beds • baths
+  var metaParts = [];
+  if (sizeStr) metaParts.push(sizeStr);
+  if (certLabel) metaParts.push(certLabel);
+  if (locationDetail) metaParts.push(locationDetail);
+  if (l.bedrooms) metaParts.push(l.bedrooms + ' bed');
+  if (l.bathrooms) metaParts.push(l.bathrooms + ' bath');
 
   // If listing has source_url, open external site in new tab; otherwise navigate internally
   var linkHref = l.source_url ? l.source_url : '#listing/' + l.slug;
@@ -1664,20 +1678,13 @@ function renderListingCard(l, index) {
     + '<a href="' + linkHref + '" class="listing-card card"' + linkTarget + linkOnclick + '>'
     + '<div class="listing-card-image">'
     + (imgUrl ? '<img src="' + imgUrl + '" alt="' + (l.title || '').replace(/"/g, '&quot;') + '" loading="lazy" onload="this.classList.add(\'loaded\')">' : '<div class="listing-card-noimg"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></div>')
-    + '<span class="listing-card-type">' + typeLabel + '</span>'
     + (l.is_featured ? '<span class="listing-card-featured">Featured</span>' : '')
     + '</div>'
     + '<div class="listing-card-body">'
+    + (categoryParts.length ? '<div class="listing-card-category">' + categoryParts.join(' • ') + '</div>' : '')
     + '<div class="listing-card-price">' + priceStr + '</div>'
     + '<h3 class="listing-card-title">' + (l.title || '') + '</h3>'
-    + '<div class="listing-card-meta">'
-    + (sizeStr ? '<span>' + sizeStr + '</span>' : '')
-    + (certLabel ? '<span>' + certLabel + '</span>' : '')
-    + (l.bedrooms ? '<span>' + l.bedrooms + ' bed</span>' : '')
-    + (l.bathrooms ? '<span>' + l.bathrooms + ' bath</span>' : '')
-    + '</div>'
-    + '<div class="listing-card-location"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> ' + locationStr + '</div>'
-    + (l.agent_name ? '<div class="listing-card-agent">' + l.agent_name + '</div>' : '')
+    + (metaParts.length ? '<div class="listing-card-meta-line">' + metaParts.join('  •  ') + '</div>' : '')
     + sourceTag
     + '</div>'
     + '</a>'
@@ -1768,8 +1775,8 @@ async function renderListings(el, params = {}) {
               </div>
             </div>
             <div class="filters-more-row">
-              <button class="btn btn--ghost btn--sm filters-more-btn" id="moreFiltersBtn" type="button">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+              <button class="filters-more-btn" id="moreFiltersBtn" type="button">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
                 More Filters${moreActiveCount > 0 ? ' (' + moreActiveCount + ')' : ''}
               </button>
               ${anyFilterActive ? '<button class="btn btn--ghost btn--sm" type="button" id="clearAllFiltersBtn" style="margin-left:auto;color:var(--color-accent);">Clear all</button>' : ''}
@@ -1819,12 +1826,41 @@ async function renderListings(el, params = {}) {
           </div>
         </div>
         <div class="split-view" id="listings-split">
-          <div class="split-view-map" aria-label="${t('listings.map_label', 'Map of listings')}">
-            <div class="split-view-map-placeholder">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
-              <strong style="font-family:var(--font-display);font-size:1.1rem;color:var(--color-text);">${t('listings.map_title', 'Map view')}</strong>
-              <span style="font-size:0.85rem;">${listings.length} ${listings.length === 1 ? t('listings.property_singular', 'property') : t('listings.property_plural', 'properties')} ${t('listings.in_this_search', 'in this search')}</span>
-              <span style="font-size:0.75rem;color:var(--color-text-faint);">${t('listings.map_coming_soon', 'Interactive map coming soon')}</span>
+          <div class="split-view-map" aria-label="Lombok property map">
+            <div class="split-view-map-topo" aria-hidden="true">
+              <svg viewBox="0 0 480 560" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+                <rect width="480" height="560" fill="#f2ebe1"/>
+                <g stroke="#ddd5c2" stroke-width="0.4" opacity="0.8">
+                  <line x1="0" y1="56" x2="480" y2="56"/><line x1="0" y1="112" x2="480" y2="112"/><line x1="0" y1="168" x2="480" y2="168"/><line x1="0" y1="224" x2="480" y2="224"/><line x1="0" y1="280" x2="480" y2="280"/><line x1="0" y1="336" x2="480" y2="336"/><line x1="0" y1="392" x2="480" y2="392"/><line x1="0" y1="448" x2="480" y2="448"/><line x1="0" y1="504" x2="480" y2="504"/>
+                  <line x1="60" y1="0" x2="60" y2="560"/><line x1="120" y1="0" x2="120" y2="560"/><line x1="180" y1="0" x2="180" y2="560"/><line x1="240" y1="0" x2="240" y2="560"/><line x1="300" y1="0" x2="300" y2="560"/><line x1="360" y1="0" x2="360" y2="560"/><line x1="420" y1="0" x2="420" y2="560"/>
+                </g>
+                <path d="M 85,110 C 95,65 160,48 235,50 C 310,52 390,75 420,120 C 450,165 445,240 420,295 C 395,350 350,400 290,430 C 230,460 165,458 120,430 C 75,402 60,350 58,295 C 56,240 70,160 85,110 Z" fill="#e8dfd0" stroke="#c8b99a" stroke-width="1.5" opacity="0.75"/>
+                <ellipse cx="205" cy="155" rx="115" ry="88" fill="none" stroke="#c8b898" stroke-width="0.8" opacity="0.6"/>
+                <ellipse cx="205" cy="155" rx="92" ry="70" fill="none" stroke="#c2b08a" stroke-width="0.9" opacity="0.65"/>
+                <ellipse cx="205" cy="155" rx="72" ry="54" fill="none" stroke="#bca87e" stroke-width="1" opacity="0.7"/>
+                <ellipse cx="205" cy="155" rx="54" ry="40" fill="none" stroke="#b6a072" stroke-width="1" opacity="0.75"/>
+                <ellipse cx="205" cy="155" rx="38" ry="28" fill="none" stroke="#b09868" stroke-width="1.2" opacity="0.8"/>
+                <ellipse cx="205" cy="155" rx="24" ry="18" fill="none" stroke="#aa9060" stroke-width="1.3" opacity="0.85"/>
+                <ellipse cx="205" cy="155" rx="13" ry="9" fill="none" stroke="#a08855" stroke-width="1.5" opacity="0.9"/>
+                <ellipse cx="205" cy="155" rx="5" ry="4" fill="#9c8050" opacity="0.7"/>
+                <circle cx="205" cy="155" r="2.5" fill="#7a5e38" opacity="0.8"/>
+                <ellipse cx="300" cy="360" rx="70" ry="45" fill="none" stroke="#d0c4ac" stroke-width="0.7" opacity="0.5"/>
+                <ellipse cx="300" cy="360" rx="52" ry="33" fill="none" stroke="#c8b8a0" stroke-width="0.8" opacity="0.55"/>
+                <ellipse cx="300" cy="360" rx="35" ry="22" fill="none" stroke="#c0ae94" stroke-width="0.9" opacity="0.6"/>
+                <ellipse cx="300" cy="360" rx="20" ry="13" fill="none" stroke="#b8a488" stroke-width="1" opacity="0.65"/>
+                <ellipse cx="130" cy="330" rx="50" ry="32" fill="none" stroke="#d0c4ac" stroke-width="0.7" opacity="0.45"/>
+                <ellipse cx="130" cy="330" rx="35" ry="22" fill="none" stroke="#c4b89e" stroke-width="0.8" opacity="0.5"/>
+                <ellipse cx="130" cy="330" rx="20" ry="13" fill="none" stroke="#b8a890" stroke-width="0.9" opacity="0.55"/>
+                <ellipse cx="58" cy="138" rx="9" ry="6" fill="#e0d8c8" stroke="#c0b090" stroke-width="1" opacity="0.8"/>
+                <ellipse cx="44" cy="165" rx="6" ry="4" fill="#e0d8c8" stroke="#c0b090" stroke-width="1" opacity="0.75"/>
+                <ellipse cx="36" cy="190" rx="5" ry="3" fill="#e0d8c8" stroke="#c0b090" stroke-width="1" opacity="0.7"/>
+                <text x="462" y="14" font-family="monospace" font-size="7" fill="#b0a890" opacity="0.5" text-anchor="end">116.5°E</text>
+                <text x="10" y="550" font-family="monospace" font-size="7" fill="#b0a890" opacity="0.5">8.7°S</text>
+                <text x="10" y="14" font-family="monospace" font-size="7" fill="#b0a890" opacity="0.5">8.3°S</text>
+              </svg>
+            </div>
+            <div class="split-view-map-overlay">
+              <span class="map-status-badge">[ INTERACTIVE EXPANSION EXPLORER &bull; ARRIVING SOON ]</span>
             </div>
           </div>
           <div class="split-view-list card-grid listings-grid" id="listings-grid">
