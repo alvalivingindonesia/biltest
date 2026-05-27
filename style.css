@@ -8536,8 +8536,9 @@ body.cmd-palette-open { overflow: hidden; }
   .filters-more-row {
     padding-left: var(--space-5);
     padding-right: var(--space-5);
-    margin-top: 0;
     padding-top: var(--space-3);
+    padding-bottom: var(--space-3);
+    margin-top: 0;
   }
   .filters-more-panel.open {
     padding-left: var(--space-5);
