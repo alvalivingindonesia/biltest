@@ -5487,6 +5487,26 @@ a.rab-tool-card:hover {
   border-bottom: none;
 }
 
+.rab-rate-row.is-active {
+  background: rgba(99, 91, 255, 0.07);
+  border-radius: 6px;
+  padding-left: 8px;
+  padding-right: 8px;
+  transition: background 0.25s ease, padding 0.25s ease;
+}
+
+.rab-rate-row.is-active .rab-rate-val {
+  color: var(--color-accent, #6366f1);
+  transition: color 0.25s ease;
+}
+
+.rab-tier-desc {
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text-faint);
+  line-height: 1.65;
+}
+
 .rab-rate-val {
   font-weight: 600;
   color: var(--color-heading);

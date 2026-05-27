@@ -4341,27 +4341,32 @@ async function renderRABCalculator(el) {
 // --- RAB Wizard: shell, state, reactive total ---
 
 function buildWizardShell(presets, dp) {
-  var presetOpts = presets.map(function(p) {
-    return '<option value="' + p.id + '"' + (p.is_default == 1 ? ' selected' : '') + '>' + escHtml(p.name) + '</option>';
-  }).join('');
+  var defaultPresetId = dp ? dp.id : (presets[0] ? presets[0].id : '');
 
   return ''
     + '<div class="rab-calc-main">'
     + '<form id="rab-calc-form" class="wizard" autocomplete="off">'
     + '  <div class="wizard-stepper" role="tablist">'
-    + '    <button type="button" class="wizard-step-tab is-active" data-step="1" role="tab"><span class="wizard-step-num">1</span><span class="wizard-step-label"><small>Step 1</small>Location &amp; preset</span></button>'
+    + '    <button type="button" class="wizard-step-tab is-active" data-step="1" role="tab"><span class="wizard-step-num">1</span><span class="wizard-step-label"><small>Step 1</small>Finish Quality</span></button>'
     + '    <button type="button" class="wizard-step-tab is-disabled" data-step="2" role="tab"><span class="wizard-step-num">2</span><span class="wizard-step-label"><small>Step 2</small>Size &amp; dimensions</span></button>'
     + '    <button type="button" class="wizard-step-tab is-disabled" data-step="3" role="tab"><span class="wizard-step-num">3</span><span class="wizard-step-label"><small>Step 3</small>Material tier</span></button>'
     + '  </div>'
     + '  <div class="wizard-body">'
     /* STEP 1 */
     + '    <div class="wizard-pane is-active" data-pane="1">'
-    + '      <h4>Where will you build?</h4>'
-    + '      <p class="wizard-hint">Choose a regional cost preset. This sets the base rates and location factor used in your estimate.</p>'
+    + '      <h4>Select Your Finish Quality</h4>'
+    + '      <p class="wizard-hint">Select a baseline material and finishing tier to calibrate your real-time build estimate.</p>'
     + '      <div class="rab-field">'
-    + '        <label class="rab-label">Regional Rate Preset</label>'
-    + '        <select id="rab-preset-sel" name="preset_id" class="rab-select">' + presetOpts + '</select>'
+    + '        <label class="rab-label">Material Grade</label>'
+    + '        <select id="rab-quality-sel" name="quality" class="rab-select">'
+    + '          <option value="economy">Economy</option>'
+    + '          <option value="architectural" selected>Architectural</option>'
+    + '          <option value="premium">Premium</option>'
+    + '          <option value="signature">Signature</option>'
+    + '        </select>'
+    + '        <p class="rab-tier-desc" id="rab-tier-desc">Standard quality regional materials, crisp structural concrete, and premium plaster work.</p>'
     + '      </div>'
+    + '      <input type="hidden" name="preset_id" id="rab-preset-hidden" value="' + defaultPresetId + '">'
     + '    </div>'
     /* STEP 2 */
     + '    <div class="wizard-pane" data-pane="2">'
@@ -4385,15 +4390,9 @@ function buildWizardShell(presets, dp) {
     + '    </div>'
     /* STEP 3 */
     + '    <div class="wizard-pane" data-pane="3">'
-    + '      <h4>Pick a material tier &amp; extras</h4>'
-    + '      <p class="wizard-hint">Quality level drives the cost-per-m². Add optional extras to refine your estimate.</p>'
-    + '      <label class="rab-label" style="margin-bottom:var(--space-2)">Quality Level</label>'
-    + '      <div class="rab-quality-row">'
-    + '        <label class="rab-quality-opt"><input type="radio" name="quality" value="low"><span class="rab-quality-inner"><span class="rab-quality-name">Economy</span><span class="rab-quality-desc">Budget finish</span></span></label>'
-    + '        <label class="rab-quality-opt selected"><input type="radio" name="quality" value="mid" checked><span class="rab-quality-inner"><span class="rab-quality-name">Standard</span><span class="rab-quality-desc">Mid-range</span></span></label>'
-    + '        <label class="rab-quality-opt"><input type="radio" name="quality" value="high"><span class="rab-quality-inner"><span class="rab-quality-name">Premium</span><span class="rab-quality-desc">High-end finish</span></span></label>'
-    + '      </div>'
-    + '      <label class="rab-check-label" style="margin-top:var(--space-5)"><input type="checkbox" name="walkable_rooftop" id="rab-ck-rooftop"><span>Walkable Rooftop / Roof Deck</span></label>'
+    + '      <h4>Optional Extras</h4>'
+    + '      <p class="wizard-hint">Add optional extras to refine your estimate.</p>'
+    + '      <label class="rab-check-label" style="margin-top:var(--space-2)"><input type="checkbox" name="walkable_rooftop" id="rab-ck-rooftop"><span>Walkable Rooftop / Roof Deck</span></label>'
     + '      <div id="rab-rooftop-wrap" style="display:none;margin-left:28px;margin-bottom:var(--space-4)">'
     + '        <div class="rab-field"><label class="rab-label">Rooftop Area (m²)</label><input type="number" name="rooftop_area" class="rab-input" min="0" step="0.5" placeholder="e.g. 80"></div>'
     + '      </div>'
@@ -4471,14 +4470,27 @@ function initRABWizard(el, presets) {
   nextBtn.addEventListener('click', function() { setStep(currentStep + 1); });
   backBtn.addEventListener('click', function() { setStep(currentStep - 1); });
 
-  // Preset selector: update sidebar and recompute total
-  var presetSel = form.querySelector('#rab-preset-sel');
-  if (presetSel) {
-    presetSel.addEventListener('change', function() {
-      var p = presets.find(function(x) { return x.id == parseInt(this.value); }, this);
-      if (p) updatePresetSidebar(p);
+  // Quality selector: update tier desc, highlight rate row, recompute
+  var TIER_DESCS = {
+    economy:      'Simple local materials, basic tile options, and straightforward functional finishes.',
+    architectural: 'Standard quality regional materials, crisp structural concrete, and premium plaster work.',
+    premium:      'Bespoke seamless surfaces (micro-cement/terrazzo), artisan built-ins, and premium hardware.',
+    signature:    'Elite international standards, top-tier imported natural stone, and master-artisan finishes.'
+  };
+  function updateQualityUI(val) {
+    var descEl = document.getElementById('rab-tier-desc');
+    if (descEl) descEl.textContent = TIER_DESCS[val] || '';
+    document.querySelectorAll('#rab-rates-list .rab-rate-row').forEach(function(row) {
+      row.classList.toggle('is-active', row.dataset.tier === val);
+    });
+  }
+  var qualitySel = form.querySelector('#rab-quality-sel');
+  if (qualitySel) {
+    qualitySel.addEventListener('change', function() {
+      updateQualityUI(this.value);
       recomputeTotal();
     });
+    updateQualityUI(qualitySel.value);
   }
 
   // Storeys: show/hide floor inputs
@@ -4506,15 +4518,6 @@ function initRABWizard(el, presets) {
     recomputeTotal();
   });
 
-  // Quality radio styling + recompute
-  form.querySelectorAll('.rab-quality-opt input[type=radio]').forEach(function(r) {
-    r.addEventListener('change', function() {
-      form.querySelectorAll('.rab-quality-opt').forEach(function(o) { o.classList.remove('selected'); });
-      if (r.checked) r.closest('.rab-quality-opt').classList.add('selected');
-      recomputeTotal();
-    });
-    if (r.checked) r.closest('.rab-quality-opt').classList.add('selected');
-  });
 
   // Recompute on any number input change
   form.querySelectorAll('input[type=number], input[type=radio]').forEach(function(inp) {
@@ -4527,10 +4530,12 @@ function initRABWizard(el, presets) {
     var presetId = parseInt(form.querySelector('[name=preset_id]').value);
     var p = presets.find(function(x) { return x.id == presetId; }) || presets[0];
     if (!p) return;
-    var quality = (form.querySelector('input[name=quality]:checked') || { value: 'mid' }).value;
-    var rate = quality === 'low'  ? Number(p.base_cost_per_m2_low)
-             : quality === 'high' ? Number(p.base_cost_per_m2_high)
-             :                       Number(p.base_cost_per_m2_mid);
+    var qualityEl = form.querySelector('[name=quality]');
+    var quality = qualityEl ? qualityEl.value : 'architectural';
+    var rate = quality === 'economy'   ? Number(p.base_cost_per_m2_low)
+             : quality === 'premium'   ? Number(p.base_cost_per_m2_high)
+             : quality === 'signature' ? Math.round(Number(p.base_cost_per_m2_high) * 1.5)
+             :                           Number(p.base_cost_per_m2_mid);
     var storeys = parseInt(form.querySelector('[name=num_storeys]').value) || 1;
     var floorArea = 0;
     for (var i = 1; i <= storeys; i++) {
@@ -4670,9 +4675,10 @@ function buildPresetSidebar(dp) {
 
 function buildRatesList(dp) {
   return ''
-    + '<div class="rab-rate-row"><span>Economy (m\u00B2)</span><span class="rab-rate-val">' + fmtIDR(dp.base_cost_per_m2_low) + '</span></div>'
-    + '<div class="rab-rate-row"><span>Standard (m\u00B2)</span><span class="rab-rate-val">' + fmtIDR(dp.base_cost_per_m2_mid) + '</span></div>'
-    + '<div class="rab-rate-row"><span>Premium (m\u00B2)</span><span class="rab-rate-val">' + fmtIDR(dp.base_cost_per_m2_high) + '</span></div>'
+    + '<div class="rab-rate-row" data-tier="economy"><span>Economy (m\u00B2)</span><span class="rab-rate-val">' + fmtIDR(dp.base_cost_per_m2_low) + '</span></div>'
+    + '<div class="rab-rate-row" data-tier="architectural"><span>Architectural (m\u00B2)</span><span class="rab-rate-val">' + fmtIDR(dp.base_cost_per_m2_mid) + '</span></div>'
+    + '<div class="rab-rate-row" data-tier="premium"><span>Premium (m\u00B2)</span><span class="rab-rate-val">' + fmtIDR(dp.base_cost_per_m2_high) + '</span></div>'
+    + '<div class="rab-rate-row" data-tier="signature"><span>Signature (m\u00B2)</span><span class="rab-rate-val">' + fmtIDR(Math.round(Number(dp.base_cost_per_m2_high) * 1.5)) + '</span></div>'
     + '<div class="rab-rate-row"><span>Standard Pool (m\u00B2)</span><span class="rab-rate-val">' + fmtIDR(dp.pool_cost_per_m2_standard) + '</span></div>'
     + '<div class="rab-rate-row"><span>Infinity Pool (m\u00B2)</span><span class="rab-rate-val">' + fmtIDR(dp.pool_cost_per_m2_infinity) + '</span></div>'
     + '<div class="rab-rate-row"><span>Deck (m\u00B2)</span><span class="rab-rate-val">' + fmtIDR(dp.deck_cost_per_m2) + '</span></div>'
@@ -4849,7 +4855,7 @@ async function renderRABEstimates(el) {
       return;
     }
 
-    var ql_map = { low: 'Economy', mid: 'Standard', high: 'Premium' };
+    var ql_map = { economy: 'Economy', architectural: 'Architectural', premium: 'Premium', signature: 'Signature', low: 'Economy', mid: 'Architectural', high: 'Premium' };
     var cards = estimates.map(function(est) {
       var dateStr = est.created_at ? new Date(est.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
       return ''
@@ -4930,7 +4936,7 @@ async function renderRABResult(el, params) {
     if (!res.ok) throw new Error(json.error || 'Not found');
     var r = json.data;
 
-    var ql_map = { low: 'Economy', mid: 'Standard', high: 'Premium' };
+    var ql_map = { economy: 'Economy', architectural: 'Architectural', premium: 'Premium', signature: 'Signature', low: 'Economy', mid: 'Architectural', high: 'Premium' };
     var ql = ql_map[r.quality_level] || r.quality_level;
     var detailEl = el.querySelector('#rab-detail-area');
 
