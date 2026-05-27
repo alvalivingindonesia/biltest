@@ -514,15 +514,19 @@
   background: none;
   border: none;
   font-family: var(--font-body);
-  font-size: var(--text-lg);
-  font-weight: 500;
-  color: var(--color-text);
-  padding: var(--space-4) 0;
+  font-size: 1.4rem;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: #1A1A1A;
+  padding: 20px 0;
   cursor: pointer;
   text-align: left;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
-[data-theme="dark"] .mobile-nav-group-toggle { border-bottom-color: rgba(255, 255, 255, 0.08); }
+[data-theme="dark"] .mobile-nav-group-toggle {
+  color: var(--color-text);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
 .mobile-nav-group-chevron {
   transition: transform 200ms ease;
   flex-shrink: 0;
@@ -547,6 +551,8 @@
   color: var(--color-text-muted);
   padding: var(--space-2) 0;
   border-bottom: none;
+  letter-spacing: normal;
+  font-weight: 500;
 }
 .mobile-nav-group-items a:hover {
   color: var(--color-primary);
@@ -689,19 +695,45 @@
   transform: translateY(0);
 }
 
-.mobile-menu a {
-  display: block;
-  text-decoration: none;
-  color: var(--color-text);
-  font-size: var(--text-lg);
-  font-family: var(--font-body);
+/* ── Mobile nav: number prefix ── */
+.nav-num {
+  font-size: 0.75rem;
+  color: #8C8C8C;
+  margin-right: 12px;
   font-weight: 500;
-  padding: var(--space-4) 0;
+  letter-spacing: 0.05em;
+  font-family: var(--font-body);
+  flex-shrink: 0;
+  line-height: 1;
+}
+[data-theme="dark"] .nav-num { color: var(--color-text-faint); }
+
+/* Left-side label group inside toggle buttons */
+.mobile-nav-label {
+  display: flex;
+  align-items: center;
+}
+
+/* Main nav links — direct children only, so CTA/WA (inside divs) and
+   sub-items (inside .mobile-nav-group-items) are unaffected. */
+.mobile-menu > a {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  color: #1A1A1A;
+  font-size: 1.4rem;
+  font-family: var(--font-body);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  padding: 20px 0;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   transition: color var(--transition-interactive);
 }
-.mobile-menu a:hover { color: var(--color-primary); }
-[data-theme="dark"] .mobile-menu a { border-bottom-color: rgba(255, 255, 255, 0.08); }
+.mobile-menu > a:hover { color: var(--color-primary); }
+[data-theme="dark"] .mobile-menu > a {
+  color: var(--color-text);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
 
 /* ── Mobile nav: staggered cascade fade-in ── */
 @keyframes mobileNavIn {
@@ -720,36 +752,6 @@
 .mobile-menu.open > *:nth-child(7) { animation-delay: 340ms; }
 .mobile-menu.open > *:nth-child(8) { animation-delay: 390ms; }
 .mobile-menu.open > *:nth-child(9) { animation-delay: 440ms; }
-
-/* ── Mobile nav: sequential architectural numbering ── */
-.mobile-menu {
-  counter-reset: mobile-nav-counter;
-}
-.mobile-menu > a:not(.mobile-auth-link),
-.mobile-menu > .mobile-nav-group {
-  counter-increment: mobile-nav-counter;
-}
-.mobile-menu > a:not(.mobile-auth-link)::before {
-  content: counter(mobile-nav-counter, decimal-leading-zero) ".";
-  display: inline-block;
-  margin-right: 0.65em;
-  font-size: 0.7rem;
-  font-family: var(--font-body);
-  font-weight: 400;
-  color: var(--color-text-faint);
-  letter-spacing: 0.06em;
-  vertical-align: middle;
-}
-.mobile-menu > .mobile-nav-group .mobile-nav-group-toggle::before {
-  content: counter(mobile-nav-counter, decimal-leading-zero) ".";
-  display: inline-block;
-  margin-right: 0.65em;
-  font-size: 0.7rem;
-  font-family: var(--font-body);
-  font-weight: 400;
-  color: var(--color-text-faint);
-  letter-spacing: 0.06em;
-}
 
 /* Search results dropdown */
 .search-dropdown {
@@ -6998,12 +7000,12 @@ body.drawer-open { overflow: hidden; }
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #FFFDF9;
+  color: #ffffff !important;
   justify-content: center;
 }
 .nav-cta--block:hover {
   background: var(--color-primary-hover);
-  color: #FFFDF9;
+  color: #ffffff !important;
 }
 
 /* =============================================================
@@ -7336,7 +7338,7 @@ body.drawer-open { overflow: hidden; }
   display: flex;
   align-items: center;
   width: 100%;
-  padding: 13px 4px 14px 35px;
+  padding: 12px 0 12px 35px;
   background: transparent;
   border: none;
   border-bottom: 1px solid var(--color-border);
