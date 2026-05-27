@@ -3000,6 +3000,499 @@
 }
 
 /* =====================================================
+   DEVELOPER DETAIL — Premium editorial layout
+   ===================================================== */
+
+/* --- Cinematic hero banner --- */
+.dev-hero {
+  position: relative;
+  width: 100%;
+  min-height: clamp(420px, 55vw, 680px);
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+  background: #1a1814;
+}
+
+.dev-hero-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center 30%;
+  background-image: url('hero-lifestyle.jpg');
+  transform: scale(1.04);
+  transition: transform 8s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.dev-hero:hover .dev-hero-bg {
+  transform: scale(1);
+}
+
+.dev-hero-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(26,24,20,0.08) 0%,
+    rgba(26,24,20,0.18) 40%,
+    rgba(26,24,20,0.72) 72%,
+    rgba(26,24,20,0.92) 100%
+  );
+  pointer-events: none;
+}
+
+.dev-hero-container {
+  position: relative;
+  z-index: 2;
+  padding-bottom: clamp(var(--space-10), 5vw, var(--space-16));
+  padding-top: var(--space-16);
+}
+
+.dev-hero-content {
+  max-width: 780px;
+}
+
+.dev-hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.dev-hero-badge {
+  display: inline-block;
+  font-family: var(--font-body);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(247,245,240,0.9);
+  border: 1px solid rgba(247,245,240,0.35);
+  padding: 4px 10px;
+  border-radius: 2px;
+}
+
+.dev-hero-name {
+  font-family: var(--font-display);
+  font-size: clamp(2.5rem, 5vw, 4.5rem);
+  font-weight: 300;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: #faf8f4;
+  margin: 0 0 var(--space-3);
+}
+
+.dev-hero-specialty {
+  font-family: var(--font-display);
+  font-size: clamp(1.1rem, 2vw, 1.5rem);
+  font-style: italic;
+  font-weight: 300;
+  color: rgba(247,245,240,0.72);
+  margin: 0 0 var(--space-5);
+  letter-spacing: 0.01em;
+}
+
+.dev-hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  font-family: var(--font-body);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(247,245,240,0.55);
+}
+
+.dev-hero-meta-dot {
+  color: rgba(247,245,240,0.3);
+}
+
+/* --- Body layout --- */
+.dev-body {
+  background: var(--color-bg);
+  padding-block: clamp(var(--space-12), 6vw, var(--space-20));
+}
+
+.dev-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "main"
+    "sidebar"
+    "portfolio";
+  gap: var(--space-10);
+}
+
+@media (min-width: 1024px) {
+  .dev-layout {
+    grid-template-columns: 65fr 35fr;
+    grid-template-areas:
+      "main    sidebar"
+      "portfolio sidebar";
+    gap: clamp(var(--space-10), 4vw, var(--space-16));
+    align-items: start;
+  }
+}
+
+.dev-main       { grid-area: main; }
+.dev-sidebar    { grid-area: sidebar; }
+.dev-portfolio-section { grid-area: portfolio; }
+
+@media (min-width: 1024px) {
+  .dev-sidebar {
+    position: sticky;
+    top: calc(var(--nav-height, 72px) + var(--space-6));
+    align-self: start;
+  }
+}
+
+/* --- Section titles --- */
+.dev-section-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.3rem, 2.2vw, 1.75rem);
+  font-weight: 300;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+  margin: 0 0 var(--space-5);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* --- Google rating row --- */
+.dev-rating-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-8);
+}
+
+.dev-rating-score {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+  line-height: 1;
+}
+
+.dev-rating-row .star-svg {
+  width: 15px;
+  height: 15px;
+  fill: #b8924a;
+}
+
+.dev-rating-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+
+/* --- About section --- */
+.dev-about {
+  margin-bottom: var(--space-10);
+}
+
+.dev-description {
+  font-size: var(--text-base);
+  line-height: 1.85;
+  color: var(--color-text-muted);
+}
+
+.dev-description p {
+  margin: 0 0 var(--space-4);
+}
+
+/* --- Focus area tags --- */
+.dev-focus-section {
+  margin-bottom: var(--space-10);
+}
+
+.dev-focus-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.dev-focus-tag {
+  display: inline-block;
+  font-family: var(--font-body);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text);
+  border: 1px solid rgba(26,24,20,0.25);
+  padding: 6px 14px;
+  border-radius: 2px;
+  transition: background 0.25s cubic-bezier(0.25, 1, 0.5, 1),
+              border-color 0.25s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.dev-focus-tag:hover {
+  background: rgba(26,24,20,0.05);
+  border-color: rgba(26,24,20,0.45);
+}
+
+/* --- Portfolio empty state --- */
+.dev-portfolio-empty {
+  padding: clamp(var(--space-8), 4vw, var(--space-12)) var(--space-8);
+  border: 1px solid var(--color-border);
+  text-align: center;
+}
+
+.dev-portfolio-empty-desc {
+  font-size: var(--text-base);
+  line-height: 1.75;
+  color: var(--color-text-muted);
+  max-width: 520px;
+  margin: 0 auto var(--space-6);
+}
+
+.dev-portfolio-cta-link {
+  display: inline-block;
+  font-family: var(--font-body);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text);
+  text-decoration: none;
+  border: 1px solid var(--color-text);
+  padding: 12px 28px;
+  border-radius: 2px;
+  transition: background 0.3s cubic-bezier(0.25, 1, 0.5, 1),
+              color 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.dev-portfolio-cta-link:hover {
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+/* --- Sticky contact card --- */
+.dev-contact-card {
+  background: var(--color-bg);
+  border: 1px solid rgba(26,24,20,0.06);
+  box-shadow:
+    0 2px 8px rgba(26,24,20,0.04),
+    0 12px 40px rgba(26,24,20,0.06);
+  padding: var(--space-7);
+}
+
+.dev-contact-card-title {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 300;
+  letter-spacing: 0.01em;
+  color: var(--color-text);
+  margin: 0 0 var(--space-5);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dev-contact-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.dev-contact-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.dev-contact-icon {
+  flex-shrink: 0;
+  color: var(--color-text-faint);
+}
+
+.dev-contact-link {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.dev-contact-link:hover {
+  color: var(--color-text);
+}
+
+/* --- Social icons (monochrome) --- */
+.dev-social-row {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.dev-social-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--color-text-faint);
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  text-decoration: none;
+  transition: color 0.2s ease,
+              border-color 0.2s ease;
+}
+
+.dev-social-link:hover {
+  color: var(--color-text);
+  border-color: var(--color-text);
+}
+
+.dev-social-link svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* --- Minimum investment --- */
+.dev-min-invest {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-5);
+}
+
+.dev-min-invest-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+
+.dev-min-invest-value {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 300;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+
+/* --- WhatsApp CTA button (deep charcoal, NOT green) --- */
+.dev-wa-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  background: var(--color-text);
+  color: var(--color-bg);
+  text-decoration: none;
+  padding: 14px var(--space-5);
+  border-radius: 2px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: var(--space-4);
+  transition: opacity 0.25s cubic-bezier(0.25, 1, 0.5, 1),
+              transform 0.25s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.dev-wa-btn:hover {
+  opacity: 0.85;
+  transform: translateY(-1px);
+}
+
+.dev-wa-btn svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* --- Favourites row --- */
+.dev-fav-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  justify-content: center;
+  padding-top: var(--space-3);
+}
+
+.dev-fav-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+
+/* --- Mobile adjustments --- */
+@media (max-width: 767px) {
+  .dev-hero {
+    min-height: clamp(320px, 70vw, 480px);
+  }
+
+  .dev-hero-name {
+    font-size: clamp(2rem, 8vw, 2.8rem);
+  }
+
+  .dev-contact-card {
+    padding: var(--space-6);
+  }
+
+  .dev-portfolio-empty {
+    padding: var(--space-8) var(--space-5);
+  }
+}
+
+/* Dark-mode overrides */
+@media (prefers-color-scheme: dark) {
+  .dev-hero-bg {
+    filter: brightness(0.85);
+  }
+
+  .dev-contact-card {
+    border-color: rgba(247,245,240,0.08);
+    box-shadow:
+      0 2px 8px rgba(0,0,0,0.12),
+      0 12px 40px rgba(0,0,0,0.2);
+  }
+
+  .dev-focus-tag {
+    border-color: rgba(247,245,240,0.2);
+  }
+
+  .dev-focus-tag:hover {
+    background: rgba(247,245,240,0.06);
+    border-color: rgba(247,245,240,0.4);
+  }
+
+  .dev-portfolio-empty {
+    border-color: rgba(247,245,240,0.08);
+  }
+
+  .dev-portfolio-cta-link {
+    border-color: rgba(247,245,240,0.6);
+  }
+
+  .dev-portfolio-cta-link:hover {
+    background: rgba(247,245,240,0.9);
+    color: var(--color-text);
+  }
+
+  .dev-social-link {
+    border-color: rgba(247,245,240,0.12);
+  }
+
+  .dev-social-link:hover {
+    border-color: rgba(247,245,240,0.5);
+  }
+}
+
+/* =====================================================
    HOW IT WORKS — Dark charcoal interstitial
    ===================================================== */
 

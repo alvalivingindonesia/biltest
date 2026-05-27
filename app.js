@@ -1524,71 +1524,111 @@ async function renderDeveloperDetail(el, slug) {
   if (!dev) { el.innerHTML = renderNotFound('Developer'); return; }
 
   const devProjects = dev.projects || [];
-
-  const devSpecialties = (dev.categories && dev.categories.length > 0) ? dev.categories.map(c => formatCategoryLabel(c.key || c)).join(', ') : 'Property Developer';
+  const devSpecialties = (dev.categories && dev.categories.length > 0)
+    ? dev.categories.map(c => formatCategoryLabel(c.key || c)).join(', ')
+    : 'Property Developer';
   const devHeroImg = dev.hero_image_url || '';
+
+  // Native inline Google rating \u2014 no boxed widget
+  const googleRating = dev.google_rating ? parseFloat(dev.google_rating) : null;
+  const reviewCount  = dev.google_review_count ? parseInt(dev.google_review_count) : 0;
+  const ratingHtml   = googleRating
+    ? '<div class="dev-rating-row">'
+        + '<span class="dev-rating-score">' + googleRating.toFixed(1) + '</span>'
+        + renderStars(googleRating)
+        + '<span class="dev-rating-label">(' + reviewCount.toLocaleString() + ' Google Reviews)</span>'
+      + '</div>'
+    : '';
+
+  // Focus tags: areas + custom tags combined
+  const focusTags = [
+    ...dev.areas_focus.map(a => formatAreaLabel(a)),
+    ...dev.tags
+  ].filter(Boolean);
+
+  // Portfolio: editorial empty state if no projects
+  const portfolioHtml = devProjects.length > 0
+    ? '<div class="card-grid card-grid--2col">' + devProjects.map((p, i) => renderProjectCard(p, i)).join('') + '</div>'
+    : '<div class="dev-portfolio-empty">'
+        + '<p class="dev-portfolio-empty-desc">Inquire directly to receive private off-market availability, upcoming phase releases, and masterplan documentation for ' + escHtml(dev.name) + '.</p>'
+        + (dev.whatsapp_number ? '<a href="https://wa.me/' + dev.whatsapp_number + '" target="_blank" rel="noopener noreferrer" class="dev-portfolio-cta-link">Request Masterplan Presentation</a>' : '')
+      + '</div>';
+
+  // Monochrome social links (no brand colours)
+  const socialHtml = (dev.instagram_url || dev.facebook_url || dev.linkedin_url)
+    ? '<div class="dev-social-row">'
+        + (dev.instagram_url ? '<a href="' + dev.instagram_url + '" target="_blank" rel="noopener noreferrer" class="dev-social-link" aria-label="Instagram">' + iconInstagram() + '</a>' : '')
+        + (dev.facebook_url  ? '<a href="' + dev.facebook_url  + '" target="_blank" rel="noopener noreferrer" class="dev-social-link" aria-label="Facebook">'  + iconFacebook()  + '</a>' : '')
+        + (dev.linkedin_url  ? '<a href="' + dev.linkedin_url  + '" target="_blank" rel="noopener noreferrer" class="dev-social-link" aria-label="LinkedIn">'  + iconLinkedIn()  + '</a>' : '')
+      + '</div>'
+    : '';
+
   el.innerHTML = `
     ${isAdmin() ? `<div class="admin-detail-bar"><span class="admin-detail-bar-label">Admin</span><button class="btn btn--primary btn--sm" onclick="adminDeveloperDetailEdit(${dev.id},'${slug}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit this listing</button></div>` : ''}
-    <div class="detail-hero">
-      ${devHeroImg ? '<div class="detail-hero-bg" style="background-image:url(\'' + devHeroImg + '\');"></div>' : ''}
-      <div class="container">
-        <div class="detail-hero-inner">
-          ${dev.logo_url ? '<img src="'+dev.logo_url+'" alt="'+dev.name+'" class="detail-hero-logo" onerror="this.style.display=\'none\'">' : (dev.profile_photo_url ? '<img src="'+dev.profile_photo_url+'" alt="'+dev.name+'" class="detail-hero-photo" onerror="this.style.display=\'none\'">' : '')}
-          <div class="detail-hero-info">
-            <div class="detail-hero-badges">
-              ${dev.is_featured ? '<span class="badge badge--light">\u2605 Featured</span>' : ''}
-              ${dev.badge ? '<span class="badge badge--light">' + renderBadge(dev.badge) + '</span>' : ''}
-              ${dev.project_types.map(t => '<span class="badge badge--light">'+formatProjectType(t)+'</span>').join('')}
-            </div>
-            <h1 class="detail-hero-name">${dev.name}</h1>
+
+    <!-- CINEMATIC HERO BANNER -->
+    <div class="dev-hero">
+      <div class="dev-hero-bg" ${devHeroImg ? 'style="background-image:url(\'' + devHeroImg + '\')"' : ''}></div>
+      <div class="dev-hero-gradient"></div>
+      <div class="container dev-hero-container">
+        <div class="dev-hero-content">
+          <div class="dev-hero-badges">
+            ${dev.is_featured ? '<span class="dev-hero-badge">\u2605 Featured</span>' : ''}
+            ${dev.badge ? '<span class="dev-hero-badge">' + renderBadge(dev.badge) + '</span>' : ''}
+            ${dev.project_types.map(t => '<span class="dev-hero-badge">' + formatProjectType(t) + '</span>').join('')}
+          </div>
+          <h1 class="dev-hero-name">${escHtml(dev.name)}</h1>
+          <p class="dev-hero-specialty">${escHtml(devSpecialties)}</p>
+          <div class="dev-hero-meta">
+            ${dev.areas_focus.map(a => '<span>' + formatAreaLabel(a) + '</span>').join('<span class="dev-hero-meta-dot">&nbsp;&middot;&nbsp;</span>')}
+            <span>${(dev.languages || 'Bahasa').split(/[,+]+/).map(function(s){return s.trim();}).filter(Boolean).join(' \u00b7 ')}</span>
           </div>
         </div>
       </div>
     </div>
-    <div class="section">
+
+    <!-- EDITORIAL BODY: 65 / 35 GRID -->
+    <div class="dev-body">
       <div class="container">
-        <div class="detail-subheading">
-          <p class="detail-subheading-specialty">${devSpecialties}</p>
-          <div class="detail-subheading-meta">
-            ${dev.areas_focus.map(a => '<span>'+iconMapPin()+' '+formatAreaLabel(a)+'</span>').join('')}
-            <span>${iconLang()} ${(dev.languages || 'Bahasa').split(/[,+]+/).map(function(s){return s.trim();}).filter(Boolean).join(' \u00b7 ')}</span>
-            ${dev.min_ticket_usd ? '<span>From '+formatUSD(dev.min_ticket_usd)+'</span>' : ''}
-          </div>
-        </div>
-        <div class="detail-layout">
-          <div class="detail-main">
-            <div class="detail-rating-row">
-              ${renderGoogleRating(dev.google_rating, dev.google_review_count, 'detail')}
-            </div>
-            <h2 class="detail-section-title">About</h2>
-            ${(dev.logo_url && dev.profile_photo_url) ? `<img src="${dev.profile_photo_url}" alt="${dev.name}" style="float:right;width:120px;height:120px;border-radius:var(--radius-md);object-fit:cover;margin:0 0 var(--space-4) var(--space-4);box-shadow:0 2px 8px rgba(0,0,0,.1);">` : ''}
-            <p class="detail-description">${dev.description_en}</p>
+        <div class="dev-layout">
 
-            <h2 class="detail-section-title">Focus Areas</h2>
-            <div class="detail-tags mb-6">
-              ${dev.areas_focus.map(a => `<span class="tag">${formatAreaLabel(a)}</span>`).join('')}
-              ${dev.tags.map(t => `<span class="tag">${t}</span>`).join('')}
+          <!-- LEFT COLUMN: Core content -->
+          <div class="dev-main">
+            ${ratingHtml}
+            <div class="dev-about">
+              <h2 class="dev-section-title">About</h2>
+              <div class="dev-description">${dev.description_en || ''}</div>
             </div>
-
-            <h2 class="detail-section-title" style="margin-bottom:var(--space-5);">Projects by ${dev.name}</h2>
-            ${devProjects.length > 0
-              ? `<div class="card-grid card-grid--2col">${devProjects.map((p, i) => renderProjectCard(p, i)).join('')}</div>`
-              : `<p class="text-muted">No active projects listed yet.</p>`
-            }
-          </div>
-          <div class="detail-sidebar">
-            <div class="detail-card">
-              <div class="detail-card-title">Contact</div>
-              <div class="info-list mb-4">
-                ${dev.phone ? `<div class="info-row"><span class="info-icon">${iconPhone()}</span><span class="info-value"><a href="tel:${dev.phone}">${dev.phone}</a></span></div>` : ''}
-                ${dev.website_url ? `<div class="info-row"><span class="info-icon">${iconGlobe()}</span><span class="info-value"><a href="${dev.website_url}" target="_blank" rel="noopener noreferrer">Website ${iconExternalLink()}</a></span></div>` : ''}
-                ${dev.google_maps_url ? `<div class="info-row"><span class="info-icon">${iconMapPin()}</span><span class="info-value"><a href="${dev.google_maps_url}" target="_blank" rel="noopener noreferrer">View on map ${iconExternalLink()}</a></span></div>` : ''}
+            <div class="dev-focus-section">
+              <h2 class="dev-section-title">Focus Areas</h2>
+              <div class="dev-focus-tags">
+                ${focusTags.map(t => '<span class="dev-focus-tag">' + escHtml(t) + '</span>').join('')}
               </div>
-              ${renderSocialLinks(dev)}
-              ${dev.whatsapp_number ? `<div style="margin-top:var(--space-4);"><a href="https://wa.me/${dev.whatsapp_number}" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--full">${iconWhatsApp()} WhatsApp</a></div>` : ''}
-              <div style="margin-top:var(--space-3);display:flex;align-items:center;justify-content:center;gap:var(--space-2);">${renderFavBtn('developer', dev.id)}<span style="font-size:var(--text-xs);color:var(--color-text-muted);">Save to favourites</span></div>
             </div>
           </div>
+
+          <!-- RIGHT COLUMN: Sticky contact card -->
+          <div class="dev-sidebar">
+            <div class="dev-contact-card">
+              <p class="dev-contact-card-title">Contact</p>
+              <div class="dev-contact-list">
+                ${dev.phone      ? '<div class="dev-contact-row"><svg class="dev-contact-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.47 8a19.79 19.79 0 01-3.07-8.67A2 2 0 012.38 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.29 6.29l1.28-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg><a href="tel:' + dev.phone + '" class="dev-contact-link">' + escHtml(dev.phone) + '</a></div>' : ''}
+                ${dev.website_url   ? '<div class="dev-contact-row"><svg class="dev-contact-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg><a href="' + dev.website_url + '" target="_blank" rel="noopener noreferrer" class="dev-contact-link">Website</a></div>' : ''}
+                ${dev.google_maps_url ? '<div class="dev-contact-row"><svg class="dev-contact-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg><a href="' + dev.google_maps_url + '" target="_blank" rel="noopener noreferrer" class="dev-contact-link">View on Map</a></div>' : ''}
+              </div>
+              ${socialHtml}
+              ${dev.min_ticket_usd ? '<div class="dev-min-invest"><span class="dev-min-invest-label">From</span><span class="dev-min-invest-value">' + formatUSD(dev.min_ticket_usd) + '</span></div>' : ''}
+              ${dev.whatsapp_number ? '<a href="https://wa.me/' + dev.whatsapp_number + '" target="_blank" rel="noopener noreferrer" class="dev-wa-btn">' + iconWhatsApp() + '<span>Inquire via WhatsApp</span></a>' : ''}
+              <div class="dev-fav-row">${renderFavBtn('developer', dev.id)}<span class="dev-fav-label">Save to favourites</span></div>
+            </div>
+          </div>
+
+          <!-- PORTFOLIO ROW: spans left column below main content -->
+          <div class="dev-portfolio-section">
+            <h2 class="dev-section-title">Current Portfolio &amp; Masterplan</h2>
+            ${portfolioHtml}
+          </div>
+
         </div>
       </div>
     </div>
