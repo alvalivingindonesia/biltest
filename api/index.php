@@ -890,9 +890,7 @@ function handle_search(): void {
                 p.area_key AS area, p.languages,
                 p.whatsapp_number, p.phone,
                 p.logo_url, p.profile_photo_url,
-                IF(p.is_trusted = 1, 1, 0) AS is_trusted,
-                IF(p.is_featured = 1, 1, 0) AS is_featured,
-                p.badge,
+                p.is_trusted, p.is_featured, p.badge,
                 a.label AS area_label,
                 (IF(p.is_featured = 1, 0.5, 0) + IF(p.is_trusted = 1, 0.3, 0)) AS score
          FROM providers p
@@ -985,7 +983,7 @@ function handle_search(): void {
                 l.listing_type_key, l.area_key AS area, a.label AS area_label,
                 l.certificate_type_key, l.location_detail,
                 l.source_url, l.source_site,
-                l.photo_urls, IF(l.is_featured = 1, 1, 0) AS is_featured,
+                l.photo_urls, l.is_featured,
                 lt.label AS listing_type_label,
                 lct.label AS certificate_type_label,
                 NULL AS google_rating, NULL AS google_review_count,
@@ -1015,6 +1013,16 @@ function handle_search(): void {
     // ---------------------------------------------------------------
     $guides = _search_guides($db, $q, $limit);
     $results = array_merge($results, $guides);
+
+    // PDO returns tinyint/bit columns as strings; cast boolean fields to int
+    // so JS truthiness checks ('0' is truthy) work correctly in the browser.
+    $bool_fields = ['is_trusted', 'is_featured', 'is_verified', 'is_active', 'is_approved'];
+    foreach ($results as &$r) {
+        foreach ($bool_fields as $f) {
+            if (array_key_exists($f, $r)) $r[$f] = (int)$r[$f];
+        }
+    }
+    unset($r);
 
     // Fire-and-forget telemetry — never blocks the response
     _search_log_query($db, $q, count($results));
