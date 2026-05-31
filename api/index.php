@@ -707,6 +707,162 @@ function handle_filters(): void {
  * user_id = NULL. Failures are silently ignored — telemetry never breaks
  * the response.
  */
+/**
+ * Parse a free-text query into structured tokens by matching against DB vocabulary.
+ * Tokens that match known areas, listing types, or provider categories are extracted
+ * as structured filters; remaining words become free-text for LIKE search.
+ *
+ * This lets "Land Kuta" → {listing_type_keys:['land'], area_keys:['kuta'], text:[]}
+ * and "notaris senggigi" → {category_keys:['notaris'], area_keys:['senggigi'], text:[]}
+ * work correctly even when listing content is in Indonesian.
+ */
+function _parse_search_tokens(PDO $db, string $q): array {
+    $raw_tokens = preg_split('/\s+/u', trim($q), -1, PREG_SPLIT_NO_EMPTY);
+
+    // Build area vocabulary: key → key, and label → key (case-insensitive)
+    $area_vocab = [];
+    foreach ($db->query("SELECT `key`, LOWER(label) AS lbl FROM areas")->fetchAll() as $r) {
+        $area_vocab[$r['key']] = $r['key'];
+        $area_vocab[$r['lbl']] = $r['key'];
+    }
+
+    // Build listing-type vocabulary + Indonesian synonyms
+    $type_vocab = ['tanah' => 'land', 'vila' => 'villa', 'rumah' => 'house', 'kavling' => 'land'];
+    try {
+        $lt_rows = $db->query("SELECT `key`, LOWER(label) AS lbl, LOWER(IFNULL(label_id,'')) AS lbl_id FROM listing_types")->fetchAll();
+    } catch (PDOException $e) {
+        $lt_rows = $db->query("SELECT `key`, LOWER(label) AS lbl, '' AS lbl_id FROM listing_types")->fetchAll();
+    }
+    foreach ($lt_rows as $r) {
+        $type_vocab[$r['key']] = $r['key'];
+        $type_vocab[$r['lbl']] = $r['key'];
+        if ($r['lbl_id'] !== '') $type_vocab[$r['lbl_id']] = $r['key'];
+    }
+
+    // Build category vocabulary: key → key, label → key
+    $cat_vocab = [];
+    foreach ($db->query("SELECT `key`, LOWER(label) AS lbl FROM categories")->fetchAll() as $r) {
+        $cat_vocab[$r['key']] = $r['key'];
+        $cat_vocab[$r['lbl']] = $r['key'];
+    }
+
+    $area_keys = [];
+    $type_keys = [];
+    $cat_keys  = [];
+    $text      = [];
+
+    foreach ($raw_tokens as $tok) {
+        $lower = mb_strtolower($tok, 'UTF-8');
+        if (isset($area_vocab[$lower])) {
+            $area_keys[] = $area_vocab[$lower];
+        } elseif (isset($type_vocab[$lower])) {
+            $type_keys[] = $type_vocab[$lower];
+        } elseif (isset($cat_vocab[$lower])) {
+            $cat_keys[] = $cat_vocab[$lower];
+        } else {
+            $text[] = $tok;
+        }
+    }
+
+    return [
+        'area_keys'         => array_values(array_unique($area_keys)),
+        'listing_type_keys' => array_values(array_unique($type_keys)),
+        'category_keys'     => array_values(array_unique($cat_keys)),
+        'text_tokens'       => $text,
+        'raw'               => $q,
+    ];
+}
+
+/** Build a LIKE/structured WHERE clause for listings and return [sql_fragment, params]. */
+function _listing_search_where(array $parsed): array {
+    $conds  = [];
+    $params = [];
+
+    if (!empty($parsed['area_keys'])) {
+        $ph = implode(',', array_fill(0, count($parsed['area_keys']), '?'));
+        $conds[]  = "l.area_key IN ($ph)";
+        $params   = array_merge($params, $parsed['area_keys']);
+    }
+    if (!empty($parsed['listing_type_keys'])) {
+        $ph = implode(',', array_fill(0, count($parsed['listing_type_keys']), '?'));
+        $conds[]  = "l.listing_type_key IN ($ph)";
+        $params   = array_merge($params, $parsed['listing_type_keys']);
+    }
+
+    $text_q = implode(' ', $parsed['text_tokens']);
+    if ($text_q !== '') {
+        $like     = '%' . $text_q . '%';
+        $conds[]  = "(l.title LIKE ? OR l.short_description LIKE ? OR l.description LIKE ?)";
+        $params[] = $like;
+        $params[] = $like;
+        $params[] = $like;
+    } elseif (empty($conds)) {
+        // No structured match at all — fall back to raw LIKE on full query
+        $like     = '%' . $parsed['raw'] . '%';
+        $conds[]  = "(l.title LIKE ? OR l.short_description LIKE ? OR l.description LIKE ?)";
+        $params[] = $like;
+        $params[] = $like;
+        $params[] = $like;
+    }
+
+    return [implode(' AND ', $conds), $params];
+}
+
+/** Build a LIKE/structured WHERE clause for providers and return [sql_fragment, params]. */
+function _provider_search_where(array $parsed): array {
+    $conds  = [];
+    $params = [];
+
+    if (!empty($parsed['area_keys'])) {
+        $ph = implode(',', array_fill(0, count($parsed['area_keys']), '?'));
+        $conds[]  = "p.area_key IN ($ph)";
+        $params   = array_merge($params, $parsed['area_keys']);
+    }
+
+    // Category match: from vocabulary OR LIKE on the raw query (handles multi-word cats)
+    $cat_cond_parts = [];
+    if (!empty($parsed['category_keys'])) {
+        $ph = implode(',', array_fill(0, count($parsed['category_keys']), '?'));
+        $cat_cond_parts[] = "pc.category_key IN ($ph)";
+        $params = array_merge($params, $parsed['category_keys']);
+    }
+    $text_q = implode(' ', $parsed['text_tokens']);
+    if ($text_q !== '') {
+        $like = '%' . $text_q . '%';
+        $cat_cond_parts[] = "c.`key` LIKE ?";
+        $cat_cond_parts[] = "c.label LIKE ?";
+        $params[] = $like;
+        $params[] = $like;
+    }
+    if (!empty($cat_cond_parts)) {
+        $conds[] = "EXISTS (
+            SELECT 1 FROM provider_categories pc
+            JOIN categories c ON c.`key` = pc.category_key
+            WHERE pc.provider_id = p.id AND (" . implode(' OR ', $cat_cond_parts) . ")
+        )";
+    }
+
+    // Free-text on name/description for remaining tokens
+    if ($text_q !== '') {
+        $like    = '%' . $text_q . '%';
+        $conds[] = "(p.name LIKE ? OR p.short_description LIKE ?)";
+        $params[] = $like;
+        $params[] = $like;
+    }
+
+    if (empty($conds)) {
+        // Fallback
+        $like     = '%' . $parsed['raw'] . '%';
+        $conds[]  = "(p.name LIKE ? OR p.short_description LIKE ? OR p.description LIKE ?)";
+        $params[] = $like;
+        $params[] = $like;
+        $params[] = $like;
+    }
+
+    // Multiple conds are OR'd (area OR category/text) so any match returns the provider
+    return ['(' . implode(' OR ', $conds) . ')', $params];
+}
+
 function handle_search(): void {
     $q = trim($_GET['q'] ?? '');
     if (strlen($q) < 2) json_error(400, 'Search query must be at least 2 characters');
@@ -716,11 +872,13 @@ function handle_search(): void {
     $default_limit = $is_palette ? 6 : 100;
     $limit = min(100, max(1, (int)($_GET['limit'] ?? $default_limit)));
 
+    $parsed  = _parse_search_tokens($db, $q);
     $results = [];
 
     // ---------------------------------------------------------------
-    // Providers — FULLTEXT + category/tag fallbacks, with trust boost
+    // Providers — structured category/area + LIKE text fallback
     // ---------------------------------------------------------------
+    list($p_where, $p_params) = _provider_search_where($parsed);
     $like = '%' . $q . '%';
     $stmt = $db->prepare(
         "SELECT 'provider' AS type,
@@ -731,36 +889,35 @@ function handle_search(): void {
                 p.logo_url, p.profile_photo_url,
                 p.is_trusted, p.is_featured, p.badge,
                 a.label AS area_label,
-                (MATCH(p.name, p.short_description, p.description) AGAINST(? IN BOOLEAN MODE)
-                 + IF(p.is_featured = 1, 0.5, 0)
-                 + IF(p.is_trusted = 1, 0.3, 0)) AS score
+                (IF(p.is_featured = 1, 0.5, 0) + IF(p.is_trusted = 1, 0.3, 0)) AS score
          FROM providers p
          LEFT JOIN areas a ON a.`key` = p.area_key
-         WHERE p.is_active = 1 AND (
-             MATCH(p.name, p.short_description, p.description) AGAINST(? IN BOOLEAN MODE)
-             OR EXISTS (
-                 SELECT 1 FROM provider_categories pc
-                 JOIN categories c ON c.`key` = pc.category_key
-                 WHERE pc.provider_id = p.id
-                   AND (c.`key` LIKE ? OR c.label LIKE ?)
-             )
-             OR EXISTS (
-                 SELECT 1 FROM provider_tags pt
-                 WHERE pt.provider_id = p.id AND pt.tag LIKE ?
-             )
-         )
-         ORDER BY score DESC
+         WHERE p.is_active = 1 AND $p_where
+         ORDER BY score DESC, p.name ASC
          LIMIT ?"
     );
-    $stmt->execute([$q, $q, $like, $like, $like, $limit]);
+    $stmt->execute(array_merge($p_params, [$limit]));
     $providers = $stmt->fetchAll();
     attach_tags($providers, 'provider_tags', 'provider_id');
     attach_categories($providers, 'provider_categories', 'provider_id');
     $results = array_merge($results, $providers);
 
     // ---------------------------------------------------------------
-    // Developers — FULLTEXT with featured boost
+    // Developers — LIKE with area filter
     // ---------------------------------------------------------------
+    $d_conds  = ['d.is_active = 1'];
+    $d_params = [];
+    if (!empty($parsed['area_keys'])) {
+        $ph = implode(',', array_fill(0, count($parsed['area_keys']), '?'));
+        $d_conds[]  = "EXISTS (SELECT 1 FROM developer_areas da WHERE da.developer_id = d.id AND da.area_key IN ($ph))";
+        $d_params   = array_merge($d_params, $parsed['area_keys']);
+    }
+    $dev_text = implode(' ', $parsed['text_tokens']) ?: $q;
+    $dev_like = '%' . $dev_text . '%';
+    $d_conds[]  = "(d.name LIKE ? OR d.short_description LIKE ? OR d.description LIKE ?)";
+    $d_params[] = $dev_like;
+    $d_params[] = $dev_like;
+    $d_params[] = $dev_like;
     $stmt = $db->prepare(
         "SELECT 'developer' AS type,
                 d.id, d.slug, d.name, d.short_description AS excerpt,
@@ -768,58 +925,66 @@ function handle_search(): void {
                 d.languages, d.logo_url, d.profile_photo_url,
                 d.whatsapp_number, d.phone,
                 d.is_featured, d.badge,
-                (MATCH(d.name, d.short_description, d.description) AGAINST(? IN BOOLEAN MODE)
-                 + IF(d.is_featured = 1, 0.5, 0)) AS score
+                IF(d.is_featured = 1, 0.5, 0) AS score
          FROM developers d
-         WHERE d.is_active = 1
-           AND MATCH(d.name, d.short_description, d.description) AGAINST(? IN BOOLEAN MODE)
-         ORDER BY score DESC
+         WHERE " . implode(' AND ', $d_conds) . "
+         ORDER BY score DESC, d.name ASC
          LIMIT ?"
     );
-    $stmt->execute([$q, $q, $limit]);
+    $stmt->execute(array_merge($d_params, [$limit]));
     $results = array_merge($results, $stmt->fetchAll());
 
     // ---------------------------------------------------------------
-    // Projects — FULLTEXT with featured boost
+    // Projects — LIKE with area filter
     // ---------------------------------------------------------------
+    $pr_conds  = ['p.is_active = 1'];
+    $pr_params = [];
+    if (!empty($parsed['area_keys'])) {
+        $ph = implode(',', array_fill(0, count($parsed['area_keys']), '?'));
+        $pr_conds[]  = "p.area_key IN ($ph)";
+        $pr_params   = array_merge($pr_params, $parsed['area_keys']);
+    }
+    $proj_text = implode(' ', $parsed['text_tokens']) ?: $q;
+    $proj_like = '%' . $proj_text . '%';
+    $pr_conds[]  = "(p.name LIKE ? OR p.short_description LIKE ? OR p.description LIKE ?)";
+    $pr_params[] = $proj_like;
+    $pr_params[] = $proj_like;
+    $pr_params[] = $proj_like;
     $stmt = $db->prepare(
         "SELECT 'project' AS type,
                 p.id, p.slug, p.name, p.short_description AS excerpt,
                 NULL AS google_rating, NULL AS google_review_count,
                 p.logo_url, p.logo_url AS profile_photo_url,
                 p.area_key AS area, a.label AS area_label,
-                (MATCH(p.name, p.short_description, p.description) AGAINST(? IN BOOLEAN MODE)
-                 + IF(p.is_featured = 1, 0.5, 0)) AS score
+                IF(p.is_featured = 1, 0.5, 0) AS score
          FROM projects p
          LEFT JOIN areas a ON a.`key` = p.area_key
-         WHERE p.is_active = 1
-           AND MATCH(p.name, p.short_description, p.description) AGAINST(? IN BOOLEAN MODE)
-         ORDER BY score DESC
+         WHERE " . implode(' AND ', $pr_conds) . "
+         ORDER BY score DESC, p.name ASC
          LIMIT ?"
     );
-    $stmt->execute([$q, $q, $limit]);
+    $stmt->execute(array_merge($pr_params, [$limit]));
     $results = array_merge($results, $stmt->fetchAll());
 
     // ---------------------------------------------------------------
-    // Listings — FULLTEXT with featured boost
+    // Listings — structured area/type + LIKE text fallback
     // ---------------------------------------------------------------
+    list($l_where, $l_params) = _listing_search_where($parsed);
     $stmt = $db->prepare(
         "SELECT 'listing' AS type,
                 l.id, l.slug, l.title AS name, l.short_description AS excerpt,
                 NULL AS google_rating, NULL AS google_review_count,
                 l.area_key AS area, a.label AS area_label,
                 l.is_featured,
-                (MATCH(l.title, l.short_description, l.description) AGAINST(? IN BOOLEAN MODE)
-                 + IF(l.is_featured = 1, 0.5, 0)) AS score
+                IF(l.is_featured = 1, 0.5, 0) AS score
          FROM listings l
          LEFT JOIN areas a ON a.`key` = l.area_key
          WHERE l.status = 'active' AND l.is_approved = 1
-           AND MATCH(l.title, l.short_description, l.description) AGAINST(? IN BOOLEAN MODE)
-         ORDER BY score DESC
+           AND $l_where
+         ORDER BY score DESC, l.created_at DESC
          LIMIT ?"
     );
-    $stmt->execute([$q, $q, $limit]);
-    $results = array_merge($results, $stmt->fetchAll());
+    $stmt->execute(array_merge($l_params, [$limit]));
 
     // ---------------------------------------------------------------
     // Agents — FULLTEXT with verified boost; LIKE fallback if no index
