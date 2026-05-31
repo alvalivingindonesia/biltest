@@ -808,59 +808,62 @@ function _listing_search_where(array $parsed): array {
     return [implode(' AND ', $conds), $params];
 }
 
-/** Build a LIKE/structured WHERE clause for providers and return [sql_fragment, params]. */
+/** Build a WHERE clause for providers. All structured tokens are AND-ed together.
+ *  "notaris mataram" → category=notaris AND area=mataram (not OR).
+ *  Falls back to broad LIKE when nothing matches the vocabulary. */
 function _provider_search_where(array $parsed): array {
     $conds  = [];
     $params = [];
 
+    // Area — AND: provider must be in this area
     if (!empty($parsed['area_keys'])) {
         $ph = implode(',', array_fill(0, count($parsed['area_keys']), '?'));
         $conds[]  = "p.area_key IN ($ph)";
         $params   = array_merge($params, $parsed['area_keys']);
     }
 
-    // Category match: from vocabulary OR LIKE on the raw query (handles multi-word cats)
-    $cat_cond_parts = [];
+    // Category — AND: provider must have this category
     if (!empty($parsed['category_keys'])) {
         $ph = implode(',', array_fill(0, count($parsed['category_keys']), '?'));
-        $cat_cond_parts[] = "pc.category_key IN ($ph)";
-        $params = array_merge($params, $parsed['category_keys']);
-    }
-    $text_q = implode(' ', $parsed['text_tokens']);
-    if ($text_q !== '') {
-        $like = '%' . $text_q . '%';
-        $cat_cond_parts[] = "c.`key` LIKE ?";
-        $cat_cond_parts[] = "c.label LIKE ?";
-        $params[] = $like;
-        $params[] = $like;
-    }
-    if (!empty($cat_cond_parts)) {
         $conds[] = "EXISTS (
             SELECT 1 FROM provider_categories pc
-            JOIN categories c ON c.`key` = pc.category_key
-            WHERE pc.provider_id = p.id AND (" . implode(' OR ', $cat_cond_parts) . ")
+            WHERE pc.provider_id = p.id AND pc.category_key IN ($ph)
         )";
+        $params = array_merge($params, $parsed['category_keys']);
     }
 
-    // Free-text on name/description for remaining tokens
+    // Free text — AND: remaining unrecognised words must appear in name or description
+    $text_q = implode(' ', $parsed['text_tokens']);
     if ($text_q !== '') {
-        $like    = '%' . $text_q . '%';
-        $conds[] = "(p.name LIKE ? OR p.short_description LIKE ?)";
-        $params[] = $like;
-        $params[] = $like;
-    }
-
-    if (empty($conds)) {
-        // Fallback
-        $like     = '%' . $parsed['raw'] . '%';
+        $like     = '%' . $text_q . '%';
         $conds[]  = "(p.name LIKE ? OR p.short_description LIKE ? OR p.description LIKE ?)";
         $params[] = $like;
         $params[] = $like;
         $params[] = $like;
     }
 
-    // Multiple conds are OR'd (area OR category/text) so any match returns the provider
-    return ['(' . implode(' OR ', $conds) . ')', $params];
+    // Nothing matched vocabulary — broad LIKE + tag/category LIKE fallback
+    if (empty($conds)) {
+        $like     = '%' . $parsed['raw'] . '%';
+        $conds[]  = "(p.name LIKE ? OR p.short_description LIKE ? OR p.description LIKE ?
+                      OR EXISTS (
+                          SELECT 1 FROM provider_categories pc
+                          JOIN categories c ON c.`key` = pc.category_key
+                          WHERE pc.provider_id = p.id AND (c.`key` LIKE ? OR c.label LIKE ?)
+                      )
+                      OR EXISTS (
+                          SELECT 1 FROM provider_tags pt
+                          WHERE pt.provider_id = p.id AND pt.tag LIKE ?
+                      ))";
+        $params[] = $like;
+        $params[] = $like;
+        $params[] = $like;
+        $params[] = $like;
+        $params[] = $like;
+        $params[] = $like;
+    }
+
+    return [implode(' AND ', $conds), $params];
 }
 
 function handle_search(): void {
