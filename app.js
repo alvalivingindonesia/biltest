@@ -6406,7 +6406,7 @@ async function renderSearch(el, params = {}) {
 
     try {
       // Full results (no palette cap) for the /search page
-      var res = await fetch('/api/index.php?action=search&q=' + encodeURIComponent(q));
+      var res = await fetch('/api/search?q=' + encodeURIComponent(q));
       var data = await res.json();
       allResults = (data && data.data) || [];
       applyAndRender(q);
@@ -7572,7 +7572,7 @@ var CommandPalette = (function() {
 
     renderLoading(q);
 
-    var url  = '/api/index.php?action=search&palette=1&q=' + encodeURIComponent(q);
+    var url  = '/api/search?palette=1&q=' + encodeURIComponent(q);
     var opts = abortCtl ? { signal: abortCtl.signal } : {};
 
     fetch(url, opts)
