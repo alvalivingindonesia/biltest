@@ -23,6 +23,7 @@ window.I18N_ID = {
   'nav.professionals': 'Profesional',
   'nav.professional_services': 'Jasa Profesional',
   'nav.professional_services_desc': 'Arsitek, insinyur, pengacara',
+  'nav.suppliers_menu': 'Pemasok',
   'nav.suppliers': 'Pemasok & Bahan',
   'nav.suppliers_desc': 'Pemasok bahan lokal',
   'nav.cta.list_business': 'Daftarkan Bisnis Anda',

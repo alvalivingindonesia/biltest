@@ -26,6 +26,7 @@ window.I18N_EN = {
   'nav.professionals': 'Professionals',
   'nav.professional_services': 'Professional Services',
   'nav.professional_services_desc': 'Architects, engineers, lawyers',
+  'nav.suppliers_menu': 'Suppliers',
   'nav.suppliers': 'Suppliers & Materials',
   'nav.suppliers_desc': 'Local material suppliers',
   'nav.cta.list_business': 'List Your Business',
