@@ -985,6 +985,7 @@ function handle_search(): void {
          LIMIT ?"
     );
     $stmt->execute(array_merge($l_params, [$limit]));
+    $results = array_merge($results, $stmt->fetchAll());
 
     // ---------------------------------------------------------------
     // Agents — FULLTEXT with verified boost; LIKE fallback if no index
