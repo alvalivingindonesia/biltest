@@ -6188,6 +6188,11 @@ async function renderSearch(el, params = {}) {
 
   function renderSearchCard(item, index) {
     if (item.type === 'guide') return renderGuideCard(item, index);
+    if (item.type === 'listing') {
+      // Normalise: search returns title as `name`; renderListingCard expects `title`
+      if (!item.title && item.name) item.title = item.name;
+      return renderListingCard(item, index);
+    }
 
     var typeMap = {
       provider:  { label: 'Provider',  nav: 'provider/'  + item.slug },

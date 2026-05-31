@@ -972,20 +972,32 @@ function handle_search(): void {
     list($l_where, $l_params) = _listing_search_where($parsed);
     $stmt = $db->prepare(
         "SELECT 'listing' AS type,
-                l.id, l.slug, l.title AS name, l.short_description AS excerpt,
+                l.id, l.slug, l.title AS name, l.title,
+                l.short_description AS excerpt,
+                l.price_usd, l.price_idr, l.price_eur, l.price_aud, l.price_label,
+                l.land_size_sqm, l.land_size_are, l.building_size_sqm,
+                l.bedrooms, l.bathrooms,
+                l.listing_type_key, l.area_key AS area, a.label AS area_label,
+                l.certificate_type_key, l.location_detail,
+                l.source_url, l.source_site,
+                l.photo_urls, l.is_featured,
+                lt.label AS listing_type_label,
+                lct.label AS certificate_type_label,
                 NULL AS google_rating, NULL AS google_review_count,
-                l.area_key AS area, a.label AS area_label,
-                l.is_featured,
                 IF(l.is_featured = 1, 0.5, 0) AS score
          FROM listings l
          LEFT JOIN areas a ON a.`key` = l.area_key
+         LEFT JOIN listing_types lt ON lt.`key` = l.listing_type_key
+         LEFT JOIN land_certificate_types lct ON lct.`key` = l.certificate_type_key
          WHERE l.status = 'active' AND l.is_approved = 1
            AND $l_where
          ORDER BY score DESC, l.created_at DESC
          LIMIT ?"
     );
     $stmt->execute(array_merge($l_params, [$limit]));
-    $results = array_merge($results, $stmt->fetchAll());
+    $listings_found = $stmt->fetchAll();
+    attach_listing_primary_image($listings_found);
+    $results = array_merge($results, $listings_found);
 
     // ---------------------------------------------------------------
     // Agents — FULLTEXT with verified boost; LIKE fallback if no index
