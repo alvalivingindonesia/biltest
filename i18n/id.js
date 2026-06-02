@@ -39,6 +39,9 @@ window.I18N_ID = {
   'nav.search_placeholder': 'Cari penyedia, proyek…',
   'nav.change_language_aria': 'Ubah bahasa',
 
+  // Command palette / search section labels
+  'palette.section.provider': 'Vendor',
+
   // Footer
   'footer.brand_desc': 'Direktori yang menghubungkan investor dan pembangun asing dengan kontraktor, arsitek, insinyur, pengembang, dan proyek investasi tepercaya di Lombok, Indonesia.',
   'footer.whatsapp': 'WhatsApp',

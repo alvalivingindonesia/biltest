@@ -6284,7 +6284,7 @@ async function renderSearch(el, params = {}) {
   var SEARCH_TYPES = [
     { key: '',          label: 'All' },
     { key: 'listing',   label: 'Properties' },
-    { key: 'provider',  label: 'Services' },
+    { key: 'provider',  label: 'Vendors' },
     { key: 'agent',     label: 'Agents' },
     { key: 'developer', label: 'Developers' },
     { key: 'project',   label: 'Projects' },
@@ -6294,7 +6294,7 @@ async function renderSearch(el, params = {}) {
   function sectionLabelFor(typeKey) {
     var labels = {
       listing:   'Properties',
-      provider:  'Services',
+      provider:  'Vendors',
       agent:     'Agents',
       developer: 'Developers',
       project:   'Projects',
@@ -7185,7 +7185,7 @@ var CommandPalette = (function() {
   // Section configuration — top-down order matches Q6 spec
   var SECTIONS = [
     { type: 'listing',   label: 'Properties',   labelSing: 'Property',  route: function(it){ return 'listing/'  + it.slug; }, viewAll: 'listing'   },
-    { type: 'provider',  label: 'Services',     labelSing: 'Service',   route: function(it){ return 'provider/' + it.slug; }, viewAll: 'provider'  },
+    { type: 'provider',  label: 'Vendors',      labelSing: 'Vendor',    route: function(it){ return 'provider/' + it.slug; }, viewAll: 'provider'  },
     { type: 'agent',     label: 'Agents',       labelSing: 'Agent',     route: function(it){ return 'agent/'    + it.slug; }, viewAll: 'agent'     },
     { type: 'developer', label: 'Developers',   labelSing: 'Developer', route: function(it){ return 'developer/'+ it.slug; }, viewAll: 'developer' },
     { type: 'project',   label: 'Projects',     labelSing: 'Project',   route: function(it){ return 'project/'  + it.slug; }, viewAll: 'project'   },

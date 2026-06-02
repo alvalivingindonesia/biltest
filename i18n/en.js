@@ -42,6 +42,9 @@ window.I18N_EN = {
   'nav.search_placeholder': 'Search providers, projects…',
   'nav.change_language_aria': 'Change language',
 
+  // Command palette / search section labels
+  'palette.section.provider': 'Vendors',
+
   // Footer
   'footer.brand_desc': 'A directory connecting foreign investors and builders with trusted local contractors, architects, engineers, developers, and investment projects across Lombok, Indonesia.',
   'footer.whatsapp': 'WhatsApp',
