@@ -62,10 +62,10 @@
           </ul>
         </li>
 
-        <!-- Services dropdown -->
+        <!-- Vendors dropdown -->
         <li class="nav-dropdown" id="nav-dd-builders">
           <button class="nav-dropdown-toggle" aria-haspopup="true" aria-expanded="false">
-            <span data-i18n="nav.builders">Services</span>
+            <span data-i18n="nav.builders">Vendors</span>
             <svg class="nav-dd-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
           <ul class="nav-dropdown-menu" role="menu">
@@ -77,16 +77,6 @@
               <svg class="nav-dd-mini-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
               <span class="nav-dd-label" data-i18n="nav.professional_services">Professional Services</span>
             </a></li>
-          </ul>
-        </li>
-
-        <!-- Suppliers dropdown -->
-        <li class="nav-dropdown" id="nav-dd-suppliers">
-          <button class="nav-dropdown-toggle" aria-haspopup="true" aria-expanded="false">
-            <span data-i18n="nav.suppliers_menu">Suppliers</span>
-            <svg class="nav-dd-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
-          </button>
-          <ul class="nav-dropdown-menu" role="menu">
             <li><a href="#directory?group=suppliers_materials" onclick="navigate('directory?group=suppliers_materials');return false;" role="menuitem">
               <svg class="nav-dd-mini-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
               <span class="nav-dd-label" data-i18n="nav.suppliers">Suppliers &amp; Materials</span>
@@ -181,31 +171,21 @@
       </div>
     </div>
 
-    <!-- Services group -->
+    <!-- Vendors group -->
     <div class="mobile-nav-group">
       <button class="mobile-nav-group-toggle" onclick="this.parentElement.classList.toggle('open')" aria-expanded="false">
-        <span class="mobile-nav-label"><span class="nav-num">03</span><span data-i18n="nav.builders">Services</span></span>
+        <span class="mobile-nav-label"><span class="nav-num">03</span><span data-i18n="nav.builders">Vendors</span></span>
         <svg class="mobile-nav-group-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <div class="mobile-nav-group-items">
         <a href="#directory?group=builders_trades" onclick="navigate('directory?group=builders_trades');return false;" data-i18n="nav.builders_trades">Builders &amp; Trades</a>
         <a href="#directory?group=professional_services" onclick="navigate('directory?group=professional_services');return false;" data-i18n="nav.professional_services">Professional Services</a>
-      </div>
-    </div>
-
-    <!-- Suppliers group -->
-    <div class="mobile-nav-group">
-      <button class="mobile-nav-group-toggle" onclick="this.parentElement.classList.toggle('open')" aria-expanded="false">
-        <span class="mobile-nav-label"><span class="nav-num">04</span><span data-i18n="nav.suppliers_menu">Suppliers</span></span>
-        <svg class="mobile-nav-group-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
-      </button>
-      <div class="mobile-nav-group-items">
         <a href="#directory?group=suppliers_materials" onclick="navigate('directory?group=suppliers_materials');return false;" data-i18n="nav.suppliers">Suppliers &amp; Materials</a>
       </div>
     </div>
 
-    <a href="#guides" onclick="navigate('guides');return false;"><span class="nav-num">05</span><span data-i18n="nav.guides">Guides</span></a>
-    <a href="#about" onclick="navigate('about');return false;"><span class="nav-num">06</span><span data-i18n="nav.about">About</span></a>
+    <a href="#guides" onclick="navigate('guides');return false;"><span class="nav-num">04</span><span data-i18n="nav.guides">Guides</span></a>
+    <a href="#about" onclick="navigate('about');return false;"><span class="nav-num">05</span><span data-i18n="nav.about">About</span></a>
 
     <!-- Primary CTA inside the drawer -->
     <div style="padding: var(--space-8) var(--space-2) var(--space-3); text-align: center;">

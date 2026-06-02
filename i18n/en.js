@@ -20,7 +20,7 @@ window.I18N_EN = {
   'nav.find_property.agents': 'Agents',
   'nav.find_property.agents_desc': 'Find a local property agent',
   'nav.developments': 'Developments',
-  'nav.builders': 'Services',
+  'nav.builders': 'Vendors',
   'nav.builders_trades': 'Builders & Trades',
   'nav.builders_trades_desc': 'Contractors, carpenters, electricians',
   'nav.professionals': 'Professionals',

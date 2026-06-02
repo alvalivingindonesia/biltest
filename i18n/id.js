@@ -17,7 +17,7 @@ window.I18N_ID = {
   'nav.find_property.agents': 'Agen',
   'nav.find_property.agents_desc': 'Temukan agen properti lokal',
   'nav.developments': 'Pengembangan',
-  'nav.builders': 'Layanan',
+  'nav.builders': 'Vendor',
   'nav.builders_trades': 'Tukang & Pengrajin',
   'nav.builders_trades_desc': 'Kontraktor, tukang kayu, tukang listrik',
   'nav.professionals': 'Profesional',
