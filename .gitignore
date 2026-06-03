@@ -2,3 +2,4 @@
 /input data/
 /config/
 deploy.bat
+agent/config.json

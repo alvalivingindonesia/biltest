@@ -667,6 +667,8 @@ async function router() {
     case 'rab-project': await renderRABProjectDetail(view, segments[1]); break;
     case 'rab-editor': await renderRABEditor(view, segments[1]); break;
     case 'get-quotes': await renderGetQuotes(view, params); break;
+    case 'quotes': await renderQuotesDashboard(view); break;
+    case 'quote': await renderQuoteDetail(view, segments[1]); break;
     case 'search': await renderSearch(view, params); break;
     case 'list-your-business': await renderListYourBusiness(view); break;
     default: await renderHome(view);
@@ -3807,6 +3809,7 @@ const UserAuth = (() => {
           <button class="user-dropdown-item" onclick="navigate('account');document.getElementById('user-dropdown').classList.remove('open');">My Account</button>
           <button class="user-dropdown-item" onclick="navigate('account?tab=favorites');document.getElementById('user-dropdown').classList.remove('open');">My Favorites</button>
           <button class="user-dropdown-item" onclick="navigate('account?tab=quotes');document.getElementById('user-dropdown').classList.remove('open');">My Quotes</button>
+          <button class="user-dropdown-item" onclick="navigate('quotes');document.getElementById('user-dropdown').classList.remove('open');">My Quote Requests</button>
           <button class="user-dropdown-item" onclick="navigate('submit-listing');document.getElementById('user-dropdown').classList.remove('open');">Submit a Listing</button>
           <button class="user-dropdown-item" onclick="navigate('create-listing');document.getElementById('user-dropdown').classList.remove('open');">Post a Property</button>
           <button class="user-dropdown-item user-dropdown-item--danger" onclick="UserAuth.logout()">Log Out</button>
@@ -6499,6 +6502,185 @@ async function renderSearch(el, params = {}) {
 }
 
 // =====================================================
+// QUOTE ENGINE (automated) — API + dashboard + detail
+// =====================================================
+
+async function qApi(action, opts) {
+  opts = opts || {};
+  var url = '/api/quotes.php?action=' + action;
+  if (opts.params) { for (var k in opts.params) { url += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(opts.params[k]); } }
+  var init = { credentials: 'include' };
+  if (opts.body) { init.method = 'POST'; init.headers = { 'Content-Type': 'application/json' }; init.body = JSON.stringify(opts.body); }
+  var res = await fetch(url, init);
+  var json = {};
+  try { json = await res.json(); } catch (e) {}
+  if (!res.ok) {
+    var err = new Error(json.error || ('HTTP ' + res.status));
+    err.status = res.status; err.data = json;
+    err.upgrade = (json.error === 'upgrade_required');
+    err.required_tier = json.required_tier;
+    throw err;
+  }
+  return json;
+}
+
+// Benefit-selling upgrade prompt (freemium rule #4 — never a raw error).
+function showQuoteUpgrade(tier) {
+  tier = tier || 'basic';
+  var tierName = tier.charAt(0).toUpperCase() + tier.slice(1);
+  var old = document.getElementById('q-upsell'); if (old) old.remove();
+  var ov = document.createElement('div');
+  ov.id = 'q-upsell';
+  ov.className = 'q-upsell-overlay';
+  ov.innerHTML =
+    '<div class="q-upsell-card">'
+    + '<button class="q-upsell-close" aria-label="Close" onclick="document.getElementById(\'q-upsell\').remove()">&times;</button>'
+    + '<h3 class="q-upsell-title">Let us chase the quotes for you</h3>'
+    + '<p class="q-upsell-desc">Auto-Quote messages every supplier you pick, translates their replies in real time, '
+    + 'and lays every price out side-by-side so you can choose in seconds &mdash; no more juggling WhatsApp chats.</p>'
+    + '<ul class="q-upsell-list">'
+    + '<li>Automatic WhatsApp outreach to all your picks</li>'
+    + '<li>Messy Bahasa replies translated &amp; structured for you</li>'
+    + '<li>A live price-comparison dashboard</li>'
+    + '</ul>'
+    + '<p class="q-upsell-note">Included with <strong>' + tierName + '</strong>.</p>'
+    + '<div class="q-upsell-actions">'
+    + '<button class="btn btn--primary" onclick="navigate(\'account?tab=subscription\');document.getElementById(\'q-upsell\').remove()">Upgrade to ' + tierName + '</button>'
+    + '<button class="btn btn--ghost" onclick="document.getElementById(\'q-upsell\').remove()">Keep sending manually</button>'
+    + '</div>'
+    + '<p class="q-upsell-foot">Or keep using the free manual WhatsApp buttons &mdash; they always work.</p>'
+    + '</div>';
+  document.body.appendChild(ov);
+  ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
+}
+
+async function renderQuotesDashboard(el) {
+  el.innerHTML = '<div class="section"><div class="container"><div class="page-loading"><div class="page-loading-spinner"></div></div></div></div>';
+  var res;
+  try { res = await qApi('my_requests'); }
+  catch (e) {
+    if (e.status === 401) showAuthModal('login');
+    el.innerHTML = '<div class="section"><div class="container"><div class="empty-state">'
+      + '<h3 class="empty-state-title">Sign in to see your quote requests</h3>'
+      + '<button class="btn btn--primary" onclick="navigate(\'get-quotes\')">Start a quote request</button></div></div></div>';
+    return;
+  }
+  var rows = res.data || [];
+  var list;
+  if (!rows.length) {
+    list = '<div class="empty-state"><h3 class="empty-state-title">No quote requests yet</h3>'
+      + '<p class="empty-state-desc">Pick some suppliers and let us gather the prices for you.</p>'
+      + '<button class="btn btn--primary" onclick="navigate(\'get-quotes\')">New quote request</button></div>';
+  } else {
+    list = '<div class="qd-list">' + rows.map(function (r) {
+      var statusCls = r.status === 'open' ? 'qd-pill--open' : 'qd-pill--closed';
+      return '<a class="qd-card" href="#quote/' + r.id + '" onclick="navigate(\'quote/' + r.id + '\');return false;">'
+        + '<div class="qd-card-main">'
+        + '<div class="qd-card-title">' + escHtml(r.first_item || 'Quote request') + (r.item_count > 1 ? ' <span class="qd-muted">+' + (r.item_count - 1) + ' more</span>' : '') + '</div>'
+        + '<div class="qd-card-meta">' + r.vendor_count + ' vendor' + (r.vendor_count != 1 ? 's' : '') + ' &middot; ' + r.replied_count + ' replied'
+        + (r.attention_count > 0 ? ' &middot; <span class="qd-attn">' + r.attention_count + ' need attention</span>' : '') + '</div>'
+        + '</div>'
+        + '<span class="qd-pill ' + statusCls + '">' + escHtml(r.status) + '</span></a>';
+    }).join('') + '</div>';
+  }
+  el.innerHTML = '<div class="dir-hero"><div class="container"><h1 class="dir-hero-title">My Quote Requests</h1>'
+    + '<p class="dir-hero-desc">Track the prices coming back from your suppliers.</p></div></div>'
+    + '<div class="section"><div class="container">'
+    + '<div style="margin-bottom:var(--space-5)"><button class="btn btn--primary" onclick="navigate(\'get-quotes\')">+ New quote request</button></div>'
+    + list + '</div></div>';
+}
+
+var _quotePollToken = 0;
+async function renderQuoteDetail(el, id) {
+  id = parseInt(id, 10);
+  var token = ++_quotePollToken;
+  el.innerHTML = '<div class="section"><div class="container"><div class="page-loading"><div class="page-loading-spinner"></div></div></div></div>';
+
+  function priceCell(cell) {
+    if (!cell) return '<span class="qd-muted">&mdash;</span>';
+    var cur = (cell.currency && cell.currency !== 'IDR') ? (escHtml(cell.currency) + ' ' + escHtml(cell.unit_price)) : formatIDR(cell.unit_price);
+    var u = cell.unit ? ' <span class="qd-unit">/ ' + escHtml(cell.unit) + '</span>' : '';
+    var d = cell.price_includes_delivery == 1 ? ' <span class="qd-incl">incl. delivery</span>' : '';
+    return '<span class="qd-price">' + cur + '</span>' + u + d;
+  }
+  function stateBadge(c) {
+    var label = c.state, cls = 'qd-st';
+    if (c.admin_intervention == 1 || c.state === 'needs_admin') { label = 'needs attention'; cls += ' qd-st--attn'; }
+    else if (c.state === 'info_received') { label = 'replied'; cls += ' qd-st--ok'; }
+    else if (c.state === 'awaiting_reply') { label = 'awaiting reply'; cls += ' qd-st--wait'; }
+    else if (c.state === 'queued') { label = 'sending…'; cls += ' qd-st--wait'; }
+    else { cls += ' qd-st--done'; }
+    return '<span class="' + cls + '">' + escHtml(label) + '</span>';
+  }
+  function paint(res) {
+    var items = res.items || [], chats = res.chats || [], matrix = res.matrix || {};
+    var head = '<th class="qd-corner">Item</th>' + chats.map(function (c) {
+      return '<th><a href="#provider/' + escHtml(c.provider_slug) + '" onclick="navigate(\'provider/' + escHtml(c.provider_slug) + '\');return false;">' + escHtml(c.provider_name) + '</a>'
+        + '<div class="qd-th-meta">' + stateBadge(c) + (c.stock_status && c.stock_status !== 'unknown' ? ' &middot; ' + escHtml(c.stock_status.replace('_', ' ')) : '') + '</div></th>';
+    }).join('');
+    var body = items.map(function (it) {
+      var cells = chats.map(function (c) {
+        var cell = (matrix[it.id] && matrix[it.id][c.id]) ? matrix[it.id][c.id] : null;
+        return '<td>' + priceCell(cell) + '</td>';
+      }).join('');
+      var label = escHtml(it.material) + (it.quantity ? ' <span class="qd-muted">(' + escHtml(it.quantity) + ')</span>' : '');
+      return '<tr><th class="qd-row-h">' + label + '</th>' + cells + '</tr>';
+    }).join('');
+    var matrixHtml = chats.length
+      ? '<div class="qd-matrix-wrap"><table class="qd-matrix"><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div>'
+      : '<p class="qd-muted">No vendors on this request.</p>';
+
+    var threads = chats.map(function (c) {
+      var msgs = (c.messages || []).map(function (m) {
+        var who = m.direction === 'inbound' ? 'in' : 'out';
+        var sub = (m.direction === 'inbound' && m.body_translated_en) ? '<div class="qd-msg-tr">' + escHtml(m.body_translated_en) + '</div>' : '';
+        var tag = m.sender_kind === 'agent_auto' ? '<span class="qd-auto">auto</span>' : '';
+        return '<div class="qd-msg qd-msg--' + who + '">' + tag + '<div class="qd-msg-raw">' + escHtml(m.body_raw || '') + '</div>' + sub + '</div>';
+      }).join('');
+      return '<details class="qd-thread"><summary>' + escHtml(c.provider_name) + ' ' + stateBadge(c) + '</summary>'
+        + '<div class="qd-msgs">' + (msgs || '<p class="qd-muted">No messages yet.</p>') + '</div></details>';
+    }).join('');
+
+    var statusLine = res.request.status === 'open'
+      ? '<span class="qd-live">&#9679; live</span> updating automatically'
+      : 'Request ' + escHtml(res.request.status);
+
+    el.innerHTML = '<div class="dir-hero"><div class="container">'
+      + '<a class="qd-back" href="#quotes" onclick="navigate(\'quotes\');return false;">&larr; My requests</a>'
+      + '<h1 class="dir-hero-title">Quote comparison</h1>'
+      + '<p class="dir-hero-desc">' + statusLine + '</p></div></div>'
+      + '<div class="section"><div class="container">'
+      + matrixHtml
+      + '<h2 class="qd-h2">Conversations</h2>' + threads
+      + (res.request.status === 'open' ? '<div style="margin-top:var(--space-6)"><button class="btn btn--ghost btn--sm" onclick="qCloseRequest(' + id + ')">Close this request</button></div>' : '')
+      + '</div></div>';
+  }
+  async function load(firstRender) {
+    var res;
+    try { res = await qApi('request_detail', { params: { id: id } }); }
+    catch (e) {
+      if (firstRender) {
+        if (e.status === 401) showAuthModal('login');
+        el.innerHTML = '<div class="section"><div class="container"><div class="empty-state">'
+          + '<h3 class="empty-state-title">Couldn\'t load this request</h3>'
+          + '<button class="btn btn--secondary" onclick="navigate(\'quotes\')">Back to my requests</button></div></div></div>';
+      }
+      return;
+    }
+    if (token !== _quotePollToken || currentRoute.page !== 'quote') return; // navigated away
+    paint(res);
+    if (res.request.status === 'open') {
+      setTimeout(function () { if (token === _quotePollToken && currentRoute.page === 'quote') load(false); }, 7000);
+    }
+  }
+  window.qCloseRequest = async function (rid) {
+    if (!confirm('Close this request? Vendors will no longer be tracked.')) return;
+    try { await qApi('close_request', { body: { id: rid } }); load(false); } catch (e) { alert(e.message); }
+  };
+  load(true);
+}
+
+// =====================================================
 // RENDER: GET QUOTES
 // =====================================================
 
@@ -6508,6 +6690,7 @@ async function renderGetQuotes(el, params = {}) {
   let quoteItems = [{ id: 1, material: '', quantity: '', info: '' }];
   let nextId = 2;
   const contactedStores = new Set(JSON.parse(localStorage.getItem('gq_contacted') || '[]'));
+  const selectedAuto = new Set(); // provider ids ticked for Auto-Quote
   let useBahasa = false;
   let delivery = { enabled: false, location: '', mapsLink: '' };
 
@@ -6621,6 +6804,7 @@ async function renderGetQuotes(el, params = {}) {
       const thumb = b.logo_url || b.profile_photo_url;
       const trustedBadge = b.is_trusted ? '<span class="card-badge card-badge--trusted">\u2713 Trusted</span>' : '';
       return '<div class="gq-store-row' + (contacted ? ' gq-store-row--contacted' : '') + '" data-id="' + b.id + '">'
+        + '<label class="gq-pick" title="Select for Auto-Quote"><input type="checkbox" class="gq-pick-cb"' + (selectedAuto.has(String(b.id)) ? ' checked' : '') + ' onchange="gqTogglePick(\'' + b.id + '\', this.checked)"></label>'
         + '<div class="gq-store-avatar">'
         + (thumb
           ? '<img src="' + thumb + '" alt="' + escHtml(b.name) + '" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">'
@@ -6646,6 +6830,7 @@ async function renderGetQuotes(el, params = {}) {
         + '</div>'
         + '</div>';
     }).join('');
+    updateAutoBar();
   }
 
   async function applyFiltersAndRender() {
@@ -6862,6 +7047,10 @@ async function renderGetQuotes(el, params = {}) {
 
           <p class="results-count" id="gq-results-count"></p>
           <div id="gq-store-list" class="gq-store-list"></div>
+          <div class="gq-auto-bar" id="gq-auto-bar">
+            <div class="gq-auto-info"><strong>&#10024; Auto-Quote</strong> &mdash; tick suppliers above and we'll message them, translate the replies, and compare prices for you.</div>
+            <button class="btn btn--primary" id="gq-auto-send" onclick="gqSendAuto()" disabled>Send to <span id="gq-auto-count">0</span> selected</button>
+          </div>
         </div>
 
       </div>
@@ -6946,6 +7135,44 @@ async function renderGetQuotes(el, params = {}) {
     filters.languages = ''; filters.min_rating = ''; filters.trusted = '';
     el.querySelectorAll('.dir-filter-pill-select, .filter-select').forEach(function(s) { s.value = ''; });
     applyFiltersAndRender();
+  };
+
+  function updateAutoBar() {
+    var n = selectedAuto.size;
+    var b = el.querySelector('#gq-auto-send');
+    if (b) { b.disabled = (n === 0); b.innerHTML = 'Send to <span id="gq-auto-count">' + n + '</span> selected'; }
+  }
+
+  window.gqTogglePick = function(id, checked) {
+    if (checked) selectedAuto.add(String(id)); else selectedAuto.delete(String(id));
+    updateAutoBar();
+  };
+
+  window.gqSendAuto = async function() {
+    var items = quoteItems.filter(function(i){ return i.material.trim(); })
+      .map(function(i){ return { material: i.material, quantity: i.quantity, info: i.info }; });
+    if (!items.length) { alert('Add at least one item first (Step 1).'); return; }
+    var ids = [];
+    selectedAuto.forEach(function(v){ ids.push(v); });
+    if (!ids.length) { alert('Tick at least one supplier.'); return; }
+    var btn = el.querySelector('#gq-auto-send');
+    if (btn) { btn.disabled = true; btn.innerHTML = 'Sending…'; }
+    try {
+      var res = await qApi('create_request', { body: {
+        items: items, provider_ids: ids, lang: useBahasa ? 'id' : 'en',
+        delivery: { required: delivery.enabled, location: delivery.location, maps_url: delivery.mapsLink }
+      }});
+      navigate('quote/' + res.request_id);
+    } catch (e) {
+      if (e.status === 401) showAuthModal('login');
+      else if (e.upgrade) showQuoteUpgrade(e.required_tier);
+      else if (e.data && e.data.error === 'quota_exceeded') {
+        alert(e.data.scope === 'vendors_per_request'
+          ? 'Your plan allows up to ' + e.data.limit + ' vendors per request.'
+          : 'You\'ve used all ' + e.data.limit + ' quote requests for this 30-day period.');
+      } else alert(e.message || 'Could not send.');
+      updateAutoBar();
+    }
   };
 
   applyFiltersAndRender();

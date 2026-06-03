@@ -1,0 +1,21 @@
+{
+  "hostpapa_base": "https://biltest.roving-i.com.au",
+  "worker_key": "PASTE-THE-SAME-64-CHAR-HEX-AS-WORKER_API_KEY-IN-CONFIG",
+
+  "evolution_url": "http://localhost:8090",
+  "evolution_apikey": "YOUR-EVOLUTION-API-KEY",
+  "evolution_instance": "YOUR-INSTANCE-NAME",
+
+  "ollama_url": "http://localhost:11434",
+  "ollama_model": "whatsapp-agent",
+
+  "webhook_port": 8099,
+
+  "poll_interval_ms": 4000,
+  "send_min_delay_ms": 8000,
+  "send_max_delay_ms": 30000,
+  "daily_send_cap": 200,
+
+  "parse_batch": 3,
+  "verbose": true
+}
