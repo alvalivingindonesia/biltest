@@ -613,7 +613,7 @@ async function router() {
       a.classList.add('active');
     }
     // Get Quotes
-    if (hrefPage === 'get-quotes' && page === 'get-quotes') {
+    if (hrefPage === 'get-quotes' && (page === 'get-quotes' || page === 'quotes' || page === 'quote')) {
       a.classList.add('active');
     }
     // Home

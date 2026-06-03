@@ -84,6 +84,24 @@
           </ul>
         </li>
 
+        <!-- Tools dropdown -->
+        <li class="nav-dropdown" id="nav-dd-tools">
+          <button class="nav-dropdown-toggle" aria-haspopup="true" aria-expanded="false">
+            <span data-i18n="nav.tools">Tools</span>
+            <svg class="nav-dd-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <ul class="nav-dropdown-menu" role="menu">
+            <li><a href="#rab-calculator" onclick="navigate('rab-calculator');return false;" role="menuitem">
+              <svg class="nav-dd-mini-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="16" y1="14" x2="16" y2="18"/><path d="M8 10h.01M12 10h.01M8 14h.01M12 14h.01M8 18h.01M12 18h.01"/></svg>
+              <span class="nav-dd-label" data-i18n="nav.tools.building_calculators">Building Calculators</span>
+            </a></li>
+            <li><a href="#get-quotes" onclick="navigate('get-quotes');return false;" role="menuitem">
+              <svg class="nav-dd-mini-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              <span class="nav-dd-label" data-i18n="nav.tools.quoting_tools">Quoting Tools</span>
+            </a></li>
+          </ul>
+        </li>
+
         <li><a href="#guides" onclick="navigate('guides');return false;" data-i18n="nav.guides">Guides</a></li>
         <li><a href="#about" onclick="navigate('about');return false;" data-i18n="nav.about">About</a></li>
       </ul>
@@ -184,8 +202,20 @@
       </div>
     </div>
 
-    <a href="#guides" onclick="navigate('guides');return false;"><span class="nav-num">04</span><span data-i18n="nav.guides">Guides</span></a>
-    <a href="#about" onclick="navigate('about');return false;"><span class="nav-num">05</span><span data-i18n="nav.about">About</span></a>
+    <!-- Tools group -->
+    <div class="mobile-nav-group">
+      <button class="mobile-nav-group-toggle" onclick="this.parentElement.classList.toggle('open')" aria-expanded="false">
+        <span class="mobile-nav-label"><span class="nav-num">04</span><span data-i18n="nav.tools">Tools</span></span>
+        <svg class="mobile-nav-group-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="mobile-nav-group-items">
+        <a href="#rab-calculator" onclick="navigate('rab-calculator');return false;" data-i18n="nav.tools.building_calculators">Building Calculators</a>
+        <a href="#get-quotes" onclick="navigate('get-quotes');return false;" data-i18n="nav.tools.quoting_tools">Quoting Tools</a>
+      </div>
+    </div>
+
+    <a href="#guides" onclick="navigate('guides');return false;"><span class="nav-num">05</span><span data-i18n="nav.guides">Guides</span></a>
+    <a href="#about" onclick="navigate('about');return false;"><span class="nav-num">06</span><span data-i18n="nav.about">About</span></a>
 
     <!-- Primary CTA inside the drawer -->
     <div style="padding: var(--space-8) var(--space-2) var(--space-3); text-align: center;">
