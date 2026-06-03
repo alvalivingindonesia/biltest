@@ -101,6 +101,13 @@ if (!$access['allowed']) json_error(403, 'upgrade_required');
 8. **RAB Tool is the primary upgrade hook** — basic estimation free, full project management premium. It's the clearest demonstration of paid value.
 9. **If a gate causes drop-off instead of upgrades, loosen it** — acquisition always beats aggressive monetisation at this stage.
 
+## Bug Tracker
+Known bugs to fix later live in [BUGS.md](BUGS.md) — an in-repo tracker any Claude Code session can use.
+- **Before bug-fix work:** read `BUGS.md` and check for relevant `Status: open` entries.
+- **When you spot a bug** you won't fix right now: add it to `BUGS.md` (next `BUG-NNN` id, `Status: open`).
+- **When you fix one:** flip its `Status:` to `fixed` and fill `Resolution:` (date — summary — commit hash).
+- The file header has the full protocol (claiming, severity, the entry template). Don't delete fixed entries.
+
 ## Git Workflow
 ```bash
 # Always pull before editing
