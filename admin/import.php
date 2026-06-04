@@ -1012,70 +1012,125 @@ function parse_gmaps_html(string $html): array {
 
 
 /**
- * Parse a single Google Maps PLACE page (one business) saved/copied as HTML.
+ * Detect area from address text — used when GPS coords are not available
+ * (e.g. pasted inspect-element HTML). Checks place/district names.
+ */
+function detect_area_from_address(string $address): string {
+    $a = strtolower($address);
+    $map = [
+        'mataram'        => ['mataram', 'cakranegara', 'ampenan', 'selaparang', 'sandubaya'],
+        'senggigi'       => ['senggigi', 'batulayar', 'meninting'],
+        'kuta'           => ['kuta', 'mandalika', 'pujut', 'praya barat daya'],
+        'gili_islands'   => ['gili trawangan', 'gili meno', 'gili air', 'gili indah'],
+        'north_lombok'   => ['lombok utara', 'north lombok', 'tanjung', 'gangga', 'kayangan', 'bayan', 'pemenang'],
+        'senaru'         => ['senaru', 'bayan'],
+        'bangsal'        => ['bangsal'],
+        'gerung'         => ['gerung'],
+        'sekotong'       => ['sekotong'],
+        'lembar'         => ['lembar'],
+        'praya'          => ['praya', 'jonggat', 'batukliang', 'lombok tengah', 'central lombok'],
+        'selong_belanak' => ['selong belanak'],
+        'selong'         => ['selong', 'lombok timur', 'east lombok', 'aikmel', 'masbagik', 'keruak'],
+        'labuhan_lombok' => ['labuhan lombok', 'labuhan haji'],
+        // West Lombok places
+        'mataram'        => ['kediri', 'labuapi', 'lingsar', 'narmada', 'gunungsari', 'west lombok', 'lombok barat'],
+    ];
+    foreach ($map as $area_key => $keywords) {
+        foreach ($keywords as $kw) {
+            if (strpos($a, $kw) !== false) return $area_key;
+        }
+    }
+    return '';
+}
+
+/**
+ * Parse a single Google Maps PLACE page (one business).
  *
- * Place pages have NO <div role="article"> blocks, so parse_gmaps_html() finds
- * nothing in them. The business data instead lives in the embedded JS state
- * (window.APP_INITIALIZATION_STATE / window.ES5DGURL). This extracts the one
- * business and returns it in the SAME shape as parse_gmaps_html() items, so the
- * rest of the import pipeline (category + type detection, preview, save) is
- * reused unchanged.
+ * Accepts TWO input formats:
+ *   1) Full page source  (Ctrl+U) — has embedded JS state (APP_INITIALIZATION_STATE / ES5DGURL)
+ *   2) Inspect-element HTML (DevTools copy) — has rendered DOM with aria-labels and CSS classes
  *
- * Returns a single listing array, or null if the HTML is not a recognisable place page.
+ * Returns data in the same shape as parse_gmaps_html() items so the rest of the
+ * import pipeline works unchanged.  Returns null if not recognisable as a place page.
  */
 function parse_gmaps_place_html(string $html): ?array {
-    // ── Name + feature id ──
-    // APP_INITIALIZATION_STATE holds:  ["0x..:0x..","Business Name",null,...]
+
+    // ══════════════════════════════════════════════════════════════════
+    // NAME
+    // ══════════════════════════════════════════════════════════════════
+
     $name = '';
     $feature_id = '';
+
+    // Format 1 (full page source): APP_INITIALIZATION_STATE array
     if (preg_match('/\["(0x[0-9a-f]+:0x[0-9a-f]+)","((?:[^"\\\\]|\\\\.)*)"/i', $html, $m)) {
         $feature_id = $m[1];
         $decoded_name = json_decode('"' . $m[2] . '"');
         $name = ($decoded_name !== null) ? $decoded_name : $m[2];
     }
-    // Fallback: name from the /maps/place/NAME/ path segment
-    if ($name === '' && preg_match('#/maps/place/([^/@]+)#', $html, $m)) {
+    // Format 2 (inspect): <div role="main" aria-label="Business Name">
+    if ($name === '') {
+        if (preg_match('/role="main"[^>]*aria-label="([^"]+)"/i', $html, $m) ||
+            preg_match('/aria-label="([^"]+)"[^>]*role="main"/i', $html, $m)) {
+            $name = $m[1];
+        }
+    }
+    // Format 2 (inspect): <h1 class="DUwDvf ...">...<span>Name</span>
+    if ($name === '') {
+        if (preg_match('/<h1[^>]*DUwDvf[^>]*>(.*?)<\/h1>/si', $html, $hm) &&
+            preg_match('/>([^<]{2,})<\/span>/i', $hm[1], $sm)) {
+            $candidate = trim(strip_tags($sm[1]));
+            if ($candidate !== '') $name = $candidate;
+        }
+    }
+    // Fallback: /maps/place/NAME/ path
+    if ($name === '' && preg_match('#/maps/place/([^/@?]+)#', $html, $m)) {
         $name = trim(urldecode(str_replace('+', ' ', $m[1])));
     }
-    if ($name === '') return null; // not a place page we can read
+    if ($name === '') return null;
 
-    // ── Coordinates: !3d<lat>!4d<lng> is the place pin (same pattern as listings) ──
+    // ══════════════════════════════════════════════════════════════════
+    // COORDINATES
+    // ══════════════════════════════════════════════════════════════════
+
     $latitude = null;
     $longitude = null;
     if (preg_match('/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/', $html, $c)) {
-        $latitude = (float)$c[1];
+        $latitude  = (float)$c[1];
         $longitude = (float)$c[2];
     }
 
-    // ── Canonical Google Maps URL (from window.ES5DGURL, falling back to feature id) ──
+    // ══════════════════════════════════════════════════════════════════
+    // GOOGLE MAPS URL
+    // ══════════════════════════════════════════════════════════════════
+
     $gmaps_url = '';
     if (preg_match("/window\.ES5DGURL\s*=\s*'([^']+)'/", $html, $u)) {
-        // ES5DGURL escapes punctuation as \x3d, \x26 etc — unescape it.
         $path = preg_replace_callback('/\\\\x([0-9a-fA-F]{2})/', function ($h) {
             return chr(hexdec($h[1]));
         }, $u[1]);
-        $path = preg_replace('/[?].*$/', '', $path); // drop the long ?entry=... query
+        $path = preg_replace('/[?].*$/', '', $path);
         $gmaps_url = (strpos($path, 'http') === 0) ? $path : 'https://www.google.com' . $path;
     }
     if ($gmaps_url === '' && $feature_id !== '') {
         $gmaps_url = 'https://www.google.com/maps/place/?q=place_id:' . $feature_id;
     }
 
-    // ── Category ──
-    // The Maps category key (e.g. "general_store") is base64-protobuf encoded in the
-    // place metadata blob, which sits right before the entity id:  "<blob>","/g/..."
-    // Decoding it and turning snake_case into a phrase ("general_contractor" ->
-    // "general contractor") lets it match the existing KEYWORD_MAP directly.
+    // ══════════════════════════════════════════════════════════════════
+    // CATEGORY
+    // ══════════════════════════════════════════════════════════════════
+
     $gmaps_category = '';
+
+    // Format 1 (full page): base64-protobuf blob before "/g/..." entity id
     $blob = '';
     if (preg_match('#"([A-Za-z0-9+/=_-]{30,})","/g/[^"]+"#', $html, $bm)) {
-        $blob = $bm[1];                          // from APP_INITIALIZATION_STATE
+        $blob = $bm[1];
     } elseif (preg_match('/!15s([A-Za-z0-9_-]{20,})/', $html, $bm)) {
-        $blob = $bm[1];                          // fallback: from the data= param
+        $blob = $bm[1];
     }
     if ($blob !== '') {
         $decoded = base64_decode(strtr($blob, '-_', '+/'));
-        // protobuf field 18 (\x92\x01) = length-delimited category key
         if ($decoded !== false && preg_match('/\x92\x01(.)([\x20-\x7e]+)/s', $decoded, $cm)) {
             $cat_key = substr($cm[2], 0, ord($cm[1]));
             if (preg_match('/^[a-z0-9_]{2,40}$/', $cat_key)) {
@@ -1083,71 +1138,128 @@ function parse_gmaps_place_html(string $html): ?array {
             }
         }
     }
+    // Format 2 (inspect): <button class="DkEaL" jsaction="...category">General store</button>
+    if ($gmaps_category === '') {
+        if (preg_match('/jsaction="[^"]*\.category[^"]*"[^>]*>([^<]+)<\/button>/i', $html, $cm)) {
+            $gmaps_category = trim($cm[1]);
+        }
+    }
 
-    // ── Area: derive from coordinates (place pages rarely expose a clean address) ──
+    // ══════════════════════════════════════════════════════════════════
+    // RATING & REVIEW COUNT
+    // ══════════════════════════════════════════════════════════════════
+
+    $rating  = 0.0;
+    $reviews = 0;
+
+    // Format 2 (inspect): <div class="fontDisplayLarge">4.8</div>  (aggregate score in review summary)
+    if (preg_match('/class="fontDisplayLarge"[^>]*>([\d.]+)</', $html, $r)) {
+        $rating = (float)$r[1];
+    }
+    // Format 2 (inspect): <span role="img" aria-label="N reviews">
+    if (preg_match('/role="img"[^>]*aria-label="(\d[\d,]*)\s+reviews?"/i', $html, $r) ||
+        preg_match('/aria-label="(\d[\d,]*)\s+reviews?"[^>]*role="img"/i', $html, $r)) {
+        $reviews = (int)str_replace(',', '', $r[1]);
+    }
+    // Format 2 (inspect): <span>N reviews</span> in the More reviews button
+    if ($reviews === 0 && preg_match('/<span>(\d[\d,]*)\s+reviews?<\/span>/i', $html, $r)) {
+        $reviews = (int)str_replace(',', '', $r[1]);
+    }
+    // Format 1 (full page source): "Rated 4.5 out of 5, 23 reviews" aria-label
+    if ($rating === 0.0) {
+        if (preg_match('/Rated\s+([\d.]+)\s+out of 5[,\s]*(\d[\d,]*)\s*reviews?/i', $html, $r)) {
+            $rating  = (float)$r[1];
+            $reviews = (int)str_replace(',', '', $r[2]);
+        }
+    }
+    // JSON-LD (either format)
+    if ($rating === 0.0 && preg_match('/"ratingValue"\s*:\s*"?([\d.]+)"?/', $html, $r)) {
+        $rating = (float)$r[1];
+        if (preg_match('/"reviewCount"\s*:\s*"?(\d+)"?/', $html, $r2)) {
+            $reviews = (int)$r2[1];
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // PHONE
+    // ══════════════════════════════════════════════════════════════════
+
+    $phone = '';
+    // Format 2 (inspect): data-item-id="phone:tel:081803703292"
+    if (preg_match('/data-item-id="phone:tel:([^"]+)"/i', $html, $pm)) {
+        $phone = $pm[1];
+    }
+    // Format 2 (inspect): aria-label="Phone: 0818-0370-3292 " on the info button
+    if ($phone === '' && preg_match('/aria-label="Phone:\s*([^"]+?)[\s.]*"/i', $html, $pm)) {
+        $phone = trim($pm[1]);
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // ADDRESS
+    // ══════════════════════════════════════════════════════════════════
+
+    $address = '';
+    // Format 2 (inspect): aria-label="Address: ..." data-item-id="address"
+    if (preg_match('/aria-label="Address:\s*([^"]+?)[\s.]*"\s*data-item-id="address"/i', $html, $am)) {
+        $address = trim($am[1]);
+    }
+    // Also try without requiring data-item-id immediately after
+    if ($address === '' && preg_match('/data-item-id="address".*?aria-label="Address:\s*([^"]+?)[\s.]*"/is', $html, $am)) {
+        $address = trim($am[1]);
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // AREA
+    // ══════════════════════════════════════════════════════════════════
+
     $detected_area = '';
     if ($latitude !== null && $longitude !== null) {
         $detected_area = detect_area_from_coords($latitude, $longitude);
     }
+    if (!$detected_area && $address !== '') {
+        $detected_area = detect_area_from_address($address);
+    }
     if (!$detected_area) $detected_area = 'mataram';
 
-    // ── Website (same action-button patterns used for search listings) ──
+    // ══════════════════════════════════════════════════════════════════
+    // THUMBNAIL
+    // ══════════════════════════════════════════════════════════════════
+
+    $thumbnail_url = '';
+    // Format 2 (inspect): hero image in .RZ66Rb section
+    if (preg_match('/class="RZ66Rb[^"]*".*?<img[^>]*src="(https:\/\/[^"]+)"/si', $html, $tm)) {
+        $thumbnail_url = $tm[1];
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // WEBSITE & SOCIALS
+    // ══════════════════════════════════════════════════════════════════
+
     $website_url = '';
     if (preg_match('/data-value="(?:Website|Situs Web)"[^>]*href="([^"]+)"/i', $html, $ws)) {
         $website_url = html_entity_decode($ws[1], ENT_QUOTES, 'UTF-8');
     }
 
-    // ── Social links from anywhere on the page (best effort) ──
     $socials = extract_social_links_from_chunk($html);
 
-    // ── Rating & Review Count ──
-    // Place pages usually show these in the top info section. Try several patterns.
-    $rating = 0.0;
-    $reviews = 0;
-
-    // Pattern 1: aria-label on a rating link, e.g. "Rated 4.5 out of 5,2341 reviews"
-    if (preg_match('/Rated\s+([\d.]+)\s+out of 5[,\s]*(\d+)\s*reviews?/i', $html, $rm)) {
-        $rating = (float)$rm[1];
-        $reviews = (int)str_replace(',', '', $rm[2]);
-    }
-    // Pattern 2: Common data attr like data-rating="4.5" + data-review-count="123"
-    if ($rating === 0.0 && preg_match('/data-(?:rating|score)="([\d.]+)"/', $html, $r1)) {
-        $rating = (float)$r1[1];
-        if (preg_match('/(?:data-)?(?:reviews?|review-count)="(\d+)"/', $html, $r2)) {
-            $reviews = (int)$r2[1];
-        }
-    }
-    // Pattern 3: ★ 4.5 (1,234) or similar visible text in the page
-    if ($rating === 0.0 && preg_match('/★\s*([\d.]+)\s*\(?([0-9,]+)\)?/u', $html, $r3)) {
-        $rating = (float)$r3[1];
-        if (!empty($r3[2])) $reviews = (int)str_replace(',', '', $r3[2]);
-    }
-    // Pattern 4: In JSON-LD if present, e.g. "ratingValue":"4.5","reviewCount":"1234"
-    if ($rating === 0.0 && preg_match('/"ratingValue"\s*:\s*"?([\d.]+)"?/', $html, $r4)) {
-        $rating = (float)$r4[1];
-        if (preg_match('/"reviewCount"\s*:\s*"?(\d+)"?/', $html, $r5)) {
-            $reviews = (int)$r5[1];
-        }
-    }
-
     return [
-        'name' => $name,
-        'rating' => $rating,
-        'reviews' => $reviews,
+        'name'          => $name,
+        'rating'        => $rating,
+        'reviews'       => $reviews,
         'gmaps_category' => $gmaps_category,
-        'address' => '',
-        'phone' => '',
-        'gmaps_url' => $gmaps_url,
-        'latitude' => $latitude,
-        'longitude' => $longitude,
-        'website_url' => $website_url,
+        'address'       => $address,
+        'phone'         => $phone,
+        'gmaps_url'     => $gmaps_url,
+        'latitude'      => $latitude,
+        'longitude'     => $longitude,
+        'website_url'   => $website_url,
         'detected_area' => $detected_area,
         'instagram_url' => $socials['instagram_url'],
-        'facebook_url' => $socials['facebook_url'],
-        'youtube_url' => $socials['youtube_url'],
-        'tiktok_url' => $socials['tiktok_url'],
-        'linkedin_url' => $socials['linkedin_url'],
-        'thumbnail_url' => '',
+        'facebook_url'  => $socials['facebook_url'],
+        'youtube_url'   => $socials['youtube_url'],
+        'tiktok_url'    => $socials['tiktok_url'],
+        'linkedin_url'  => $socials['linkedin_url'],
+        'thumbnail_url' => $thumbnail_url,
     ];
 }
 
