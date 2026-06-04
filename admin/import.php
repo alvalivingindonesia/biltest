@@ -1100,10 +1100,40 @@ function parse_gmaps_place_html(string $html): ?array {
     // ── Social links from anywhere on the page (best effort) ──
     $socials = extract_social_links_from_chunk($html);
 
+    // ── Rating & Review Count ──
+    // Place pages usually show these in the top info section. Try several patterns.
+    $rating = 0.0;
+    $reviews = 0;
+
+    // Pattern 1: aria-label on a rating link, e.g. "Rated 4.5 out of 5,2341 reviews"
+    if (preg_match('/Rated\s+([\d.]+)\s+out of 5[,\s]*(\d+)\s*reviews?/i', $html, $rm)) {
+        $rating = (float)$rm[1];
+        $reviews = (int)str_replace(',', '', $rm[2]);
+    }
+    // Pattern 2: Common data attr like data-rating="4.5" + data-review-count="123"
+    if ($rating === 0.0 && preg_match('/data-(?:rating|score)="([\d.]+)"/', $html, $r1)) {
+        $rating = (float)$r1[1];
+        if (preg_match('/(?:data-)?(?:reviews?|review-count)="(\d+)"/', $html, $r2)) {
+            $reviews = (int)$r2[1];
+        }
+    }
+    // Pattern 3: ★ 4.5 (1,234) or similar visible text in the page
+    if ($rating === 0.0 && preg_match('/★\s*([\d.]+)\s*\(?([0-9,]+)\)?/u', $html, $r3)) {
+        $rating = (float)$r3[1];
+        if (!empty($r3[2])) $reviews = (int)str_replace(',', '', $r3[2]);
+    }
+    // Pattern 4: In JSON-LD if present, e.g. "ratingValue":"4.5","reviewCount":"1234"
+    if ($rating === 0.0 && preg_match('/"ratingValue"\s*:\s*"?([\d.]+)"?/', $html, $r4)) {
+        $rating = (float)$r4[1];
+        if (preg_match('/"reviewCount"\s*:\s*"?(\d+)"?/', $html, $r5)) {
+            $reviews = (int)$r5[1];
+        }
+    }
+
     return [
         'name' => $name,
-        'rating' => 0.0,
-        'reviews' => 0,
+        'rating' => $rating,
+        'reviews' => $reviews,
         'gmaps_category' => $gmaps_category,
         'address' => '',
         'phone' => '',
