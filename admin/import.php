@@ -38,10 +38,16 @@ if (empty($_SESSION['admin_auth'])) {
 
 // ─── CATEGORY TREE (loaded dynamically from database) ────────────────
 $CATEGORY_TREE = [];
+$CATEGORY_MATCH = []; // cat_key => ['group_key'=>, 'phrases'=>[], 'words'=>[]] — derived from category label + label_id
 try {
     $db_cat = get_db();
     $grp_rows = $db_cat->query("SELECT `key`, `label` FROM `groups` ORDER BY sort_order")->fetchAll();
-    $cat_rows = $db_cat->query("SELECT `key`, `label`, `group_key` FROM categories ORDER BY sort_order")->fetchAll();
+    // label_id (Bahasa) may not exist on older installs — fall back gracefully
+    try {
+        $cat_rows = $db_cat->query("SELECT `key`, `label`, `label_id`, `group_key` FROM categories ORDER BY sort_order")->fetchAll();
+    } catch (Exception $e) {
+        $cat_rows = $db_cat->query("SELECT `key`, `label`, `group_key` FROM categories ORDER BY sort_order")->fetchAll();
+    }
     foreach ($grp_rows as $g) {
         $CATEGORY_TREE[$g['key']] = ['label' => $g['label'], 'cats' => []];
     }
@@ -50,10 +56,15 @@ try {
         if (isset($CATEGORY_TREE[$gk])) {
             $CATEGORY_TREE[$gk]['cats'][$c['key']] = $c['label'];
         }
+        // Build name-based match terms from the English + Indonesian labels so that
+        // categories added later in the admin auto-detect without any code changes.
+        $terms = build_cat_match_terms([$c['label'] ?? '', $c['label_id'] ?? '']);
+        $CATEGORY_MATCH[$c['key']] = ['group_key' => $gk, 'phrases' => $terms['phrases'], 'words' => $terms['words']];
     }
 } catch (Exception $e) {
-    // Fallback: if DB fails, detect_category will return empty results
+    // Fallback: if DB fails, detection relies on the curated keyword map only
     $CATEGORY_TREE = [];
+    $CATEGORY_MATCH = [];
 }
 
 // ─── KEYWORD → CATEGORY MAPPING ─────────────────────────────────────
@@ -265,60 +276,124 @@ function slugify(string $text): string {
 }
 
 /**
- * Try to auto-detect a category from Google Maps category text + business name.
- * Returns ['group_key' => ..., 'category_key' => ..., 'confidence' => 'high'|'medium'|'low']
+ * Break a category label (English or Bahasa) into match terms used for auto-detection.
+ * Generic retail/trade words ("toko", "store", "supplier", "contractor"…) are stripped so
+ * that a name merely containing "Toko" doesn't match every "Toko ___" category — only the
+ * distinctive words (e.g. "mebel", "bangunan", "bambu") count.
+ * Returns ['phrases' => [full multi-word labels], 'words' => [distinctive single words]].
  */
-function detect_category(string $gmaps_category, string $business_name, array $keyword_map, array $category_tree): array {
-    $gmaps_lower = strtolower(html_entity_decode($gmaps_category));
-    $name_lower = strtolower(html_entity_decode($business_name));
-    $combined = $gmaps_lower . ' ' . $name_lower;
+function build_cat_match_terms(array $labels): array {
+    static $stop = null;
+    if ($stop === null) {
+        $stop = array_flip([
+            // generic shop / business forms
+            'toko','store','stores','shop','shops','shopping','outlet','mart','depot',
+            'supplier','suppliers','supply','pemasok','distributor','grosir','retailer',
+            'agen','agent','agency','jual','penjual','beli','jasa','service','services','layanan',
+            'company','perusahaan','cv','pt','ud','co','group','pusat','center','centre','toserba',
+            // generic roles (would otherwise collide across many categories)
+            'contractor','contractors','kontraktor','specialist','specialists','spesialis',
+            'engineer','engineers','insinyur','designer','design','installer','installers',
+            'maker','makers','manufacturer','manufacturers','worker','workers','consultant','konsultan',
+            // fillers / places
+            'general','umum','professional','and','dan','of','the','for','di','in','&',
+            'lombok','bali','indonesia','mataram',
+        ]);
+    }
+    $phrases = [];
+    $words = [];
+    foreach ($labels as $label) {
+        $label = strtolower(trim((string)html_entity_decode($label)));
+        if ($label === '') continue;
+        $norm = trim(preg_replace('/\s+/', ' ', preg_replace('/[^a-z0-9]+/u', ' ', $label)));
+        if ($norm === '') continue;
+        $toks = explode(' ', $norm);
+        $distinct = [];
+        foreach ($toks as $t) {
+            if (strlen($t) < 3) continue;       // skip very short tokens (false-positive prone)
+            if (isset($stop[$t])) continue;      // skip generic words
+            $distinct[] = $t;
+        }
+        // Keep the full label as a phrase only if it's multi-word and has real content.
+        if (count($toks) >= 2 && $distinct) {
+            $phrases[] = $norm;
+        }
+        foreach ($distinct as $d) $words[] = $d;
+    }
+    return [
+        'phrases' => array_values(array_unique($phrases)),
+        'words'   => array_values(array_unique($words)),
+    ];
+}
 
-    $best_cat = null;
-    $best_score = 0;
-    $best_confidence = 'low';
+/**
+ * Auto-detect one OR MORE categories from Google Maps category text + business name + description.
+ * Matches the curated keyword map AND the DB category names (label + Bahasa label_id).
+ * A business may legitimately match several categories (e.g. "Toko Bangunan & Mebel").
+ * Returns ['group_key' => ..., 'category_keys' => [...], 'confidence' => 'high'|'medium'|'low'|'none']
+ */
+function detect_categories(string $gmaps_category, string $business_name, string $extra_text, array $keyword_map, array $category_match): array {
+    $gmaps_lower = ' ' . strtolower(html_entity_decode($gmaps_category)) . ' ';
+    $name_lower  = ' ' . strtolower(html_entity_decode($business_name)) . ' ';
+    $extra_lower = ' ' . strtolower(html_entity_decode($extra_text)) . ' ';
 
+    $scores = []; // cat_key => best score
+
+    // 1) Curated keyword map (hand-tuned phrases — substring match, weighted by source)
     foreach ($keyword_map as $cat_key => $keywords) {
         foreach ($keywords as $kw) {
-            $score = 0;
-            // Check Google Maps category (higher weight)
-            if (stripos($gmaps_lower, $kw) !== false) {
-                // Exact match of full category string
-                if ($gmaps_lower === $kw) {
-                    $score = 100;
-                } else {
-                    $score = 70 + (strlen($kw) / strlen($gmaps_lower)) * 20;
-                }
+            $kw = strtolower(trim($kw));
+            if ($kw === '') continue;
+            $s = 0;
+            if (strpos($gmaps_lower, $kw) !== false) {
+                $s = (trim($gmaps_lower) === $kw) ? 100 : 80; // Maps category is the strongest signal
+            } elseif (strpos($name_lower, $kw) !== false || strpos($extra_lower, $kw) !== false) {
+                $s = 60;
             }
-            // Check business name (lower weight)
-            if (stripos($name_lower, $kw) !== false) {
-                $score = max($score, 40 + (strlen($kw) / strlen($name_lower)) * 20);
-            }
+            if ($s > 0) $scores[$cat_key] = max($scores[$cat_key] ?? 0, $s);
+        }
+    }
 
-            if ($score > $best_score) {
-                $best_score = $score;
-                $best_cat = $cat_key;
+    // 2) DB category names (label + label_id) — generic words already stripped in build_cat_match_terms
+    foreach ($category_match as $cat_key => $mt) {
+        // Full multi-word label as a phrase (strong)
+        foreach ($mt['phrases'] as $ph) {
+            if (strpos($gmaps_lower, $ph) !== false) {
+                $scores[$cat_key] = max($scores[$cat_key] ?? 0, 90);
+            } elseif (strpos($name_lower, $ph) !== false || strpos($extra_lower, $ph) !== false) {
+                $scores[$cat_key] = max($scores[$cat_key] ?? 0, 72);
+            }
+        }
+        // Distinctive single words (word-boundary so "bambu" matches "Penjual Bambu", not substrings)
+        foreach ($mt['words'] as $w) {
+            $re = '/\b' . preg_quote($w, '/') . '\b/u';
+            if (preg_match($re, $gmaps_lower)) {
+                $scores[$cat_key] = max($scores[$cat_key] ?? 0, 75);
+            } elseif (preg_match($re, $name_lower) || preg_match($re, $extra_lower)) {
+                $scores[$cat_key] = max($scores[$cat_key] ?? 0, 55);
             }
         }
     }
 
-    if (!$best_cat) {
-        return ['group_key' => '', 'category_key' => '', 'confidence' => 'none'];
+    if (!$scores) {
+        return ['group_key' => '', 'category_keys' => [], 'confidence' => 'none'];
     }
 
-    // Find group for this category
-    $group_key = '';
-    foreach ($category_tree as $gk => $gdata) {
-        if (isset($gdata['cats'][$best_cat])) {
-            $group_key = $gk;
-            break;
-        }
+    arsort($scores);
+    $best = reset($scores);
+    // When there's a clear winner, only keep similarly-strong siblings; otherwise keep all real matches.
+    $thresh = max(55, $best - 20);
+    $picked = [];
+    foreach ($scores as $ck => $sc) {
+        if ($sc >= $thresh) $picked[] = $ck;
     }
 
-    $confidence = 'low';
-    if ($best_score >= 70) $confidence = 'high';
-    elseif ($best_score >= 40) $confidence = 'medium';
+    $top = array_key_first($scores);
+    $group_key = $category_match[$top]['group_key'] ?? '';
 
-    return ['group_key' => $group_key, 'category_key' => $best_cat, 'confidence' => $confidence];
+    $confidence = $best >= 80 ? 'high' : ($best >= 55 ? 'medium' : 'low');
+
+    return ['group_key' => $group_key, 'category_keys' => $picked, 'confidence' => $confidence];
 }
 
 /**
@@ -1405,20 +1480,6 @@ if (isset($_POST['parse'])) {
                 }
             }
 
-            // Detect category (for providers)
-            $detection = detect_category($item['gmaps_category'], $item['name'], $KEYWORD_MAP, $CATEGORY_TREE);
-            $item['detected_group'] = $detection['group_key'];
-            $item['detected_category'] = $detection['category_key'];
-            $item['confidence'] = $detection['confidence'];
-            
-            // Auto-detect entity type: agent, developer, or provider
-            $type_det = detect_entity_type($item['gmaps_category'], $item['name'], $AGENT_KEYWORDS, $DEVELOPER_KEYWORDS);
-            $item['detected_type'] = $type_det['type'];
-            $item['type_confidence'] = $type_det['type_confidence'];
-            // If provider category matched with high confidence, keep as provider even if type detection says low
-            if ($type_det['type'] === 'provider' && $detection['confidence'] === 'high') {
-                $item['type_confidence'] = 'high';
-            }
             // Carry through parsed website + area + socials + thumbnail
             $item['website_url'] = $item['website_url'] ?? '';
             $item['detected_area'] = $item['detected_area'] ?? 'mataram';
@@ -1466,6 +1527,27 @@ if (isset($_POST['parse'])) {
                 if (!empty($web_data['profile_photo_url'])) {
                     $item['profile_photo_url'] = $web_data['profile_photo_url'];
                 }
+            }
+
+            // ── Detect category/categories (for providers) ──
+            // Runs after scraping so the business description can also feed the match.
+            // Matches the curated keyword map AND the DB category names; may pick several.
+            $detection = detect_categories(
+                $item['gmaps_category'], $item['name'], $item['profile_description'] ?? '',
+                $KEYWORD_MAP, $CATEGORY_MATCH
+            );
+            $item['detected_group'] = $detection['group_key'];
+            $item['detected_categories'] = $detection['category_keys'];
+            $item['detected_category'] = $detection['category_keys'][0] ?? ''; // back-compat (first/best)
+            $item['confidence'] = $detection['confidence'];
+
+            // Auto-detect entity type: agent, developer, or provider
+            $type_det = detect_entity_type($item['gmaps_category'], $item['name'], $AGENT_KEYWORDS, $DEVELOPER_KEYWORDS);
+            $item['detected_type'] = $type_det['type'];
+            $item['type_confidence'] = $type_det['type_confidence'];
+            // If provider category matched with high confidence, keep as provider even if type detection says low
+            if ($type_det['type'] === 'provider' && $detection['confidence'] === 'high') {
+                $item['type_confidence'] = 'high';
             }
 
             if ($detection['confidence'] === 'high') {
@@ -1792,6 +1874,8 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
             $is_auto = $item['confidence'] === 'high';
             $gk = $item['detected_group'];
             $ck = $item['detected_category'];
+            // All auto-detected categories (a business may match several) — pre-selected below.
+            $cks = !empty($item['detected_categories']) ? $item['detected_categories'] : ($ck !== '' ? [$ck] : []);
             $ex = $item['existing'] ?? null; // existing DB record or null
             $is_dup = ($ex !== null);
 
@@ -1905,7 +1989,7 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
                             <option value="<?= $fc['cat_key'] ?>"
                                     data-group="<?= $fc['group_key'] ?>"
                                     title="<?= htmlspecialchars($fc['group_label'] . ' → ' . $fc['cat_label']) ?>"
-                                    <?= $ck === $fc['cat_key'] ? 'selected' : '' ?>>
+                                    <?= in_array($fc['cat_key'], $cks, true) ? 'selected' : '' ?>>
                                 <?= $fc['group_label'] ?> → <?= $fc['cat_label'] ?>
                             </option>
                         <?php endforeach; ?>
@@ -1917,7 +2001,25 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
                     <?php endif; ?>
                 </td>
                 <td>
-                    <?php $short_val = !empty($item['short_description_override']) ? $item['short_description_override'] : ($item['gmaps_category'] . ' in ' . ($item['address'] ?: 'Lombok')); ?>
+                    <?php
+                    // Short description default:
+                    //  1) scraped "About Us" snippet if we have one;
+                    //  2) else the detected category label(s) + location;
+                    //  3) else BLANK — never fall back to the raw Maps category ("general store").
+                    if (!empty($item['short_description_override'])) {
+                        $short_val = $item['short_description_override'];
+                    } elseif (!empty($cks)) {
+                        $cat_labels = [];
+                        foreach ($cks as $cck) {
+                            foreach ($flat_cats as $fc) {
+                                if ($fc['cat_key'] === $cck) { $cat_labels[] = $fc['cat_label']; break; }
+                            }
+                        }
+                        $short_val = $cat_labels ? implode(', ', $cat_labels) . ' in ' . ($item['address'] ?: 'Lombok') : '';
+                    } else {
+                        $short_val = '';
+                    }
+                    ?>
                     <input type="text" class="small-input editable" name="items[<?= $idx ?>][short_description]"
                            value="<?= htmlspecialchars($short_val) ?>"
                            style="min-width:180px;">
