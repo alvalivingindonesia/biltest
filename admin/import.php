@@ -380,7 +380,8 @@ function detect_categories(string $gmaps_category, string $business_name, string
     }
 
     arsort($scores);
-    $best = reset($scores);
+    $best = reset($scores);          // highest score (pointer now on first/best element)
+    $top  = key($scores);            // key of the best — avoids array_key_first (PHP 7.3+ only)
     // When there's a clear winner, only keep similarly-strong siblings; otherwise keep all real matches.
     $thresh = max(55, $best - 20);
     $picked = [];
@@ -388,8 +389,7 @@ function detect_categories(string $gmaps_category, string $business_name, string
         if ($sc >= $thresh) $picked[] = $ck;
     }
 
-    $top = array_key_first($scores);
-    $group_key = $category_match[$top]['group_key'] ?? '';
+    $group_key = isset($category_match[$top]) ? $category_match[$top]['group_key'] : '';
 
     $confidence = $best >= 80 ? 'high' : ($best >= 55 ? 'medium' : 'low');
 
@@ -1417,6 +1417,7 @@ $parsed = null;
 $parse_stats = null;
 $parse_input_error = '';
 if (isset($_POST['parse'])) {
+  try {
     // Accept EITHER an uploaded HTML file OR pasted page source.
     $html = '';
     if (isset($_FILES['gmaps_file']) && $_FILES['gmaps_file']['error'] === UPLOAD_ERR_OK && $_FILES['gmaps_file']['size'] > 0) {
@@ -1632,6 +1633,14 @@ if (isset($_POST['parse'])) {
             'existing' => $existing_count,
         ];
     }
+  } catch (\Throwable $e) {
+      // Surface the real reason instead of a blank 500 (shared hosting hides errors).
+      $parsed = null;
+      $parse_stats = null;
+      $parse_input_error = 'Parse failed: ' . $e->getMessage()
+          . ' [' . basename($e->getFile()) . ':' . $e->getLine() . ']';
+      error_log('import.php parse error: ' . $e);
+  }
 }
 
 
