@@ -936,6 +936,117 @@ function parse_gmaps_html(string $html): array {
 }
 
 
+/**
+ * Parse a single Google Maps PLACE page (one business) saved/copied as HTML.
+ *
+ * Place pages have NO <div role="article"> blocks, so parse_gmaps_html() finds
+ * nothing in them. The business data instead lives in the embedded JS state
+ * (window.APP_INITIALIZATION_STATE / window.ES5DGURL). This extracts the one
+ * business and returns it in the SAME shape as parse_gmaps_html() items, so the
+ * rest of the import pipeline (category + type detection, preview, save) is
+ * reused unchanged.
+ *
+ * Returns a single listing array, or null if the HTML is not a recognisable place page.
+ */
+function parse_gmaps_place_html(string $html): ?array {
+    // ── Name + feature id ──
+    // APP_INITIALIZATION_STATE holds:  ["0x..:0x..","Business Name",null,...]
+    $name = '';
+    $feature_id = '';
+    if (preg_match('/\["(0x[0-9a-f]+:0x[0-9a-f]+)","((?:[^"\\\\]|\\\\.)*)"/i', $html, $m)) {
+        $feature_id = $m[1];
+        $decoded_name = json_decode('"' . $m[2] . '"');
+        $name = ($decoded_name !== null) ? $decoded_name : $m[2];
+    }
+    // Fallback: name from the /maps/place/NAME/ path segment
+    if ($name === '' && preg_match('#/maps/place/([^/@]+)#', $html, $m)) {
+        $name = trim(urldecode(str_replace('+', ' ', $m[1])));
+    }
+    if ($name === '') return null; // not a place page we can read
+
+    // ── Coordinates: !3d<lat>!4d<lng> is the place pin (same pattern as listings) ──
+    $latitude = null;
+    $longitude = null;
+    if (preg_match('/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/', $html, $c)) {
+        $latitude = (float)$c[1];
+        $longitude = (float)$c[2];
+    }
+
+    // ── Canonical Google Maps URL (from window.ES5DGURL, falling back to feature id) ──
+    $gmaps_url = '';
+    if (preg_match("/window\.ES5DGURL\s*=\s*'([^']+)'/", $html, $u)) {
+        // ES5DGURL escapes punctuation as \x3d, \x26 etc — unescape it.
+        $path = preg_replace_callback('/\\\\x([0-9a-fA-F]{2})/', function ($h) {
+            return chr(hexdec($h[1]));
+        }, $u[1]);
+        $path = preg_replace('/[?].*$/', '', $path); // drop the long ?entry=... query
+        $gmaps_url = (strpos($path, 'http') === 0) ? $path : 'https://www.google.com' . $path;
+    }
+    if ($gmaps_url === '' && $feature_id !== '') {
+        $gmaps_url = 'https://www.google.com/maps/place/?q=place_id:' . $feature_id;
+    }
+
+    // ── Category ──
+    // The Maps category key (e.g. "general_store") is base64-protobuf encoded in the
+    // place metadata blob, which sits right before the entity id:  "<blob>","/g/..."
+    // Decoding it and turning snake_case into a phrase ("general_contractor" ->
+    // "general contractor") lets it match the existing KEYWORD_MAP directly.
+    $gmaps_category = '';
+    $blob = '';
+    if (preg_match('#"([A-Za-z0-9+/=_-]{30,})","/g/[^"]+"#', $html, $bm)) {
+        $blob = $bm[1];                          // from APP_INITIALIZATION_STATE
+    } elseif (preg_match('/!15s([A-Za-z0-9_-]{20,})/', $html, $bm)) {
+        $blob = $bm[1];                          // fallback: from the data= param
+    }
+    if ($blob !== '') {
+        $decoded = base64_decode(strtr($blob, '-_', '+/'));
+        // protobuf field 18 (\x92\x01) = length-delimited category key
+        if ($decoded !== false && preg_match('/\x92\x01(.)([\x20-\x7e]+)/s', $decoded, $cm)) {
+            $cat_key = substr($cm[2], 0, ord($cm[1]));
+            if (preg_match('/^[a-z0-9_]{2,40}$/', $cat_key)) {
+                $gmaps_category = str_replace('_', ' ', $cat_key);
+            }
+        }
+    }
+
+    // ── Area: derive from coordinates (place pages rarely expose a clean address) ──
+    $detected_area = '';
+    if ($latitude !== null && $longitude !== null) {
+        $detected_area = detect_area_from_coords($latitude, $longitude);
+    }
+    if (!$detected_area) $detected_area = 'mataram';
+
+    // ── Website (same action-button patterns used for search listings) ──
+    $website_url = '';
+    if (preg_match('/data-value="(?:Website|Situs Web)"[^>]*href="([^"]+)"/i', $html, $ws)) {
+        $website_url = html_entity_decode($ws[1], ENT_QUOTES, 'UTF-8');
+    }
+
+    // ── Social links from anywhere on the page (best effort) ──
+    $socials = extract_social_links_from_chunk($html);
+
+    return [
+        'name' => $name,
+        'rating' => 0.0,
+        'reviews' => 0,
+        'gmaps_category' => $gmaps_category,
+        'address' => '',
+        'phone' => '',
+        'gmaps_url' => $gmaps_url,
+        'latitude' => $latitude,
+        'longitude' => $longitude,
+        'website_url' => $website_url,
+        'detected_area' => $detected_area,
+        'instagram_url' => $socials['instagram_url'],
+        'facebook_url' => $socials['facebook_url'],
+        'youtube_url' => $socials['youtube_url'],
+        'tiktok_url' => $socials['tiktok_url'],
+        'linkedin_url' => $socials['linkedin_url'],
+        'thumbnail_url' => '',
+    ];
+}
+
+
 // ─── HANDLE SAVE TO DB ───────────────────────────────────────────────
 $save_message = '';
 $save_errors = [];
@@ -1229,21 +1340,43 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
 // ─── HANDLE FILE UPLOAD & PARSE ──────────────────────────────────────
 $parsed = null;
 $parse_stats = null;
-if (isset($_POST['parse']) && isset($_FILES['gmaps_file'])) {
-    $file = $_FILES['gmaps_file'];
-    if ($file['error'] === UPLOAD_ERR_OK && $file['size'] > 0) {
-        $html = file_get_contents($file['tmp_name']);
+$parse_input_error = '';
+if (isset($_POST['parse'])) {
+    // Accept EITHER an uploaded HTML file OR pasted page source.
+    $html = '';
+    if (isset($_FILES['gmaps_file']) && $_FILES['gmaps_file']['error'] === UPLOAD_ERR_OK && $_FILES['gmaps_file']['size'] > 0) {
+        $html = file_get_contents($_FILES['gmaps_file']['tmp_name']);
+    } elseif (!empty($_POST['gmaps_paste'])) {
+        $html = (string)$_POST['gmaps_paste'];
+    }
 
-        // Extract search query from the HTML title
+    if ($html === '') {
+        $parse_input_error = 'Please upload a Google Maps HTML file or paste the page source.';
+    } else {
+        // Extract search query from the HTML title (search-results pages).
+        // Single place pages have a generic "Google Maps" title — handled below.
         $search_query = '';
         if (preg_match('/<title>([^<]+)<\/title>/', $html, $tm)) {
-            $search_query = preg_replace('/\s*-\s*Google Maps$/', '', html_entity_decode($tm[1]));
+            $search_query = trim(preg_replace('/\s*-\s*Google Maps$/', '', html_entity_decode($tm[1])));
         }
 
         $min_reviews = (int)($_POST['min_reviews'] ?? 2);
         $min_rating = (float)($_POST['min_rating'] ?? 3.0);
 
+        // Try the multi-listing search-results parser first; if it finds nothing,
+        // fall back to the single-place page parser.
         $raw = parse_gmaps_html($html);
+        $is_single_place = false;
+        if (empty($raw)) {
+            $place = parse_gmaps_place_html($html);
+            if ($place !== null) {
+                $raw = [$place];
+                $is_single_place = true;
+                if ($search_query === '' || strcasecmp($search_query, 'Google Maps') === 0) {
+                    $search_query = $place['name'];
+                }
+            }
+        }
 
         // Apply filters and detect categories
         $auto_approved = [];
@@ -1257,15 +1390,19 @@ if (isset($_POST['parse']) && isset($_FILES['gmaps_file'])) {
                 continue;
             }
 
-            // Check minimum reviews
-            if ($item['reviews'] < $min_reviews) {
-                $rejected[] = array_merge($item, ['reason' => "Only {$item['reviews']} review(s) (min: {$min_reviews})"]);
-                continue;
-            }
-            // Check minimum rating
-            if ($item['rating'] < $min_rating) {
-                $rejected[] = array_merge($item, ['reason' => "Rating {$item['rating']} (min: {$min_rating})"]);
-                continue;
+            // Review/rating minimums apply to bulk search-results imports only.
+            // A single pasted place often has 0 reviews, so don't reject it on that basis.
+            if (!$is_single_place) {
+                // Check minimum reviews
+                if ($item['reviews'] < $min_reviews) {
+                    $rejected[] = array_merge($item, ['reason' => "Only {$item['reviews']} review(s) (min: {$min_reviews})"]);
+                    continue;
+                }
+                // Check minimum rating
+                if ($item['rating'] < $min_rating) {
+                    $rejected[] = array_merge($item, ['reason' => "Rating {$item['rating']} (min: {$min_rating})"]);
+                    continue;
+                }
             }
 
             // Detect category (for providers)
@@ -1401,6 +1538,7 @@ if (isset($_POST['parse']) && isset($_FILES['gmaps_file'])) {
             'auto_approved' => $auto_approved,
             'needs_review' => $needs_review,
             'rejected' => $rejected,
+            'single_place' => $is_single_place,
         ];
 
         $parse_stats = [
@@ -1521,13 +1659,21 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
 <!-- UPLOAD FORM -->
 <div class="card">
     <h1>Import Google Maps Listings</h1>
-    <p style="color:#666;margin-bottom:16px;">Upload a saved Google Maps search results HTML file. Listings are parsed, filtered, and categorized automatically.</p>
+    <p style="color:#666;margin-bottom:16px;">
+        Import a saved Google Maps <strong>search results</strong> page (many listings) <em>or</em>
+        a single <strong>place</strong> page (one business). Provide a file or paste the page source —
+        listings are parsed, filtered, and categorized automatically.
+    </p>
+
+    <?php if (!empty($parse_input_error)): ?>
+        <div class="msg msg-error"><?= htmlspecialchars($parse_input_error) ?></div>
+    <?php endif; ?>
 
     <form method="POST" enctype="multipart/form-data">
         <div class="form-row">
             <div class="form-group">
                 <label>Google Maps HTML File</label>
-                <input type="file" name="gmaps_file" accept=".html,.htm" required>
+                <input type="file" name="gmaps_file" accept=".html,.htm">
             </div>
             <div class="form-group">
                 <label>Min Reviews</label>
@@ -1548,6 +1694,12 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
                 <button type="submit" name="parse" class="btn btn-primary">Parse & Preview</button>
             </div>
         </div>
+        <div class="form-group" style="margin-top:4px;">
+            <label>…or paste page source (single place or search results)</label>
+            <textarea name="gmaps_paste" placeholder="Paste the full Google Maps page source here (Ctrl+U → Ctrl+A → Ctrl+C)…"
+                      style="width:100%;min-height:90px;font-family:monospace;font-size:0.8rem;"></textarea>
+            <span style="font-size:0.75rem;color:#888;">Min review/rating filters are ignored for a single pasted place (these often have no reviews yet).</span>
+        </div>
     </form>
 </div>
 
@@ -1555,6 +1707,9 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
 <!-- PARSE RESULTS -->
 <div class="card">
     <h2>Parse Results: "<?= htmlspecialchars($parsed['search_query']) ?>" <span style="font-size:0.8rem;font-weight:400;color:#666;">— auto-detected types per item</span></h2>
+    <?php if (!empty($parsed['single_place'])): ?>
+        <div class="msg msg-info" style="margin-bottom:12px;">Single place page detected — one business parsed. Review the category &amp; type below, then save.</div>
+    <?php endif; ?>
 
     <div class="stats">
         <div class="stat stat-blue">
