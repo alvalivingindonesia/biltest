@@ -6694,6 +6694,22 @@ async function renderGetQuotes(el, params = {}) {
   let useBahasa = false;
   let delivery = { enabled: false, location: '', mapsLink: '' };
 
+  // Smart, varied placeholder examples (static — cycled by row index, not animated)
+  const GQ_MATERIAL_EG = [
+    'e.g. MU-445 Silatama Screed',
+    'e.g. Mapei Mapeflex 45',
+    'e.g. Dulux Weathershield, white',
+    'e.g. Holcim Serba Guna cement',
+    'e.g. Onduline corrugated roofing'
+  ];
+  const GQ_INFO_EG = [
+    'e.g. White base, coarse grain, 10mm',
+    'e.g. 25kg bags, grey',
+    'e.g. Specific Dulux paint code',
+    'e.g. Grade A, kiln-dried',
+    'e.g. Delivered to site'
+  ];
+
   const filters = {
     area: params.area || '',
     group: params.group || 'suppliers_materials',
@@ -6736,9 +6752,17 @@ async function renderGetQuotes(el, params = {}) {
     return msg;
   }
 
+  function refreshGhost() {
+    const ta = el.querySelector('#gq-message');
+    const ghost = el.querySelector('#gq-preview-ghost');
+    if (!ta || !ghost) return;
+    ghost.style.display = ta.value.trim() ? 'none' : '';
+  }
+
   function syncMessage() {
     const ta = el.querySelector('#gq-message');
     if (ta && !ta.dataset.manualEdit) ta.value = buildMessage();
+    refreshGhost();
   }
 
   function syncDeliveryFields() {
@@ -6752,13 +6776,13 @@ async function renderGetQuotes(el, params = {}) {
     container.innerHTML = quoteItems.map(function(item, idx) {
       return '<div class="gq-item-row" data-id="' + item.id + '">'
         + '<span class="gq-item-num">' + (idx + 1) + '</span>'
-        + '<input type="text" class="gq-input gq-input--material" placeholder="Material (e.g. Mapei Mapeflex 45)"'
+        + '<input type="text" class="gq-input gq-input--material" placeholder="' + escHtml(GQ_MATERIAL_EG[idx % GQ_MATERIAL_EG.length]) + '"'
         + ' value="' + escHtml(item.material) + '"'
         + ' oninput="gqUpdateItem(' + item.id + ', \'material\', this.value)">'
         + '<input type="text" class="gq-input gq-input--qty" placeholder="Qty"'
         + ' value="' + escHtml(item.quantity) + '"'
         + ' oninput="gqUpdateItem(' + item.id + ', \'quantity\', this.value)">'
-        + '<input type="text" class="gq-input gq-input--info" placeholder="Colour, size, spec\u2026"'
+        + '<input type="text" class="gq-input gq-input--info" placeholder="' + escHtml(GQ_INFO_EG[idx % GQ_INFO_EG.length]) + '"'
         + ' value="' + escHtml(item.info) + '"'
         + ' oninput="gqUpdateItem(' + item.id + ', \'info\', this.value)">'
         + (quoteItems.length > 1
@@ -6804,7 +6828,6 @@ async function renderGetQuotes(el, params = {}) {
       const thumb = b.logo_url || b.profile_photo_url;
       const trustedBadge = b.is_trusted ? '<span class="card-badge card-badge--trusted">\u2713 Trusted</span>' : '';
       return '<div class="gq-store-row' + (contacted ? ' gq-store-row--contacted' : '') + '" data-id="' + b.id + '">'
-        + '<label class="gq-pick" title="Select for Auto-Quote"><input type="checkbox" class="gq-pick-cb"' + (selectedAuto.has(String(b.id)) ? ' checked' : '') + ' onchange="gqTogglePick(\'' + b.id + '\', this.checked)"></label>'
         + '<div class="gq-store-avatar">'
         + (thumb
           ? '<img src="' + thumb + '" alt="' + escHtml(b.name) + '" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">'
@@ -6824,13 +6847,12 @@ async function renderGetQuotes(el, params = {}) {
         + '<button class="gq-wa-btn' + (contacted ? ' gq-wa-btn--contacted' : '') + '"'
         + ' data-wa="' + waNum + '" data-store-id="' + b.id + '"'
         + ' onclick="gqOpenWhatsApp(this)"'
-        + ' title="Send quote request via WhatsApp" aria-label="WhatsApp ' + escHtml(b.name) + '">'
-        + iconWhatsApp()
+        + ' title="Open WhatsApp with your message ready to send" aria-label="WhatsApp ' + escHtml(b.name) + '">'
+        + iconWhatsApp() + '<span class="gq-wa-btn-label">WhatsApp</span>'
         + '</button>'
         + '</div>'
         + '</div>';
     }).join('');
-    updateAutoBar();
   }
 
   async function applyFiltersAndRender() {
@@ -6880,19 +6902,38 @@ async function renderGetQuotes(el, params = {}) {
     <div class="dir-hero" data-group="suppliers_materials">
       <div class="container">
         <h1 class="dir-hero-title">Get Quotes</h1>
-        <p class="dir-hero-desc">List what you need, then send your quote request to multiple suppliers via WhatsApp in seconds.</p>
+        <p class="dir-hero-desc">Compose one materials list, then message Lombok suppliers directly on WhatsApp &mdash; and compare their replies.</p>
+        <div class="gq-stepper" role="list" aria-label="How it works">
+          <div class="gq-stepper-item" role="listitem">
+            <span class="gq-stepper-num">01</span>
+            <span class="gq-stepper-label">Compose</span>
+            <span class="gq-stepper-text">List your materials, specs &amp; delivery.</span>
+          </div>
+          <span class="gq-stepper-divider" aria-hidden="true"></span>
+          <div class="gq-stepper-item" role="listitem">
+            <span class="gq-stepper-num">02</span>
+            <span class="gq-stepper-label">Generate</span>
+            <span class="gq-stepper-text">We format a clean, vendor-ready inquiry.</span>
+          </div>
+          <span class="gq-stepper-divider" aria-hidden="true"></span>
+          <div class="gq-stepper-item" role="listitem">
+            <span class="gq-stepper-num">03</span>
+            <span class="gq-stepper-label">Connect</span>
+            <span class="gq-stepper-text">Launch WhatsApp to message local stores.</span>
+          </div>
+        </div>
       </div>
     </div>
     <div class="section">
       <div class="container">
 
-        <!-- Step 1: Items -->
+        <!-- Step 1: Compose (items + delivery) -->
         <div class="gq-step">
           <div class="gq-step-header">
             <div class="gq-step-num">1</div>
             <div>
-              <h2 class="gq-step-title">What do you need?</h2>
-              <p class="gq-step-desc">Add the materials or products you want a quote for.</p>
+              <h2 class="gq-step-title">Compose your list</h2>
+              <p class="gq-step-desc">Add the materials or products you want a quote for &mdash; the more precise, the better.</p>
             </div>
           </div>
           <div class="gq-items-cols">
@@ -6907,54 +6948,64 @@ async function renderGetQuotes(el, params = {}) {
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Add item
           </button>
+
+          <div class="gq-note">
+            <span class="gq-note-label">Concierge Note</span>
+            <p>Local vendors in Lombok respond fastest to precise item specs and brand names. Providing exact variants ensures highly accurate quotes.</p>
+          </div>
+
+          <div class="gq-subsection">
+            <label class="gq-checkbox-label">
+              <input type="checkbox" id="gq-delivery-toggle" onchange="gqToggleDelivery(this.checked)">
+              <span>Request delivery to a specific location</span>
+            </label>
+            <div id="gq-delivery-fields" style="display:none;">
+              <div class="gq-delivery-grid">
+                <div class="gq-field">
+                  <label class="gq-field-label" for="gq-delivery-location">Delivery location</label>
+                  <input type="text" id="gq-delivery-location" class="gq-input" placeholder="e.g. Kuta, Lombok"
+                         oninput="gqUpdateDelivery('location', this.value)">
+                </div>
+                <div class="gq-field">
+                  <label class="gq-field-label" for="gq-delivery-maps">Google Maps link <span class="gq-field-optional">(optional)</span></label>
+                  <input type="url" id="gq-delivery-maps" class="gq-input" placeholder="https://maps.google.com/..."
+                         oninput="gqUpdateDelivery('mapsLink', this.value)">
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <!-- Step 2: Delivery -->
+        <!-- Step 2: Generate -->
         <div class="gq-step">
           <div class="gq-step-header">
             <div class="gq-step-num">2</div>
             <div>
-              <h2 class="gq-step-title">Delivery details</h2>
-              <p class="gq-step-desc">Optionally request delivery and include your location.</p>
-            </div>
-          </div>
-          <label class="gq-checkbox-label">
-            <input type="checkbox" id="gq-delivery-toggle" onchange="gqToggleDelivery(this.checked)">
-            <span>Request delivery to a specific location</span>
-          </label>
-          <div id="gq-delivery-fields" style="display:none;">
-            <div class="gq-delivery-grid">
-              <div class="gq-field">
-                <label class="gq-field-label" for="gq-delivery-location">Delivery location</label>
-                <input type="text" id="gq-delivery-location" class="gq-input" placeholder="e.g. Kuta, Lombok"
-                       oninput="gqUpdateDelivery('location', this.value)">
-              </div>
-              <div class="gq-field">
-                <label class="gq-field-label" for="gq-delivery-maps">Google Maps link <span class="gq-field-optional">(optional)</span></label>
-                <input type="url" id="gq-delivery-maps" class="gq-input" placeholder="https://maps.google.com/..."
-                       oninput="gqUpdateDelivery('mapsLink', this.value)">
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Step 3: Message -->
-        <div class="gq-step">
-          <div class="gq-step-header">
-            <div class="gq-step-num">3</div>
-            <div>
               <h2 class="gq-step-title">Your quote message</h2>
-              <p class="gq-step-desc">Auto-generated from your items above &mdash; edit freely.</p>
+              <p class="gq-step-desc">Formatted from your list into a clean, vendor-ready inquiry &mdash; review and edit freely before you send.</p>
             </div>
           </div>
-          <label class="gq-checkbox-label" style="margin-bottom:var(--space-4);">
-            <input type="checkbox" id="gq-bahasa-toggle" onchange="gqToggleBahasa(this.checked)">
-            <span>Send the message using Bahasa Indonesia</span>
-          </label>
+          <div class="gq-preview-bar">
+            <span class="gq-preview-tag">Live Preview</span>
+            <div class="gq-lang-badge" role="group" aria-label="Message language">
+              <button type="button" class="gq-lang-opt is-active" data-lang="en" onclick="gqSetLang('en')">EN</button>
+              <span class="gq-lang-sep" aria-hidden="true">&#8646;</span>
+              <button type="button" class="gq-lang-opt" data-lang="id" onclick="gqSetLang('id')">ID</button>
+            </div>
+          </div>
           <div class="gq-message-wrap">
-            <textarea id="gq-message" class="gq-textarea" rows="10"
-                      placeholder="Add items above to generate your message\u2026"
-                      oninput="this.dataset.manualEdit='1'"></textarea>
+            <div class="gq-textarea-box">
+              <textarea id="gq-message" class="gq-textarea" rows="10"
+                        oninput="this.dataset.manualEdit='1';gqRefreshGhost()"></textarea>
+              <div class="gq-preview-ghost" id="gq-preview-ghost" aria-hidden="true">
+                <div class="gq-preview-ghost-head">Your formatted inquiry</div>
+                <div class="gq-preview-ghost-body">Hello, please can you provide a quote for the following items:
+
+&#8226;  [ your first material ]  &mdash;  Qty : &hellip;
+&#8226;  &hellip;</div>
+                <div class="gq-preview-ghost-foot">&lsaquo; add items above to generate your message &rsaquo;</div>
+              </div>
+            </div>
             <div class="gq-message-actions">
               <button class="btn btn--ghost btn--sm" onclick="gqResetMessage()">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
@@ -6964,13 +7015,13 @@ async function renderGetQuotes(el, params = {}) {
           </div>
         </div>
 
-        <!-- Step 4: Suppliers -->
+        <!-- Step 3: Connect -->
         <div class="gq-step">
           <div class="gq-step-header">
-            <div class="gq-step-num">4</div>
+            <div class="gq-step-num">3</div>
             <div>
-              <h2 class="gq-step-title">Select suppliers</h2>
-              <p class="gq-step-desc">Click the WhatsApp button next to any supplier to open WhatsApp with your message ready to send.</p>
+              <h2 class="gq-step-title">Connect with suppliers</h2>
+              <p class="gq-step-desc">Browse local stores below and tap WhatsApp on any one to open a chat with your message ready to send. Message as many as you like, then compare their replies.</p>
             </div>
           </div>
 
@@ -7047,10 +7098,14 @@ async function renderGetQuotes(el, params = {}) {
 
           <p class="results-count" id="gq-results-count"></p>
           <div id="gq-store-list" class="gq-store-list"></div>
+          <!-- Auto-Quote (paid automated engine) temporarily disabled — feature-flagged off.
+               Markup removed from the page; gqSendAuto/gqTogglePick handlers retained below for easy revival. -->
+          <!--
           <div class="gq-auto-bar" id="gq-auto-bar">
             <div class="gq-auto-info"><strong>&#10024; Auto-Quote</strong> &mdash; tick suppliers above and we'll message them, translate the replies, and compare prices for you.</div>
             <button class="btn btn--primary" id="gq-auto-send" onclick="gqSendAuto()" disabled>Send to <span id="gq-auto-count">0</span> selected</button>
           </div>
+          -->
         </div>
 
       </div>
@@ -7082,6 +7137,18 @@ async function renderGetQuotes(el, params = {}) {
     if (ta) { delete ta.dataset.manualEdit; }
     syncMessage();
   };
+
+  window.gqSetLang = function(lang) {
+    useBahasa = (lang === 'id');
+    el.querySelectorAll('.gq-lang-opt').forEach(function(btn) {
+      btn.classList.toggle('is-active', btn.dataset.lang === lang);
+    });
+    const ta = el.querySelector('#gq-message');
+    if (ta) delete ta.dataset.manualEdit;
+    syncMessage();
+  };
+
+  window.gqRefreshGhost = refreshGhost;
 
   window.gqToggleDelivery = function(checked) {
     delivery.enabled = checked;
