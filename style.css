@@ -2534,6 +2534,19 @@
   opacity: 0.25;
 }
 
+/* Get Quotes hero: extra diffused scrim so the stepper text reads cleanly
+   over the concrete/scaffolding image (scoped — leaves other dir heroes as-is). */
+.dir-hero:has(.gq-stepper)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg,
+    rgba(20, 18, 16, 0.35) 0%,
+    rgba(20, 18, 16, 0.58) 100%);
+}
+
 .dir-hero .container {
   position: relative;
   z-index: 1;
@@ -6662,13 +6675,16 @@ a.rab-tool-card:hover {
   flex-direction: column;
   gap: 6px;
   flex: 1;
+  /* Ultra-subtle ambient shadow: separates font edges from light concrete
+     textures without any harsh outline. Inherited by all rows below. */
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
 }
 .gq-stepper-num {
   font-family: var(--font-body);
   font-size: var(--text-xs);
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.18em;
-  color: rgba(250, 248, 244, 0.5);
+  color: #ffffff;
 }
 .gq-stepper-label {
   font-family: var(--font-body);
@@ -6676,12 +6692,12 @@ a.rab-tool-card:hover {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.16em;
-  color: #faf8f4;
+  color: #ffffff;
 }
 .gq-stepper-text {
   font-size: var(--text-xs);
   line-height: 1.5;
-  color: rgba(250, 248, 244, 0.72);
+  color: rgba(250, 248, 244, 0.8);
 }
 .gq-stepper-divider {
   width: 1px;
