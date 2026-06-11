@@ -1015,16 +1015,15 @@ var HeroReveal = {
 
     var tl = gsap.timeline({
       // duration:1 makes every primary tween span the full scrubbed timeline,
-      // so the wipe completes exactly at the end of the pin (not halfway).
+      // so the wipe completes exactly at the end of the scrub window.
       defaults: { ease: 'none', duration: 1 },
       scrollTrigger: {
         trigger: hero,
         start: 'top top',
-        end: '+=50%',         // shorter pin = line descends faster per scroll
+        // No pin: the page scrolls naturally while the wipe scrubs against it,
+        // so the hero scrolls up the screen as the wireframe dissolves away.
+        end: '+=50%',         // wipe completes after ~half a viewport of scroll
         scrub: 1,             // smooth catch-up factor
-        pin: true,
-        pinSpacing: true,
-        anticipatePin: 1,
         invalidateOnRefresh: true
       }
     });
