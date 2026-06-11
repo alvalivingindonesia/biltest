@@ -1013,7 +1013,11 @@ var HeroReveal = {
         // No pin: the page scrolls naturally while the wipe scrubs against it,
         // so the hero scrolls up the screen as the wireframe dissolves away.
         end: '+=20%',         // short window: ~one scroll clears half the mesh
-        scrub: 1,             // smooth catch-up factor
+        // scrub:true tracks scroll position 1:1 (no time-based catch-up). With
+        // the short window a numeric scrub lags badly on fast scroll-up, leaving
+        // the mesh stuck partway when you return to the top. 1:1 always reaches
+        // both ends exactly, so the wipe fully reverses back to the roofline.
+        scrub: true,
         invalidateOnRefresh: true
       }
     });
