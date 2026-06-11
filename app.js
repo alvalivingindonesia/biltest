@@ -960,6 +960,8 @@ var HeroReveal = {
   destroy: function () {
     if (this.tl) { this.tl.kill(); this.tl = null; }
     if (this.st) { this.st.kill(true); this.st = null; }
+    // Restore native smooth scrolling once the pin is gone.
+    document.documentElement.classList.remove('st-pinned');
   },
 
   init: function (root) {
@@ -988,6 +990,11 @@ var HeroReveal = {
     // Mark the hero so CSS pins both image layers at identity scale (the base
     // photo's Ken Burns zoom would otherwise de-register the wireframe).
     hero.classList.add('hero-xray');
+
+    // Disable CSS `scroll-behavior: smooth` while pinned. Native smooth-scroll
+    // hijacks ScrollTrigger's scroll-position correction at the pin boundary,
+    // which makes the page lurch back to the top when the wipe completes.
+    document.documentElement.classList.add('st-pinned');
 
     // Where the wipe begins, as a % down from the top of the viewport. The top
     // band of the frame is sky/ocean — identical in both layers — so wiping it

@@ -822,6 +822,15 @@
   background: #1a1814;
 }
 
+/* GSAP ScrollTrigger pins the hero; native CSS smooth-scroll (set on <html> in
+   base.css) fights its scroll-position correction at the pin boundary and snaps
+   the page to the top. Disable it only while a pin is active — set/cleared by
+   HeroReveal. Class beats the element selector, so smooth scroll is restored
+   everywhere else. */
+html.st-pinned {
+  scroll-behavior: auto;
+}
+
 /* Base layer — the finished, photorealistic villa. */
 .hero-bg {
   position: absolute;
