@@ -989,10 +989,18 @@ var HeroReveal = {
     // photo's Ken Burns zoom would otherwise de-register the wireframe).
     hero.classList.add('hero-xray');
 
-    // Open the wireframe to its full initial state (it is clipped away by
-    // default for the no-JS fallback).
-    gsap.set(wire, { clipPath: 'inset(0% 0 0 0)', webkitClipPath: 'inset(0% 0 0 0)' });
-    if (scan) gsap.set(scan, { top: '0%', opacity: 0 });
+    // Where the wipe begins, as a % down from the top of the viewport. The top
+    // band of the frame is sky/ocean — identical in both layers — so wiping it
+    // shows no motion and pushes the visible reveal off-screen. Start the clip
+    // edge just above the villa roofline so the sweep happens over the building.
+    // Tune this single value if the roof sits higher/lower in the crop.
+    var WIPE_START = 25;
+    var startInset = 'inset(' + WIPE_START + '% 0 0 0)';
+
+    // Initial state: top band already "revealed" (it's identical sky anyway),
+    // full villa wireframe visible below, scan line parked at the roofline.
+    gsap.set(wire, { clipPath: startInset, webkitClipPath: startInset });
+    if (scan) gsap.set(scan, { top: WIPE_START + '%', opacity: 0 });
 
     var tl = gsap.timeline({
       // duration:1 makes every primary tween span the full scrubbed timeline,
@@ -1010,15 +1018,14 @@ var HeroReveal = {
       }
     });
 
-    // Wipe the wireframe away top->bottom, revealing the finished villa.
-    tl.to(wire, {
-      clipPath: 'inset(100% 0 0 0)',
-      webkitClipPath: 'inset(100% 0 0 0)'
-    }, 0);
+    // Wipe the wireframe away from the roofline down, revealing the finished villa.
+    tl.fromTo(wire,
+      { clipPath: startInset, webkitClipPath: startInset },
+      { clipPath: 'inset(100% 0 0 0)', webkitClipPath: 'inset(100% 0 0 0)' }, 0);
 
     // Scan line rides the clip edge; fades in at the start, out at the finish.
     if (scan) {
-      tl.fromTo(scan, { top: '0%' }, { top: '100%' }, 0);
+      tl.fromTo(scan, { top: WIPE_START + '%' }, { top: '100%' }, 0);
       tl.to(scan, { opacity: 1, duration: 0.06 }, 0);
       tl.to(scan, { opacity: 0, duration: 0.08 }, 0.92);
     }
