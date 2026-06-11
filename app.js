@@ -694,6 +694,10 @@ async function router() {
 // =====================================================
 
 async function renderHome(el) {
+  // Transform-free entrance so the GSAP-pinned hero has no transformed
+  // ancestor (a lingering transform breaks position:fixed pinning).
+  el.classList.add('is-xray-host');
+
   let trustedProviders = [], featuredDevs = [], featuredProjects = [], homeGuides = [];
   let totalProviders = 0, totalDevelopers = 0, totalProjects = 0;
   try {

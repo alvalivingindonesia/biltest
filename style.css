@@ -4004,6 +4004,21 @@ html.st-pinned {
   }
 }
 
+/* The home view hosts the GSAP-pinned hero. The page-reveal animation above
+   uses `forwards`, so its final `transform: translateY(0)` lingers on the
+   element permanently — and ANY transform makes the element a containing block
+   for position:fixed, which breaks ScrollTrigger's pin (the hero ends up fixed
+   to .page-view instead of the viewport, causing a jump at unpin). So the home
+   view uses a transform-free fade entrance — no lingering transform, valid pin. */
+.page-view.is-xray-host {
+  animation-name: page-reveal-fade;
+}
+
+@keyframes page-reveal-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
 /* Card stagger animation */
 .card-animate {
   opacity: 0;
