@@ -822,15 +822,6 @@
   background: #1a1814;
 }
 
-/* GSAP ScrollTrigger pins the hero; native CSS smooth-scroll (set on <html> in
-   base.css) fights its scroll-position correction at the pin boundary and snaps
-   the page to the top. Disable it only while a pin is active — set/cleared by
-   HeroReveal. Class beats the element selector, so smooth scroll is restored
-   everywhere else. */
-html.st-pinned {
-  scroll-behavior: auto;
-}
-
 /* Base layer — the finished, photorealistic villa. */
 .hero-bg {
   position: absolute;
@@ -4002,21 +3993,6 @@ html.st-pinned {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-/* The home view hosts the GSAP-pinned hero. The page-reveal animation above
-   uses `forwards`, so its final `transform: translateY(0)` lingers on the
-   element permanently — and ANY transform makes the element a containing block
-   for position:fixed, which breaks ScrollTrigger's pin (the hero ends up fixed
-   to .page-view instead of the viewport, causing a jump at unpin). So the home
-   view uses a transform-free fade entrance — no lingering transform, valid pin. */
-.page-view.is-xray-host {
-  animation-name: page-reveal-fade;
-}
-
-@keyframes page-reveal-fade {
-  from { opacity: 0; }
-  to   { opacity: 1; }
 }
 
 /* Card stagger animation */
