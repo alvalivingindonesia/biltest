@@ -1009,7 +1009,7 @@ var HeroReveal = {
       scrollTrigger: {
         trigger: hero,
         start: 'top top',
-        end: '+=100%',        // full wipe takes ~1 viewport of scroll
+        end: '+=50%',         // shorter pin = line descends faster per scroll
         scrub: 1,             // smooth catch-up factor
         pin: true,
         pinSpacing: true,
