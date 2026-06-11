@@ -639,6 +639,10 @@ async function router() {
   var view = document.createElement('div');
   view.className = 'page-view';
 
+  // Tear down the hero reveal before any route renders; renderHome re-inits it.
+  // Prevents the pinned ScrollTrigger from leaking onto replaced DOM.
+  if (typeof HeroReveal !== 'undefined') HeroReveal.destroy();
+
   switch (page) {
     case 'home': await renderHome(view); break;
     case 'directory': await renderDirectory(view, params); break;
@@ -722,9 +726,16 @@ async function renderHome(el) {
   const totalFeaturedDevs = featuredDevs.length;
 
   el.innerHTML = `
-    <!-- HERO — Full bleed, wireframe layout -->
-    <section class="hero" aria-label="Build in Lombok hero">
+    <!-- HERO — Full bleed, X-Ray materialization reveal -->
+    <section class="hero" id="hero-reveal" aria-label="Build in Lombok hero">
+      <!-- Base layer: the finished, photorealistic villa (hero-main.jpg). -->
       <div class="hero-bg" id="hero-bg"></div>
+      <!-- Reveal layer: pixel-registered wireframe of the same frame (hero-wire.jpg).
+           Clipped away top-to-bottom on scroll to "materialize" the villa beneath.
+           Hidden by default so no-JS / no-GSAP gracefully shows the finished photo. -->
+      <div class="hero-wire" id="hero-wire" aria-hidden="true"></div>
+      <!-- Razor-thin scanning line that tracks the clip edge. -->
+      <div class="hero-scanline" id="hero-scanline" aria-hidden="true"></div>
       <div class="hero-overlay"></div>
       <div class="hero-inner">
         <div class="container">
@@ -922,8 +933,107 @@ async function renderHome(el) {
   // Animate cards
   requestAnimationFrame(() => animateCards(el));
 
+  // Wire the hero X-Ray materialization reveal (GSAP ScrollTrigger).
+  requestAnimationFrame(() => initHeroReveal(el));
+
   // The hero search trigger is wired by CommandPalette.bindTriggers()
   // which runs on init() and after every hashchange.
+}
+
+// =====================================================
+// HERO X-RAY MATERIALIZATION REVEAL
+// =====================================================
+// Layers hero-wire.jpg (a pixel-registered wireframe of the same frame) over
+// the finished hero-main.jpg, then scrubs a clip-path wipe top->bottom while the
+// hero is pinned for ~1 viewport. Above the moving edge the finished villa has
+// "materialized"; below it the wireframe remains. A thin gold scan line rides
+// the edge. Pixel-flawless because both layers are the same 2752px camera frame.
+//
+// Graceful degradation: if GSAP/ScrollTrigger failed to load, or the user
+// prefers reduced motion, we skip the effect entirely — the default CSS clips
+// the wireframe away, leaving the finished photo visible.
+
+var HeroReveal = {
+  st: null,
+  tl: null,
+
+  destroy: function () {
+    if (this.tl) { this.tl.kill(); this.tl = null; }
+    if (this.st) { this.st.kill(true); this.st = null; }
+  },
+
+  init: function (root) {
+    // Always start clean so re-navigating to home never stacks triggers on
+    // dead DOM (the SPA replaces #main-content on every route change).
+    this.destroy();
+
+    var scope = root || document;
+    var hero = scope.querySelector('#hero-reveal');
+    var wire = scope.querySelector('#hero-wire');
+    var scan = scope.querySelector('#hero-scanline');
+    if (!hero || !wire) return;
+
+    var reduce = window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // No GSAP, or reduced motion → leave the finished photo showing.
+    if (reduce || typeof window.gsap === 'undefined' ||
+        typeof window.ScrollTrigger === 'undefined') {
+      return;
+    }
+
+    var gsap = window.gsap;
+    gsap.registerPlugin(window.ScrollTrigger);
+
+    // Mark the hero so CSS pins both image layers at identity scale (the base
+    // photo's Ken Burns zoom would otherwise de-register the wireframe).
+    hero.classList.add('hero-xray');
+
+    // Open the wireframe to its full initial state (it is clipped away by
+    // default for the no-JS fallback).
+    gsap.set(wire, { clipPath: 'inset(0% 0 0 0)', webkitClipPath: 'inset(0% 0 0 0)' });
+    if (scan) gsap.set(scan, { top: '0%', opacity: 0 });
+
+    var tl = gsap.timeline({
+      // duration:1 makes every primary tween span the full scrubbed timeline,
+      // so the wipe completes exactly at the end of the pin (not halfway).
+      defaults: { ease: 'none', duration: 1 },
+      scrollTrigger: {
+        trigger: hero,
+        start: 'top top',
+        end: '+=100%',        // full wipe takes ~1 viewport of scroll
+        scrub: 1,             // smooth catch-up factor
+        pin: true,
+        pinSpacing: true,
+        anticipatePin: 1,
+        invalidateOnRefresh: true
+      }
+    });
+
+    // Wipe the wireframe away top->bottom, revealing the finished villa.
+    tl.to(wire, {
+      clipPath: 'inset(100% 0 0 0)',
+      webkitClipPath: 'inset(100% 0 0 0)'
+    }, 0);
+
+    // Scan line rides the clip edge; fades in at the start, out at the finish.
+    if (scan) {
+      tl.fromTo(scan, { top: '0%' }, { top: '100%' }, 0);
+      tl.to(scan, { opacity: 1, duration: 0.06 }, 0);
+      tl.to(scan, { opacity: 0, duration: 0.08 }, 0.92);
+    }
+
+    // Drift the scroll hint away as the reveal begins.
+    var hint = scope.querySelector('.hero-scroll-hint');
+    if (hint) tl.to(hint, { opacity: 0, duration: 0.15 }, 0);
+
+    this.tl = tl;
+    this.st = tl.scrollTrigger;
+  }
+};
+
+function initHeroReveal(root) {
+  try { HeroReveal.init(root); } catch (e) { /* never block render */ }
 }
 
 // =====================================================

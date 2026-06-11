@@ -822,6 +822,7 @@
   background: #1a1814;
 }
 
+/* Base layer — the finished, photorealistic villa. */
 .hero-bg {
   position: absolute;
   inset: 0;
@@ -837,9 +838,63 @@
   transform: scale(1);
 }
 
+/* When the X-Ray reveal is active, both layers must stay pixel-locked — any
+   Ken Burns zoom on the base would de-register the wireframe during the wipe.
+   So we pin both layers at identity scale. */
+.hero.hero-xray .hero-bg,
+.hero.hero-xray .hero-bg.loaded {
+  transform: none;
+  transition: none;
+}
+
+/* Reveal layer — pixel-registered wireframe of the same frame.
+   Default state is fully clipped away (invisible) so that without JS/GSAP the
+   finished photo shows through. JS opens the clip on init, then scrolls it shut. */
+.hero-wire {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background-image: url('./images/hero-wire.jpg');
+  background-size: cover;
+  background-position: center 40%;
+  background-repeat: no-repeat;
+  clip-path: inset(100% 0 0 0);
+  -webkit-clip-path: inset(100% 0 0 0);
+  will-change: clip-path;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  pointer-events: none;
+}
+
+/* Razor-thin scanning line riding the clip edge — the "materialization front". */
+.hero-scanline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 3;
+  height: 2px;
+  opacity: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    rgba(212, 175, 110, 0.0) 4%,
+    rgba(244, 226, 178, 0.95) 50%,
+    rgba(212, 175, 110, 0.0) 96%,
+    transparent 100%
+  );
+  box-shadow:
+    0 0 8px rgba(244, 226, 178, 0.7),
+    0 0 22px rgba(212, 175, 110, 0.55);
+  transform: translateZ(0);
+  will-change: top, opacity;
+}
+
 .hero-overlay {
   position: absolute;
   inset: 0;
+  z-index: 2;
   background: linear-gradient(
     to bottom,
     rgba(10, 8, 6, 0.38) 0%,
@@ -850,7 +905,7 @@
 
 .hero-inner {
   position: relative;
-  z-index: 2;
+  z-index: 4;
   width: 100%;
   padding-top: calc(var(--nav-height) + var(--space-6));
   padding-bottom: clamp(var(--space-16), 8vw, var(--space-32));
@@ -908,7 +963,7 @@
   bottom: var(--space-8);
   left: 50%;
   transform: translateX(-50%);
-  z-index: 2;
+  z-index: 4;
   display: flex;
   flex-direction: column;
   align-items: center;
