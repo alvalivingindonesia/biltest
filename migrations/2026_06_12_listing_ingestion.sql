@@ -181,9 +181,11 @@ INSERT IGNORE INTO area_aliases (alias_text, area_key) VALUES
     ('gili', 'gili_islands'), ('gili trawangan', 'gili_islands'), ('gili air', 'gili_islands'), ('gili meno', 'gili_islands'),
     ('mawi', 'mawi'), ('are guling', 'are_guling'), ('areguling', 'are_guling'),
     ('gerupuk', 'gerupuk'), ('sekotong', 'sekotong'),
-    ('praya', 'praya'), ('pujut praya', 'praya'), ('batujai', 'praya'), ('penujak', 'praya'),
-    ('sengkol', 'praya'), ('mertak', 'praya'), ('pengembur', 'praya'),
-    ('batukliang', 'praya'), ('jonggat', 'praya'), ('kopang', 'praya'), ('janapria', 'praya');
+    ('praya', 'praya'), ('batujai', 'praya'), ('penujak', 'praya'),
+    ('batukliang', 'praya'), ('jonggat', 'praya'), ('kopang', 'praya'), ('janapria', 'praya'),
+    -- Pujut district (south coast) villages = the Kuta/Mandalika market area, NOT Praya town.
+    ('pujut', 'kuta'), ('sengkol', 'kuta'), ('mertak', 'kuta'), ('pengembur', 'kuta'),
+    ('rembitan', 'kuta'), ('sukadana', 'kuta'), ('bumbang', 'kuta'), ('prabu', 'kuta');
 
 
 -- ---------------------------------------------------------------------

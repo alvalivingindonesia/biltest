@@ -98,3 +98,13 @@ outranks a display-only one).
 - **Repro / example:** https://www.lamudi.co.id/properti/41032-73-52f21a7e305b-bc52-ce4058cb-a6b8-422f — desc "LT 9.67 are … Jual 200 juta/are … Hanya 1,9 M"; the Rp 1.9 B total was discarded.
 - **Suggested fix:** Indonesian description price parser (`lc_prices_from_text` / `lc_best_total_from_text`) that understands `1,9 M`, `200 juta/are`, `Rp 1.900.000.000`, ignores sizes (`9.67 are`, `967 m2`), and sanity-checks the recovered total against land size + the per-m² band. Use it as a fallback in ingest, and prefill the corrector's price field with it.
 - **Resolution:** 2026-06-12 — parser added; `listing_ingest.php` falls back to the description total when the card price is missing/flagged; the worker now sends the full `description`; the recanonicalize desk shows "📝 from description: Rp …" and prefills the Save field — commit pending this session.
+
+### BUG-007 — Area resolver relabelled correct listings to "Kuta" from a description mention
+- **Status:** fixed
+- **Severity:** high (data-integrity — would move dozens of correctly-located listings)
+- **Area:** `api/listing_canonical.php` `lc_resolve_area_key`; area logic in `admin/recanonicalize_listings.php`; `area_aliases` seed
+- **Reported:** 2026-06-13
+- **Description:** `lc_resolve_area_key` sorted candidates by string length and scanned the whole description, so a listing whose description merely said "…near Kuta…" resolved to `kuta` and the corrector flagged it to move there — even though its stored area (are_guling, gerupuk, selong_belanak…) was correct. Separately the seed mapped Pujut-district villages (Mertak, Sengkol, Pengembur) to `praya` though they are the Kuta/Mandalika area, so a "Mertak" listing was flagged Kuta→Praya.
+- **Repro / example:** Listings #700/#721/#724 etc. (correct areas) all suggested → Kuta; #659 "Mertak" (correctly Kuta) suggested → Praya.
+- **Suggested fix:** Resolve candidates in priority order (structured/title first), word-boundary match, and only let the **title** override an already-set area; fill default/blank areas from the best signal (description → review, not auto). Remap Pujut villages to `kuta`.
+- **Resolution:** 2026-06-13 — resolver rewritten (order-preserving, `\b` match) + `lc_resolve_area_with_source`; recanonicalize only flags a set-area conflict on explicit title evidence and leaves correct areas alone; alias fix in `migrations/2026_06_13_fix_area_aliases.sql` (+ corrected seed) — commit pending this session.

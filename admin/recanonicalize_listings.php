@@ -235,17 +235,35 @@ foreach ($rows as $r) {
     }
 
     // ── AREA ─────────────────────────────────────────────────────────
-    $resolved = lc_resolve_area_key($db, array($r['location_detail'], $r['title'], $r['description']));
-    if ($resolved && $resolved !== $r['area_key']) {
-        $is_default = ($r['area_key'] === null || $r['area_key'] === '' || $r['area_key'] === 'praya');
-        $arow = array('id' => $id, 'title' => $r['title'], 'old' => $r['area_key'], 'new' => $resolved,
-                      'loc' => $r['location_detail'], 'source_url' => $r['source_url']);
-        if ($is_default) {
-            $area_fixes[] = $arow;
-            if ($apply) $db->prepare("UPDATE listings SET area_key = ?, updated_at = NOW() WHERE id = ?")->execute(array($resolved, $id));
-        } else {
-            $area_flips[] = $arow;
-            if ($apply) lc_queue_review($db, $id, 'area_flip', array('old_area_key' => $r['area_key'], 'new_area_key' => $resolved, 'location_detail' => $r['location_detail']));
+    // A non-default stored area was almost always curated correctly, so we DON'T
+    // second-guess it from a noisy description (a "near Kuta" line must not
+    // relabel an are_guling listing). Only the TITLE — explicit, e.g. "Tanah
+    // Dijual di Praya" — is trusted to override a set area. Missing/default
+    // areas are filled from the best available signal.
+    $cur_area   = $r['area_key'];
+    $is_default = ($cur_area === null || $cur_area === '' || $cur_area === 'praya');
+    $title_area = lc_resolve_area_key($db, array($r['title']));
+
+    if (!$is_default) {
+        if ($title_area && $title_area !== $cur_area) {
+            $area_flips[] = array('id' => $id, 'title' => $r['title'], 'old' => $cur_area, 'new' => $title_area,
+                                  'loc' => $r['location_detail'], 'source_url' => $r['source_url']);
+            if ($apply) lc_queue_review($db, $id, 'area_flip', array('old_area_key' => $cur_area, 'new_area_key' => $title_area, 'evidence' => 'title', 'location_detail' => $r['location_detail']));
+        }
+        // else: trust the stored area, leave it untouched.
+    } else {
+        $res = lc_resolve_area_with_source($db, $r['location_detail'], $r['title'], $r['description']);
+        if ($res['key'] && $res['key'] !== $cur_area) {
+            $arow = array('id' => $id, 'title' => $r['title'], 'old' => $cur_area, 'new' => $res['key'],
+                          'loc' => $r['location_detail'], 'source_url' => $r['source_url']);
+            if ($res['source'] === 'description') {
+                // weakest signal — review, don't auto-apply.
+                $area_flips[] = $arow;
+                if ($apply) lc_queue_review($db, $id, 'area_flip', array('old_area_key' => $cur_area, 'new_area_key' => $res['key'], 'evidence' => 'description', 'location_detail' => $r['location_detail']));
+            } else {
+                $area_fixes[] = $arow;
+                if ($apply) $db->prepare("UPDATE listings SET area_key = ?, updated_at = NOW() WHERE id = ?")->execute(array($res['key'], $id));
+            }
         }
     }
 }

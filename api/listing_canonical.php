@@ -460,34 +460,43 @@ function lc_save_tags($db, $listing_id, array $tags) {
 // ─────────────────────────────────────────────────────────────────────
 
 /**
- * Resolve area_key from structured/loose location candidates via area_aliases.
- * Tries each candidate string (kecamatan, desa, district, title) longest-first.
- * Returns area_key string, or null when nothing maps — caller queues a review,
- * NEVER defaults to 'praya'.
+ * Resolve area_key from location candidates via area_aliases. Candidates are
+ * tried IN THE GIVEN ORDER (most reliable first — e.g. structured location,
+ * then title) and the FIRST that maps wins. Within a candidate: exact match,
+ * then a word-boundary alias match (so "near kuta" still resolves but "kutai"
+ * does not, and a long description doesn't outrank a clean structured field).
+ * Returns area_key, or null when nothing maps — caller decides, NEVER defaults.
  */
 function lc_resolve_area_key($db, array $candidates) {
-    $norms = array();
+    $exact = $db->prepare("SELECT area_key FROM area_aliases WHERE alias_text = ? LIMIT 1");
+    $all = null;
     foreach ($candidates as $c) {
         $n = lc_normalize_area_text($c);
-        if ($n !== '') $norms[$n] = strlen($n);
-    }
-    if (empty($norms)) return null;
-    arsort($norms); // try most specific (longest) first
-
-    $exact = $db->prepare("SELECT area_key FROM area_aliases WHERE alias_text = ? LIMIT 1");
-    foreach (array_keys($norms) as $n) {
+        if ($n === '') continue;
         $exact->execute(array($n));
         $k = $exact->fetchColumn();
         if ($k) return $k;
-    }
-    // Substring fallback: any alias contained in a candidate (e.g. full address line).
-    $all = $db->query("SELECT alias_text, area_key FROM area_aliases ORDER BY CHAR_LENGTH(alias_text) DESC")->fetchAll();
-    foreach (array_keys($norms) as $n) {
+        if ($all === null) $all = $db->query("SELECT alias_text, area_key FROM area_aliases ORDER BY CHAR_LENGTH(alias_text) DESC")->fetchAll();
         foreach ($all as $a) {
-            if (strpos($n, $a['alias_text']) !== false) return $a['area_key'];
+            if (preg_match('/\b' . preg_quote($a['alias_text'], '/') . '\b/u', $n)) return $a['area_key'];
         }
     }
     return null;
+}
+
+/**
+ * Like lc_resolve_area_key but reports WHICH tier resolved it, so callers can
+ * trust a title/structured match more than a loose description mention.
+ * Returns array(key, source) where source is 'title'|'structured'|'description'|null.
+ */
+function lc_resolve_area_with_source($db, $structured, $title, $description) {
+    $tiers = array('title' => $title, 'structured' => $structured, 'description' => $description);
+    foreach ($tiers as $src => $txt) {
+        if ($txt === null || $txt === '') continue;
+        $k = lc_resolve_area_key($db, array($txt));
+        if ($k) return array('key' => $k, 'source' => $src);
+    }
+    return array('key' => null, 'source' => null);
 }
 
 // ─────────────────────────────────────────────────────────────────────
