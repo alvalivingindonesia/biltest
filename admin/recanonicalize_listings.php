@@ -61,8 +61,9 @@ $rows = $db->query(
        FROM listings"
 )->fetchAll();
 
-$price_fixes = array();   // [id, old, new, note]
-$price_flags = array();
+$price_changes = array();  // total or per-m² changed / relabelled (auto-applied)
+$price_reviews = array();   // can't trust — flagged, price left as-is
+$price_nosize  = array();   // priced but no land size to sanity-check
 $area_fixes  = array();
 $area_flips  = array();
 
@@ -71,27 +72,56 @@ foreach ($rows as $r) {
     $sqm = (int)$r['land_size_sqm'];
     $sqm_ok = lc_trustworthy_size_sqm($sqm);
     $label = (string)$r['price_label'];
+    $cur_idr = $r['price_idr'] === null ? null : (int)$r['price_idr'];
+    $cur_psqm = $r['price_idr_per_sqm'] === null ? null : (int)$r['price_idr_per_sqm'];
 
-    // ── PRICE ───────────────────────────────────────────────────────
-    if (in_array($label, array('Per Are', 'Per m²'), true) && $r['price_idr'] !== null && $r['price_idr_per_sqm'] === null) {
-        // Old buggy row: price_idr holds the per-are/per-m² unit price.
-        if ($sqm_ok) {
-            $pc = lc_canonical_price((int)$r['price_idr'], $label, $sqm);
-            if ($pc['price_idr'] !== null && (int)$pc['price_idr'] !== (int)$r['price_idr']) {
-                $price_fixes[] = array('id' => $id, 'title' => $r['title'],
-                    'old' => (int)$r['price_idr'], 'new' => (int)$pc['price_idr'],
-                    'per_sqm' => $pc['price_idr_per_sqm'], 'label' => $label);
+    // ── PRICE ── re-evaluate EVERY priced row by magnitude, not by label ──
+    if ($cur_idr !== null && $cur_idr > 0) {
+        $inf = lc_infer_price($cur_idr, $sqm, $label);
+        $row = array(
+            'id' => $id, 'title' => $r['title'],
+            'sqm' => $sqm_ok ? $sqm : null, 'are' => $sqm_ok ? round($sqm / 100, 2) : null,
+            'stored' => $cur_idr, 'interp' => $inf['interp'], 'note' => $inf['note'],
+            'total' => $inf['total'], 'per_sqm' => $inf['per_sqm'], 'per_are' => $inf['per_are'],
+            'confidence' => $inf['confidence'],
+        );
+
+        if (!$sqm_ok) {
+            // No size: keep whatever total we have, but can't verify it.
+            if ($inf['confidence'] === 'review') {
+                $price_nosize[] = $row;
                 if ($apply) {
-                    $db->prepare("UPDATE listings SET price_idr=?, price_idr_per_sqm=?, price_review_flag=0, updated_at=NOW() WHERE id=?")
-                       ->execute(array($pc['price_idr'], $pc['price_idr_per_sqm'], $id));
+                    $db->prepare("UPDATE listings SET price_review_flag=1, updated_at=NOW() WHERE id=?")->execute(array($id));
+                    lc_queue_review($db, $id, 'price_uncertain', array('stored_idr' => $cur_idr, 'reason' => $inf['note'], 'land_size_sqm' => $sqm));
                 }
             }
-        } else {
-            // Per-are with no size -> can't total. Price on Request + review.
-            $price_flags[] = array('id' => $id, 'title' => $r['title'], 'old' => (int)$r['price_idr'], 'label' => $label);
+        } elseif ($inf['confidence'] === 'review') {
+            // Implausible at any reading — leave price, flag for a human.
+            $price_reviews[] = $row;
             if ($apply) {
-                $db->prepare("UPDATE listings SET price_idr=NULL, price_review_flag=1, updated_at=NOW() WHERE id=?")->execute(array($id));
-                lc_queue_review($db, $id, 'per_are_no_size', array('was_price_idr' => (int)$r['price_idr'], 'label' => $label));
+                $db->prepare("UPDATE listings SET price_review_flag=1, updated_at=NOW() WHERE id=?")->execute(array($id));
+                lc_queue_review($db, $id, 'price_uncertain', array(
+                    'stored_idr' => $cur_idr, 'land_size_sqm' => $sqm,
+                    'implied_per_sqm' => $inf['per_sqm'], 'reason' => $inf['note']));
+            }
+        } else {
+            // Confident ('ok') or soft ('verify'). price_idr becomes the canonical
+            // TOTAL; per-m² populated; label normalised to Total.
+            $new_total = (int)$inf['total'];
+            $new_psqm  = $inf['per_sqm'] !== null ? (int)$inf['per_sqm'] : null;
+            $flag = $inf['confidence'] === 'verify' ? 1 : 0;
+            $total_changed = ($new_total !== $cur_idr);
+            $psqm_changed  = ($new_psqm !== $cur_psqm);
+            $label_changed = ($label !== 'Total');
+            if ($total_changed || $psqm_changed || $label_changed || (int)$r['price_review_flag'] !== $flag) {
+                $price_changes[] = $row + array('changed_total' => $total_changed);
+                if ($apply) {
+                    $db->prepare("UPDATE listings SET price_idr=?, price_idr_per_sqm=?, price_label='Total', price_review_flag=?, updated_at=NOW() WHERE id=?")
+                       ->execute(array($new_total, $new_psqm, $flag, $id));
+                    if ($flag) lc_queue_review($db, $id, 'price_verify', array(
+                        'stored_idr' => $cur_idr, 'new_total' => $new_total,
+                        'land_size_sqm' => $sqm, 'per_sqm' => $new_psqm, 'reason' => $inf['note']));
+                }
             }
         }
     }
@@ -142,26 +172,54 @@ $fmt = function($n) { return $n === null ? '—' : 'Rp ' . number_format((int)$n
   <em>would</em> change. &nbsp; <a class="btn" href="?apply=1" onclick="return confirm('Apply all changes below?')">Apply changes</a></div>
 <?php endif; ?>
 
+<?php
+ $are_fmt = function($a){ return $a === null ? '—' : number_format($a, 2, ',', '.') . ' are'; };
+ $sqm_fmt = function($s){ return $s === null ? '—' : number_format((int)$s, 0, ',', '.') . ' m²'; };
+ $conf_badge = function($c){
+     $map = array('ok'=>array('#093','OK'),'verify'=>array('#b8860b','VERIFY'),'review'=>array('#c00','REVIEW'));
+     $m = isset($map[$c]) ? $map[$c] : array('#666',strtoupper($c));
+     return '<span style="font-weight:700;color:'.$m[0].'">'.$m[1].'</span>';
+ };
+?>
 <p>
-  Per-are price fixes: <strong><?= count($price_fixes) ?></strong> &nbsp;·&nbsp;
-  Priced→Price-on-Request (no size): <strong><?= count($price_flags) ?></strong> &nbsp;·&nbsp;
-  Area corrections (from default): <strong><?= count($area_fixes) ?></strong> &nbsp;·&nbsp;
+  Price changes (auto-applied): <strong><?= count($price_changes) ?></strong> &nbsp;·&nbsp;
+  Price uncertain (→review, price kept): <strong><?= count($price_reviews) ?></strong> &nbsp;·&nbsp;
+  Priced, no land size: <strong><?= count($price_nosize) ?></strong> &nbsp;·&nbsp;
+  Area corrections: <strong><?= count($area_fixes) ?></strong> &nbsp;·&nbsp;
   Area conflicts (→review): <strong><?= count($area_flips) ?></strong>
 </p>
 
-<h2>Per-are price corrections (× land size)</h2>
-<table><tr><th>ID</th><th>Title</th><th>Label</th><th>Old (per-are)</th><th>New (total)</th><th>per m²</th></tr>
-<?php foreach ($price_fixes as $f): ?>
- <tr><td><?= $f['id'] ?></td><td><?= $esc(mb_substr($f['title'],0,60)) ?></td><td><?= $esc($f['label']) ?></td>
- <td class="old"><?= $fmt($f['old']) ?></td><td class="new"><?= $fmt($f['new']) ?></td><td><?= $fmt($f['per_sqm']) ?></td></tr>
-<?php endforeach; if (!$price_fixes) echo '<tr><td colspan="6">None.</td></tr>'; ?>
+<h2>Price re-evaluation (by land size, not by label)</h2>
+<p style="font-size:12px;color:#666;margin:4px 0">
+  Each number is read against a plausible Lombok band of
+  Rp <?= number_format(LC_PERM2_MIN,0,',','.') ?>–<?= number_format(LC_PERM2_HARD_MAX,0,',','.') ?>/m²
+  (soft ceiling Rp <?= number_format(LC_PERM2_SOFT_MAX,0,',','.') ?>/m²). A value that is already a
+  sane total is kept as-is (no multiplication); only an implausibly cheap value is read as a unit price.
+</p>
+<table><tr>
+  <th>ID</th><th>Title</th><th>Land</th><th>Stored price_idr</th><th>Read as</th>
+  <th>New total</th><th>per m²</th><th>per are</th><th>Conf.</th><th>Note</th></tr>
+<?php foreach ($price_changes as $f): ?>
+ <tr>
+  <td><?= $f['id'] ?></td><td><?= $esc(mb_substr($f['title'],0,42)) ?></td>
+  <td><?= $sqm_fmt($f['sqm']) ?><br><span style="color:#888"><?= $are_fmt($f['are']) ?></span></td>
+  <td class="<?= $f['changed_total'] ? 'old' : '' ?>"><?= $fmt($f['stored']) ?></td>
+  <td><?= $esc($f['interp']) ?></td>
+  <td class="new"><?= $fmt($f['total']) ?></td>
+  <td><?= $fmt($f['per_sqm']) ?></td><td><?= $fmt($f['per_are']) ?></td>
+  <td><?= $conf_badge($f['confidence']) ?></td><td style="font-size:11px"><?= $esc($f['note']) ?></td>
+ </tr>
+<?php endforeach; if (!$price_changes) echo '<tr><td colspan="10">None.</td></tr>'; ?>
 </table>
 
-<h2>Per-are, no land size → Price on Request + flag</h2>
-<table><tr><th>ID</th><th>Title</th><th>Was</th><th>Label</th></tr>
-<?php foreach ($price_flags as $f): ?>
- <tr><td><?= $f['id'] ?></td><td><?= $esc(mb_substr($f['title'],0,60)) ?></td><td class="old"><?= $fmt($f['old']) ?></td><td><?= $esc($f['label']) ?></td></tr>
-<?php endforeach; if (!$price_flags) echo '<tr><td colspan="4">None.</td></tr>'; ?>
+<h2>Price uncertain → review queue (price NOT changed)</h2>
+<p style="font-size:12px;color:#666;margin:4px 0">No reading is plausible (too expensive even as a total, or the land size looks wrong). Left untouched for a human.</p>
+<table><tr><th>ID</th><th>Title</th><th>Land</th><th>Stored price_idr</th><th>Implied per m²</th><th>Note</th></tr>
+<?php foreach (array_merge($price_reviews, $price_nosize) as $f): ?>
+ <tr><td><?= $f['id'] ?></td><td><?= $esc(mb_substr($f['title'],0,42)) ?></td>
+ <td><?= $sqm_fmt($f['sqm']) ?></td><td class="old"><?= $fmt($f['stored']) ?></td>
+ <td><?= $fmt($f['per_sqm']) ?></td><td style="font-size:11px"><?= $esc($f['note']) ?></td></tr>
+<?php endforeach; if (!$price_reviews && !$price_nosize) echo '<tr><td colspan="6">None.</td></tr>'; ?>
 </table>
 
 <h2>Area corrected (was default / blank)</h2>

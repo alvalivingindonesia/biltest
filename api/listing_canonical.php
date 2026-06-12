@@ -61,6 +61,132 @@ function lc_trustworthy_size_sqm($sqm) {
     return $sqm > 0 && $sqm < 50000000; // < 5,000 ha — anything above is a parse error
 }
 
+// Plausible Lombok land per-m² band (IDR). Calibrated to real prices:
+//   remote/rural floor ≈ Rp 10rb/m²; typical good land up to ≈ Rp 15jt/m²;
+//   absolute prime beachfront ceiling ≈ Rp 50jt/m². A per-m² above the HARD
+//   ceiling is a unit-conversion error, not a real price. The SOFT ceiling
+//   just marks "high — a human should verify", it does not reject.
+if (!defined('LC_PERM2_MIN'))      define('LC_PERM2_MIN',      10000);          // 10 rb/m²
+if (!defined('LC_PERM2_SOFT_MAX')) define('LC_PERM2_SOFT_MAX', 15000000);       // 15 jt/m²
+if (!defined('LC_PERM2_HARD_MAX')) define('LC_PERM2_HARD_MAX', 50000000);       // 50 jt/m²
+// No single Lombok plot realistically exceeds this as a TOTAL — above it, a
+// computed total is the per-are/per-m² bug, not a real listing.
+if (!defined('LC_TOTAL_HARD_MAX')) define('LC_TOTAL_HARD_MAX', 500000000000);   // Rp 500 B
+
+/** Does a free-text unit label point at a per-are / per-m² unit price? */
+function lc_label_is_per_are($label) {
+    $l = mb_strtolower((string)$label, 'UTF-8');
+    return (strpos($l, '/are') !== false) || (strpos($l, 'per are') !== false) || ($l === 'are');
+}
+function lc_label_is_per_sqm($label) {
+    $l = mb_strtolower((string)$label, 'UTF-8');
+    if (lc_label_is_per_are($l)) return false;
+    return (strpos($l, '/m') !== false) || (strpos($l, 'per m') !== false) || (strpos($l, 'm²') !== false) || (strpos($l, 'm2') !== false);
+}
+
+/**
+ * Infer the true canonical TOTAL price_idr from an amount whose unit is
+ * UNCERTAIN (e.g. an existing row with an unreliable label), using land size +
+ * the plausible per-m² band. Unlike lc_canonical_price() — which trusts a
+ * freshly-scraped label — this decides what the number actually is from its
+ * magnitude, so it never multiplies a number that is already a total.
+ *
+ * Strategy (conservative — never inflate without evidence):
+ *   1. If reading the amount AS THE TOTAL gives a plausible per-m², it's a
+ *      total. (Covers the common "Rp 9B mislabeled Per Are" case.)
+ *   2. Only if the total reading is implausibly CHEAP do we consider that the
+ *      amount is a per-are (or per-m²) UNIT and multiply by size — and only if
+ *      that yields both a sane per-m² and a sane total.
+ *   3. Anything left (too expensive even as a total, or size clearly wrong) is
+ *      left untouched and sent to review — we never guess a total.
+ *
+ * Returns: array(
+ *   total, per_sqm, per_are,  // ints or null
+ *   interp,      // 'total' | 'per_are' | 'per_sqm' | 'unknown'
+ *   confidence,  // 'ok' | 'verify' | 'review'
+ *   note         // human-readable reason
+ * )
+ */
+function lc_infer_price($amount, $size_sqm, $label_hint = '') {
+    $amount = (int)round((float)$amount);
+    $res = array('total'=>null,'per_sqm'=>null,'per_are'=>null,'interp'=>'unknown','confidence'=>'review','note'=>'');
+    if ($amount <= 0) { $res['note'] = 'no amount'; return $res; }
+
+    $size_ok = lc_trustworthy_size_sqm($size_sqm);
+    $S = (int)$size_sqm;
+
+    // ── No trustworthy size: can't sanity-check via per-m². Trust label only. ──
+    if (!$size_ok) {
+        if (lc_label_is_per_are($label_hint) || lc_label_is_per_sqm($label_hint)) {
+            $res['note'] = 'unit price but no land size — cannot total';
+            return $res; // interp unknown, confidence review
+        }
+        $res['interp'] = 'total'; $res['total'] = $amount;
+        if ($amount > LC_TOTAL_HARD_MAX) { $res['confidence'] = 'review'; $res['note'] = 'total above sane ceiling, no size to check'; }
+        else { $res['confidence'] = 'ok'; }
+        return $res;
+    }
+
+    $perm2_total  = $amount / $S;            // amount read as the total
+    $perm2_perare = $amount / 100.0;         // amount read as per-are (1 are = 100 m²)
+    $perm2_persqm = $amount;                 // amount read as per-m²
+    $total_perare = $amount * ($S / 100.0);
+    $total_persqm = $amount * (float)$S;
+    $inband = function($p){ return $p >= LC_PERM2_MIN && $p <= LC_PERM2_HARD_MAX; };
+
+    // 1) The amount is already a plausible TOTAL — the common case. Keep it,
+    //    never multiply. (Fixes the trillion-rupiah bug.)
+    if ($inband($perm2_total)) {
+        $res['interp']  = 'total';
+        $res['total']   = $amount;
+        $res['per_sqm'] = (int)round($perm2_total);
+        $res['per_are'] = (int)round($perm2_total * 100);
+        if ($perm2_total > LC_PERM2_SOFT_MAX) {
+            $res['confidence'] = 'verify'; $res['note'] = 'high per-m² — verify';
+        } elseif (lc_label_is_per_are($label_hint) && $inband($perm2_perare) && $total_perare <= LC_TOTAL_HARD_MAX) {
+            // Source labelled it per-are AND that reading is also plausible —
+            // we kept it as a total (no inflation) but a human should confirm.
+            $res['confidence'] = 'verify'; $res['note'] = 'also plausible as per-are; kept as total';
+        } else {
+            $res['confidence'] = 'ok';
+        }
+        return $res;
+    }
+
+    // 2) Total reading is implausibly CHEAP — the amount may be a unit price.
+    if ($perm2_total < LC_PERM2_MIN) {
+        if ($inband($perm2_perare) && $total_perare <= LC_TOTAL_HARD_MAX) {
+            $res['interp']  = 'per_are';
+            $res['total']   = (int)round($total_perare);
+            $res['per_sqm'] = (int)round($perm2_perare);
+            $res['per_are'] = $amount;
+            $res['confidence'] = 'verify';
+            $res['note'] = 'total too cheap; read as per-are × size';
+            return $res;
+        }
+        if ($inband($perm2_persqm) && $total_persqm <= LC_TOTAL_HARD_MAX) {
+            $res['interp']  = 'per_sqm';
+            $res['total']   = (int)round($total_persqm);
+            $res['per_sqm'] = $amount;
+            $res['per_are'] = (int)round($amount * 100);
+            $res['confidence'] = 'verify';
+            $res['note'] = 'total too cheap; read as per-m² × size';
+            return $res;
+        }
+    }
+
+    // 3) Nothing plausible (too expensive even as a total, or size is wrong).
+    //    Leave the stored price alone; flag for a human.
+    $res['interp']  = 'unknown';
+    $res['total']   = $amount;
+    $res['per_sqm'] = (int)round($perm2_total);
+    $res['per_are'] = (int)round($perm2_total * 100);
+    $res['note']    = ($perm2_total > LC_PERM2_HARD_MAX)
+        ? 'per-m² above ceiling — land size or price looks wrong'
+        : 'no plausible interpretation';
+    return $res;
+}
+
 /**
  * Turn a raw price + its unit label + land size into a canonical TOTAL price_idr.
  *
@@ -106,6 +232,18 @@ function lc_canonical_price($raw_amount, $unit_label, $land_size_sqm) {
         $out['price_label'] = 'Total';
         $out['price_idr'] = $amount;
         if ($sqm_ok) $out['price_idr_per_sqm'] = (int)round($amount / $sqm);
+    }
+
+    // Sanity guard: even a freshly-scraped unit price can be a parse error.
+    // If the computed total or its per-m² is beyond the plausible band, don't
+    // trust it — Price on Request + flag rather than poison the price index.
+    if ($out['price_idr'] !== null) {
+        $perm2 = $sqm_ok ? ($out['price_idr'] / $sqm) : null;
+        if ($out['price_idr'] > LC_TOTAL_HARD_MAX || ($perm2 !== null && $perm2 > LC_PERM2_HARD_MAX)) {
+            $out['price_idr'] = null;
+            $out['price_idr_per_sqm'] = null;
+            $out['flagged'] = 1;
+        }
     }
 
     return $out;
