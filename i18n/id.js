@@ -148,4 +148,59 @@ window.I18N_ID = {
   // Theme
   'theme.switch_light_aria': 'Ganti ke mode terang',
   'theme.switch_dark_aria': 'Ganti ke mode gelap',
+
+  // Listings page (dynamic filters + map)
+  'listings.hero_title': 'Cari Tanah & Properti',
+  'listings.hero_desc': 'Temukan lokasi impian Anda di seluruh Lombok — tanah, vila, dan properti investasi.',
+  'listings.price_on_request': 'Harga sesuai permintaan',
+  'listings.showing': 'Menampilkan',
+  'listings.of': 'dari',
+  'listings.none_found': 'Tidak ada properti ditemukan',
+  'listings.agent_cta_title': 'Anda seorang agen?',
+  'listings.agent_cta_desc': 'Pasang properti Anda di Build in Lombok dan jangkau investor asing.',
+  'listings.agent_cta_btn': 'Pasang Listing',
+
+  // Filters
+  'filter.type': 'Tipe',
+  'filter.area': 'Area',
+  'filter.price': 'Harga',
+  'filter.land_size': 'Luas Tanah',
+  'filter.building_size': 'Luas Bangunan',
+  'filter.bedrooms': 'Kamar Tidur',
+  'filter.bathrooms': 'Kamar Mandi',
+  'filter.certificate': 'Sertifikat',
+  'filter.features': 'Fasilitas',
+  'filter.all_types': 'Semua tipe',
+  'filter.all_areas': 'Semua area',
+  'filter.any_price': 'Semua harga',
+  'filter.any_size': 'Semua ukuran',
+  'filter.any': 'Semua',
+  'filter.any_certificate': 'Semua sertifikat',
+  'filter.more_filters': 'Filter Lainnya',
+  'filter.clear_all': 'Hapus semua',
+  'filter.under': 'Di bawah',
+
+  // Sorting
+  'sort.label': 'Urutkan',
+  'sort.newest': 'Terbaru',
+  'sort.price_asc': 'Harga: terendah ke tertinggi',
+  'sort.price_desc': 'Harga: tertinggi ke terendah',
+  'sort.size_desc': 'Tanah terluas',
+
+  // Display currency
+  'currency.label': 'Mata uang tampilan',
+  'currency.approx_title': 'Dikonversi dengan kurs hari ini',
+
+  // Interactive map
+  'map.aria': 'Filter peta wilayah Lombok',
+  'map.explore': 'Jelajahi lewat Peta',
+  'map.all_lombok': 'Seluruh Lombok',
+  'map.clear': 'Hapus lokasi',
+  'map.property': 'properti',
+  'map.properties': 'properti',
+  'map.no_listings': 'Belum ada listing',
+
+  // Errors
+  'empty.error_title': 'Terjadi kesalahan',
+  'empty.error_desc': 'Silakan coba lagi sebentar lagi.',
 };

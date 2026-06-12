@@ -24,40 +24,37 @@ if (empty($_SESSION['admin_auth'])) { show_login($auth_error); exit; }
 // ─── AJAX API ────────────────────────────────────────────────────────
 // ─── HELPER: Server-side currency conversion for listings ──────────
 function convert_listing_prices($db_conn, &$fields, &$vals) {
-    $currencies = array('usd', 'idr', 'eur', 'aud');
+    // Canonical-IDR model (docs/adr/0006): the server guarantees price_idr is
+    // set whenever any price exists; other currencies are converted live on
+    // the frontend from current rates rather than stored.
+    $currencies = array('idr', 'usd', 'eur', 'aud');
     $prices = array();
     foreach ($currencies as $c) {
-        $key = 'price' . $c;
+        $key = 'price_' . $c;
         $prices[$c] = (isset($_POST[$key]) && trim($_POST[$key]) !== '') ? floatval($_POST[$key]) : null;
     }
+    if ($prices['idr'] !== null && $prices['idr'] > 0) return; // canonical already set
     // Find the source currency (first non-empty)
     $source = null;
     foreach ($currencies as $c) {
         if ($prices[$c] !== null && $prices[$c] > 0) { $source = $c; break; }
     }
     if (!$source) return;
-    // Load rates
-    $rates = array();
+    // Load the source→IDR rate
+    $rate = 0;
     try {
-        $rs = $db_conn->query("SELECT from_currency, to_currency, rate FROM currency_rates");
-        foreach ($rs as $r) {
-            $rates[$r['from_currency'] . '_' . $r['to_currency']] = (float)$r['rate'];
-        }
+        $rs = $db_conn->prepare("SELECT rate FROM currency_rates WHERE from_currency = ? AND to_currency = 'IDR'");
+        $rs->execute(array(strtoupper($source)));
+        $rate = (float)$rs->fetchColumn();
     } catch (Exception $e) { return; }
-    // Fill missing currencies
-    foreach ($currencies as $target) {
-        if ($target === $source) continue;
-        if ($prices[$target] !== null && $prices[$target] > 0) continue;
-        $rateKey = strtoupper($source) . '_' . strtoupper($target);
-        if (!isset($rates[$rateKey])) continue;
-        $converted = round($prices[$source] * $rates[$rateKey]);
-        $col = 'price' . $target . '=?';
-        $replaced = false;
-        for ($i = 0; $i < count($fields); $i++) {
-            if ($fields[$i] === $col) { $vals[$i] = $converted; $replaced = true; break; }
-        }
-        if (!$replaced) { $fields[] = $col; $vals[] = $converted; }
+    if ($rate <= 0) return;
+    $converted = round($prices[$source] * $rate);
+    $col = '`price_idr`=?';
+    $replaced = false;
+    for ($i = 0; $i < count($fields); $i++) {
+        if ($fields[$i] === $col) { $vals[$i] = $converted; $replaced = true; break; }
     }
+    if (!$replaced) { $fields[] = $col; $vals[] = $converted; }
 }
 
 // All quick actions (delete, toggle, status change, approve/reject, edit)

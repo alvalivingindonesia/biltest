@@ -861,6 +861,38 @@ function handle_my_agent(): void {
 // LISTING MANAGEMENT
 // =================================================================
 
+/**
+ * Canonical-IDR price normalisation (docs/adr/0006).
+ * Every priced listing must carry price_idr — it is the only column price
+ * filtering and sorting run against. If a listing was saved with a price in
+ * another currency but no IDR value, derive it from currency_rates.
+ * Fails silently: a missing rates table must never block a listing save.
+ */
+function normalize_listing_price_idr(PDO $db, int $listing_id): void {
+    try {
+        $stmt = $db->prepare("SELECT price_idr, price_usd, price_eur, price_aud FROM listings WHERE id = ?");
+        $stmt->execute([$listing_id]);
+        $l = $stmt->fetch();
+        if (!$l || !empty($l['price_idr'])) return;
+
+        $source = null; $amount = 0;
+        foreach (['USD' => 'price_usd', 'EUR' => 'price_eur', 'AUD' => 'price_aud'] as $cur => $col) {
+            if (!empty($l[$col]) && (float)$l[$col] > 0) { $source = $cur; $amount = (float)$l[$col]; break; }
+        }
+        if (!$source) return;
+
+        $rs = $db->prepare("SELECT rate FROM currency_rates WHERE from_currency = ? AND to_currency = 'IDR'");
+        $rs->execute([$source]);
+        $rate = (float)$rs->fetchColumn();
+        if ($rate <= 0) return;
+
+        $db->prepare("UPDATE listings SET price_idr = ? WHERE id = ?")
+           ->execute([(int)round($amount * $rate), $listing_id]);
+    } catch (Exception $e) {
+        // currency_rates may not exist yet — never block the save
+    }
+}
+
 function handle_create_listing(): void {
     $uid      = require_auth();
     $agent_id = require_agent();
@@ -904,6 +936,7 @@ function handle_create_listing(): void {
     ]);
 
     $listing_id = (int)$db->lastInsertId();
+    normalize_listing_price_idr($db, $listing_id);
     $stmt = $db->prepare("SELECT * FROM listings WHERE id = ?");
     $stmt->execute([$listing_id]);
 
@@ -953,6 +986,8 @@ function handle_update_listing(): void {
         trim($data['address'] ?? '') ?: ($listing['address'] ?? null),
         $listing_id,
     ]);
+
+    normalize_listing_price_idr($db, $listing_id);
 
     json_out(['success' => true, 'message' => 'Listing updated.']);
 }
@@ -1062,6 +1097,8 @@ function handle_admin_update_listing(): void {
         trim($data['address'] ?? $listing['address'] ?? ''),
         $listing_id,
     ]);
+
+    normalize_listing_price_idr($db, $listing_id);
 
     json_out(['success' => true, 'message' => 'Listing updated.']);
 }

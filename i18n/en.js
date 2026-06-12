@@ -151,4 +151,59 @@ window.I18N_EN = {
   // Theme
   'theme.switch_light_aria': 'Switch to light mode',
   'theme.switch_dark_aria': 'Switch to dark mode',
+
+  // Listings page (dynamic filters + map)
+  'listings.hero_title': 'Find Land & Property',
+  'listings.hero_desc': 'Discover your dream location across Lombok — land, villas, and investment properties.',
+  'listings.price_on_request': 'Price on request',
+  'listings.showing': 'Showing',
+  'listings.of': 'of',
+  'listings.none_found': 'No properties found',
+  'listings.agent_cta_title': 'Are you an agent?',
+  'listings.agent_cta_desc': 'List your properties on Build in Lombok and reach foreign investors.',
+  'listings.agent_cta_btn': 'Post a Listing',
+
+  // Filters
+  'filter.type': 'Type',
+  'filter.area': 'Area',
+  'filter.price': 'Price',
+  'filter.land_size': 'Land Size',
+  'filter.building_size': 'Building Size',
+  'filter.bedrooms': 'Bedrooms',
+  'filter.bathrooms': 'Bathrooms',
+  'filter.certificate': 'Certificate',
+  'filter.features': 'Features',
+  'filter.all_types': 'All types',
+  'filter.all_areas': 'All areas',
+  'filter.any_price': 'Any price',
+  'filter.any_size': 'Any size',
+  'filter.any': 'Any',
+  'filter.any_certificate': 'Any certificate',
+  'filter.more_filters': 'More Filters',
+  'filter.clear_all': 'Clear all',
+  'filter.under': 'Under',
+
+  // Sorting
+  'sort.label': 'Sort by',
+  'sort.newest': 'Newest',
+  'sort.price_asc': 'Price: low to high',
+  'sort.price_desc': 'Price: high to low',
+  'sort.size_desc': 'Largest land',
+
+  // Display currency
+  'currency.label': 'Display currency',
+  'currency.approx_title': 'Converted at today’s exchange rate',
+
+  // Interactive map
+  'map.aria': 'Lombok region map filter',
+  'map.explore': 'Explore by Map',
+  'map.all_lombok': 'All Lombok',
+  'map.clear': 'Clear location',
+  'map.property': 'property',
+  'map.properties': 'properties',
+  'map.no_listings': 'No listings yet',
+
+  // Errors
+  'empty.error_title': 'Something went wrong',
+  'empty.error_desc': 'Please try again in a moment.',
 };

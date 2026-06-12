@@ -218,6 +218,9 @@ switch ($resource) {
     case 'listings':
         $slug ? handle_listing_detail($slug) : handle_listings_list();
         break;
+    case 'listing_counts':
+        handle_listing_counts();
+        break;
     case 'agents':
         $slug ? handle_agent_detail($slug) : handle_agents_list();
         break;
@@ -669,6 +672,16 @@ function handle_filters(): void {
         }
     } catch (Exception $e) {}
 
+    // Feature Tags — DB table once migrated, canonical PHP list before that
+    $feature_tags = [];
+    try {
+        $feature_tags = $db->query("SELECT `key`, label, label_id, applies_to FROM feature_tags ORDER BY sort_order")->fetchAll();
+    } catch (Exception $e) {
+        foreach (feature_tag_defs() as $key => $def) {
+            $feature_tags[] = ['key' => $key, 'label' => $def['label'], 'label_id' => $def['label_id'], 'applies_to' => $def['applies_to']];
+        }
+    }
+
     json_out([
         'groups' => $groups,
         'categories' => $categories,
@@ -679,6 +692,7 @@ function handle_filters(): void {
         'listing_types' => $listing_types,
         'land_certificate_types' => $land_certificate_types,
         'currency_rates' => $currency_rates,
+        'feature_tags' => $feature_tags,
     ]);
 }
 
@@ -1150,30 +1164,74 @@ function _search_log_query(PDO $db, string $q, int $result_count): void {
 // LISTINGS
 // =============================================================
 
-function handle_listings_list(): void {
-    try {
-        $db = get_db();
-    [$page, $per_page, $offset] = get_page_params();
+/**
+ * Canonical Feature Tags (see CONTEXT.md). Each entry: label (EN), label_id (ID),
+ * applies_to ('all' or comma list of listing_type keys), and the bilingual
+ * keywords used both by the migration backfill and the transitional LIKE
+ * fallback while listing_tags is still empty.
+ * The DB table feature_tags (created by migration) overrides labels/sort;
+ * this array keeps the API fully functional before the migration runs.
+ */
+function feature_tag_defs(): array {
+    $built = 'villa,house,apartment,commercial,long_term_rental';
+    return [
+        'beachfront'      => ['label' => 'Beachfront',      'label_id' => 'Tepi Pantai',        'applies_to' => 'all',
+                              'keywords' => ['beachfront', 'beach front', 'tepi pantai', 'pinggir pantai', 'depan pantai']],
+        'ocean_view'      => ['label' => 'Ocean View',      'label_id' => 'Pemandangan Laut',   'applies_to' => 'all',
+                              'keywords' => ['ocean view', 'sea view', 'seaview', 'pemandangan laut', 'view laut']],
+        'mountain_view'   => ['label' => 'Mountain View',   'label_id' => 'Pemandangan Gunung', 'applies_to' => 'all',
+                              'keywords' => ['mountain view', 'rinjani view', 'pemandangan gunung', 'view gunung']],
+        'rice_field_view' => ['label' => 'Rice Field View', 'label_id' => 'Pemandangan Sawah',  'applies_to' => 'all',
+                              'keywords' => ['rice field', 'ricefield', 'rice paddy', 'paddy view', 'sawah']],
+        'cliff_top'       => ['label' => 'Cliff Top',       'label_id' => 'Atas Tebing',        'applies_to' => 'all',
+                              'keywords' => ['cliff', 'clifftop', 'tebing']],
+        'near_airport'    => ['label' => 'Near Airport',    'label_id' => 'Dekat Bandara',      'applies_to' => 'all',
+                              'keywords' => ['airport', 'bandara']],
+        'pool'            => ['label' => 'Swimming Pool',   'label_id' => 'Kolam Renang',       'applies_to' => $built,
+                              'keywords' => ['swimming pool', 'private pool', 'kolam renang']],
+        'furnished'       => ['label' => 'Furnished',       'label_id' => 'Berperabot',         'applies_to' => $built,
+                              'keywords' => ['fully furnished', 'full furnished', 'semi furnished', 'berperabot', 'full furnish']],
+    ];
+}
 
+/** True once the migration backfill has populated listing_tags. */
+function listing_tags_populated(): bool {
+    static $populated = null;
+    if ($populated === null) {
+        try {
+            $populated = (bool)get_db()->query("SELECT 1 FROM listing_tags LIMIT 1")->fetchColumn();
+        } catch (Exception $e) {
+            $populated = false;
+        }
+    }
+    return $populated;
+}
+
+/**
+ * Shared WHERE builder for listings list + listing_counts.
+ * $skip lets the counts endpoint exclude location filters so the map
+ * always shows the full geographic distribution of the current search.
+ */
+function build_listing_filters(array $skip = []): array {
     $where = ["l.status = 'active'", 'l.is_approved = 1'];
     $params = [];
 
     // Filter: listing_type
-    if (!empty($_GET['listing_type'])) {
+    if (!empty($_GET['listing_type']) && !in_array('listing_type', $skip)) {
         $where[] = 'l.listing_type_key = ?';
         $params[] = $_GET['listing_type'];
     }
     // Filter: area
-    if (!empty($_GET['area'])) {
+    if (!empty($_GET['area']) && !in_array('area', $skip)) {
         $where[] = 'l.area_key = ?';
         $params[] = $_GET['area'];
     }
     // Filter: region
-    if (!empty($_GET['region'])) {
+    if (!empty($_GET['region']) && !in_array('region', $skip)) {
         $where[] = 'l.area_key IN (SELECT `key` FROM areas WHERE region_key = ?)';
         $params[] = $_GET['region'];
     }
-    // Filter: price range (USD)
+    // Filter: price range (USD) — legacy callers only; canonical filtering is IDR
     if (!empty($_GET['min_price_usd'])) {
         $where[] = 'l.price_usd >= ?';
         $params[] = (int)$_GET['min_price_usd'];
@@ -1182,7 +1240,7 @@ function handle_listings_list(): void {
         $where[] = 'l.price_usd <= ?';
         $params[] = (int)$_GET['max_price_usd'];
     }
-    // Filter: price range (IDR)
+    // Filter: price range (canonical IDR — see docs/adr/0006)
     if (!empty($_GET['min_price_idr'])) {
         $where[] = 'l.price_idr >= ?';
         $params[] = (int)$_GET['min_price_idr'];
@@ -1191,7 +1249,7 @@ function handle_listings_list(): void {
         $where[] = 'l.price_idr <= ?';
         $params[] = (int)$_GET['max_price_idr'];
     }
-    // Filter: size range — only match listings that HAVE a land size
+    // Filter: land size range — only match listings that HAVE a land size
     if (!empty($_GET['min_size']) || !empty($_GET['max_size'])) {
         $where[] = 'l.land_size_sqm IS NOT NULL AND l.land_size_sqm > 0';
     }
@@ -1202,6 +1260,15 @@ function handle_listings_list(): void {
     if (!empty($_GET['max_size'])) {
         $where[] = 'l.land_size_sqm <= ?';
         $params[] = (int)$_GET['max_size'];
+    }
+    // Filter: building size range
+    if (!empty($_GET['min_building_size'])) {
+        $where[] = 'l.building_size_sqm >= ?';
+        $params[] = (int)$_GET['min_building_size'];
+    }
+    if (!empty($_GET['max_building_size'])) {
+        $where[] = 'l.building_size_sqm <= ?';
+        $params[] = (int)$_GET['max_building_size'];
     }
     // Filter: certificate type
     if (!empty($_GET['certificate_type'])) {
@@ -1227,16 +1294,87 @@ function handle_listings_list(): void {
     if (isset($_GET['featured']) && $_GET['featured'] === '1') {
         $where[] = 'l.is_featured = 1';
     }
+    // Filter: Feature Tags (comma-separated canonical keys, AND semantics).
+    // Uses listing_tags once the backfill migration has run; until then falls
+    // back to a bilingual keyword scan so the UI works pre-migration.
+    if (!empty($_GET['tags'])) {
+        $defs = feature_tag_defs();
+        $tags = array_filter(array_map('trim', explode(',', $_GET['tags'])));
+        $use_table = listing_tags_populated();
+        foreach ($tags as $tag) {
+            if (!isset($defs[$tag])) continue; // unknown tag — ignore, never error
+            if ($use_table) {
+                $where[] = 'EXISTS (SELECT 1 FROM listing_tags ltg WHERE ltg.listing_id = l.id AND ltg.tag = ?)';
+                $params[] = $tag;
+            } else {
+                $conds = [];
+                foreach ($defs[$tag]['keywords'] as $kw) {
+                    $conds[] = "(l.title LIKE ? OR l.short_description LIKE ? OR l.description LIKE ?)";
+                    $like = '%' . $kw . '%';
+                    array_push($params, $like, $like, $like);
+                }
+                $where[] = '(' . implode(' OR ', $conds) . ')';
+            }
+        }
+    }
     // Filter: fulltext search
     if (!empty($_GET['q'])) {
         $where[] = 'MATCH(l.title, l.short_description, l.description) AGAINST(? IN BOOLEAN MODE)';
         $params[] = $_GET['q'];
     }
 
-    $where_sql = implode(' AND ', $where);
+    return [implode(' AND ', $where), $params];
+}
 
-    $sort = get_sort_param(['price_usd', 'land_size_sqm', 'created_at', 'title'], 'created_at');
+/**
+ * Aggregate listing counts per Region and Area for the interactive map.
+ * Honours every active filter EXCEPT location ones, so the map shows where
+ * the current search's inventory lives across the whole island.
+ */
+function handle_listing_counts(): void {
+    try {
+        $db = get_db();
+        [$where_sql, $params] = build_listing_filters(['area', 'region']);
+        $stmt = $db->prepare(
+            "SELECT l.area_key, a.region_key, COUNT(*) AS c
+             FROM listings l
+             LEFT JOIN areas a ON a.`key` = l.area_key
+             WHERE {$where_sql}
+             GROUP BY l.area_key, a.region_key"
+        );
+        $stmt->execute($params);
+        $areas = [];
+        $regions = [];
+        $total = 0;
+        foreach ($stmt->fetchAll() as $row) {
+            $n = (int)$row['c'];
+            $total += $n;
+            if (!empty($row['area_key'])) {
+                $areas[$row['area_key']] = ($areas[$row['area_key']] ?? 0) + $n;
+            }
+            $rk = $row['region_key'] ?: 'other';
+            $regions[$rk] = ($regions[$rk] ?? 0) + $n;
+        }
+        json_out(['regions' => $regions, 'areas' => $areas, 'total' => $total]);
+    } catch (Exception $e) {
+        json_out(['regions' => new stdClass(), 'areas' => new stdClass(), 'total' => 0, 'debug_error' => $e->getMessage()]);
+    }
+}
+
+function handle_listings_list(): void {
+    try {
+        $db = get_db();
+    [$page, $per_page, $offset] = get_page_params();
+
+    [$where_sql, $params] = build_listing_filters();
+
+    $sort = get_sort_param(['price_idr', 'price_usd', 'land_size_sqm', 'created_at', 'title'], 'created_at');
     $order = "l.is_featured DESC, l.{$sort} " . get_sort_dir();
+    // Sorting by price must not bury priced listings under NULL "price on
+    // request" rows when ascending.
+    if ($sort === 'price_idr' || $sort === 'price_usd') {
+        $order = "l.is_featured DESC, (l.{$sort} IS NULL) ASC, l.{$sort} " . get_sort_dir();
+    }
 
     // Count
     $count_stmt = $db->prepare("SELECT COUNT(*) FROM listings l WHERE {$where_sql}");

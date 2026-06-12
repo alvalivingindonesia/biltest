@@ -195,6 +195,8 @@ const DataLayer = (() => {
       area: row.area_key || row.area,
       price_idr: row.price_idr ? parseInt(row.price_idr) : null,
       price_usd: row.price_usd ? parseInt(row.price_usd) : null,
+      price_eur: row.price_eur ? parseInt(row.price_eur) : null,
+      price_aud: row.price_aud ? parseInt(row.price_aud) : null,
       land_size_sqm: row.land_size_sqm ? parseInt(row.land_size_sqm) : null,
       land_size_are: row.land_size_are ? parseFloat(row.land_size_are) : null,
       building_size_sqm: row.building_size_sqm ? parseInt(row.building_size_sqm) : null,
@@ -251,6 +253,9 @@ const DataLayer = (() => {
     async getListings(filters = {}) {
       const res = await apiFetch('listings', filters);
       return { data: (res.data || []).map(mapListing), meta: res.meta || { total: 0 } };
+    },
+    async getListingCounts(filters = {}) {
+      return await apiFetch('listing_counts', filters);
     },
     async getListing(slug) {
       const res = await apiFetch('listings/' + slug);
@@ -319,9 +324,98 @@ function formatLandSize(sqm, are) {
   return '';
 }
 
+// =====================================================
+// DISPLAY CURRENCY — property listings & developments only.
+// Presentation setting (see CONTEXT.md "Display Currency"):
+// canonical price is IDR (docs/adr/0006); other currencies are
+// converted client-side from currency_rates and marked ≈.
+// Materials / RAB prices stay IDR and never use this.
+// =====================================================
+const Currency = {
+  LIST: ['IDR', 'USD', 'EUR', 'AUD'],
+  // Used only if the currency_rates table is missing/empty
+  FALLBACK_IDR: { IDR: 1, USD: 16500, EUR: 17800, AUD: 10500 },
+  _stored: (function() {
+    try {
+      var c = localStorage.getItem('bil_currency');
+      if (c && ['IDR', 'USD', 'EUR', 'AUD'].indexOf(c) >= 0) return c;
+    } catch (e) {}
+    return null;
+  })(),
+  get() { return this._stored || (CURRENT_LANG === 'id' ? 'IDR' : 'USD'); },
+  set(cur) {
+    if (this.LIST.indexOf(cur) < 0) return;
+    this._stored = cur;
+    try { localStorage.setItem('bil_currency', cur); } catch (e) {}
+  },
+  rate(from, to) {
+    if (from === to) return 1;
+    var r = (FilterData.currency_rates || {})[from + '_' + to];
+    if (r && r > 0) return r;
+    return this.FALLBACK_IDR[from] / this.FALLBACK_IDR[to];
+  },
+  convert(amount, from, to) { return amount * this.rate(from, to); },
+  _num(n) {
+    var s = (Math.round(n * 10) / 10).toFixed(1).replace(/\.0$/, '');
+    return CURRENT_LANG === 'id' ? s.replace('.', ',') : s;
+  },
+  format(amount, cur) {
+    if (!amount && amount !== 0) return '';
+    cur = cur || this.get();
+    if (cur === 'IDR') {
+      if (CURRENT_LANG === 'id') {
+        if (amount >= 1e9) return 'Rp ' + this._num(amount / 1e9) + ' M';
+        if (amount >= 1e6) return 'Rp ' + this._num(amount / 1e6) + ' Jt';
+        return 'Rp ' + Math.round(amount).toLocaleString('id-ID');
+      }
+      if (amount >= 1e9) return 'Rp ' + this._num(amount / 1e9) + 'B';
+      if (amount >= 1e6) return 'Rp ' + this._num(amount / 1e6) + 'M';
+      return 'Rp ' + Math.round(amount).toLocaleString();
+    }
+    var sym = { USD: '$', EUR: '€', AUD: 'A$' }[cur] || '';
+    if (amount >= 1e6) return sym + this._num(amount / 1e6) + 'M';
+    if (amount >= 1e4) return sym + Math.round(amount / 1000) + 'k';
+    return sym + Math.round(amount).toLocaleString();
+  },
+  /**
+   * Price of a listing in the visitor's Display Currency.
+   * Exact when the listing stores that currency; otherwise converted
+   * from its canonical/native price and flagged approx.
+   * Returns null for Price on Request listings.
+   */
+  listingPrice(l) {
+    var cur = this.get();
+    var exact = l['price_' + cur.toLowerCase()];
+    if (exact && exact > 0) return { text: this.format(exact, cur), approx: false };
+    var order = ['idr', 'usd', 'eur', 'aud'];
+    for (var i = 0; i < order.length; i++) {
+      var v = l['price_' + order[i]];
+      if (v && v > 0) {
+        return { text: this.format(this.convert(v, order[i].toUpperCase(), cur), cur), approx: true };
+      }
+    }
+    return null;
+  },
+  priceHtml(l) {
+    var p = this.listingPrice(l);
+    if (!p) return t('listings.price_on_request', 'Price on request');
+    if (!p.approx) return p.text;
+    return '<span class="price-approx" title="' + t('currency.approx_title', 'Converted at today’s exchange rate') + '">≈</span>' + p.text;
+  }
+};
+
+/** Development (project) min-investment in the Display Currency (USD-native). */
+function projectPriceHtml(usd) {
+  if (!usd) return 'TBC';
+  var cur = Currency.get();
+  if (cur === 'USD') return Currency.format(usd, 'USD');
+  return '<span class="price-approx" title="' + t('currency.approx_title', 'Converted at today’s exchange rate') + '">≈</span>' + Currency.format(Currency.convert(usd, 'USD', cur), cur);
+}
+
 // ---- Dynamic filter data (loaded from DB) ----
 const FilterData = {
   areas: [], regions: [], groups: [], categories: [], project_types: [], project_statuses: [], listing_types: [], land_certificate_types: [],
+  feature_tags: [], currency_rates: {},
   _loaded: false,
   async load() {
     if (this._loaded) return;
@@ -335,6 +429,8 @@ const FilterData = {
       this.project_statuses = f.project_statuses || [];
       this.listing_types = f.listing_types || [];
       this.land_certificate_types = f.land_certificate_types || [];
+      this.feature_tags = f.feature_tags || [];
+      this.currency_rates = f.currency_rates || {};
       this._loaded = true;
     } catch(e) { console.error('Failed to load filters:', e); }
   },
@@ -1766,7 +1862,7 @@ async function renderDeveloperDetail(el, slug) {
 function renderListingCard(l, index) {
   if (typeof index === 'undefined') index = 0;
   var imgUrl = l.image && l.image.url ? l.image.url : '';
-  var priceStr = l.price_usd ? formatUSD(l.price_usd) : (l.price_idr ? formatIDR(l.price_idr) : 'Price on request');
+  var priceStr = Currency.priceHtml(l);
   var sizeStr = formatLandSize(l.land_size_sqm, l.land_size_are);
   var typeLabel = l.listing_type_label || l.listing_type_key || '';
   var certLabel = l.certificate_type_label || '';
@@ -1818,39 +1914,453 @@ function renderListingCard(l, index) {
 // RENDER: LISTINGS (Find Land / Property)
 // =====================================================
 
+// =====================================================
+// INTERACTIVE LOMBOK MAP — hand-drawn SVG market regions
+// (docs/adr/0005). Regions are MARKET regions, not kabupaten;
+// geometry is an owned design asset, deliberately stylised.
+// =====================================================
+
+const LOMBOK_MAP = {
+  viewBox: [0, 0, 880, 640],
+  outline: 'M258,108 L340,72 L430,58 L520,60 L610,72 L690,96 L740,128 L790,150 L810,176 L788,205 L792,260 L786,320 L775,380 L752,415 L760,448 L738,492 L712,512 L694,478 L672,462 L655,488 L635,470 L615,448 L565,470 L545,492 L525,478 L495,500 L470,486 L445,505 L420,492 L392,512 L368,495 L332,505 L300,478 L282,452 L252,470 L205,498 L162,522 L128,512 L150,486 L196,464 L238,440 L262,418 L250,372 L244,338 L250,290 L256,252 L252,196 L252,150 Z',
+  regions: {
+    north_lombok:   { d: 'M258,108 L340,72 L430,58 L520,60 L610,72 L690,96 L740,128 L640,170 L520,200 L380,208 L252,196 L252,150 Z',
+                      bbox: [240, 46, 520, 176], label: [480, 128] },
+    east_lombok:    { d: 'M740,128 L790,150 L810,176 L788,205 L792,260 L786,320 L775,380 L752,415 L618,438 L612,340 L618,260 L640,170 Z',
+                      bbox: [596, 118, 230, 336], label: [702, 290] },
+    central_lombok: { d: 'M312,205 L380,208 L520,200 L640,170 L618,260 L612,340 L618,438 L560,440 L450,448 L340,442 L322,400 L310,330 Z',
+                      bbox: [296, 166, 360, 296], label: [468, 320] },
+    west_lombok:    { d: 'M252,196 L312,205 L310,330 L322,400 L340,442 L332,505 L300,478 L282,452 L252,470 L205,498 L162,522 L128,512 L150,486 L196,464 L238,440 L262,418 L250,372 L244,338 L250,290 L256,252 Z',
+                      bbox: [112, 180, 240, 360], label: [278, 300] },
+    south_lombok:   { d: 'M340,442 L450,448 L560,440 L618,438 L752,415 L760,448 L738,492 L712,512 L694,478 L672,462 L655,488 L635,470 L615,448 L565,470 L545,492 L525,478 L495,500 L470,486 L445,505 L420,492 L392,512 L368,495 L332,505 Z',
+                      bbox: [316, 398, 460, 132], label: [486, 462] },
+    gili_islands:   { circles: [[150, 96, 12], [184, 108, 9], [214, 118, 8]],
+                      bbox: [104, 48, 160, 104], label: [168, 64] }
+  },
+  // Area marker positions. Markers appear once their region is selected.
+  // 'anchor: end' flips the label left of the dot (markers near the east coast).
+  areas: {
+    selong_belanak:  { p: [380, 496], r: 'south_lombok' },
+    mawi:            { p: [410, 487], r: 'south_lombok' },
+    mawun:           { p: [438, 496], r: 'south_lombok' },
+    are_guling:      { p: [463, 485], r: 'south_lombok' },
+    kuta:            { p: [490, 482], r: 'south_lombok' },
+    tanjung_aan:     { p: [521, 479], r: 'south_lombok' },
+    gerupuk:         { p: [548, 484], r: 'south_lombok' },
+    ekas:            { p: [700, 477], r: 'south_lombok', anchor: 'end' },
+    senggigi:        { p: [262, 254], r: 'west_lombok' },
+    mataram:         { p: [252, 338], r: 'west_lombok' },
+    gerung:          { p: [288, 406], r: 'west_lombok' },
+    lembar:          { p: [270, 434], r: 'west_lombok' },
+    sekotong:        { p: [188, 492], r: 'west_lombok' },
+    praya:           { p: [430, 330], r: 'central_lombok' },
+    jonggat:         { p: [382, 298], r: 'central_lombok' },
+    batukliang:      { p: [452, 254], r: 'central_lombok' },
+    selong:          { p: [700, 330], r: 'east_lombok', anchor: 'end' },
+    labuhan_lombok:  { p: [778, 186], r: 'east_lombok', anchor: 'end' },
+    bangsal:         { p: [288, 122], r: 'north_lombok' },
+    tanjung:         { p: [352, 118], r: 'north_lombok' },
+    senaru:          { p: [520, 150], r: 'north_lombok' },
+    gili_islands:    { p: [184, 108], r: 'gili_islands' }
+    // other_lombok is a catch-all, deliberately not on the map
+  }
+};
+
+function createLombokMap(wrapEl, opts) {
+  opts = opts || {};
+  var VB = LOMBOK_MAP.viewBox;
+  var counts = { regions: {}, areas: {} };
+  var selRegion = '', selArea = '';
+  var animFrame = null;
+
+  function regionLabel(key) {
+    var row = (FilterData.regions || []).find(function(r) { return r.region_key === key; });
+    return (row ? lookupLabel(row) : key.replace(/_/g, ' ')).toUpperCase();
+  }
+  function areaLabel(key) {
+    var row = (FilterData.areas || []).find(function(a) { return a.key === key; });
+    var lbl = row ? lookupLabel(row) : key.replace(/_/g, ' ');
+    return lbl.split(' / ')[0].toUpperCase(); // 'Kuta / Mandalika' → 'KUTA'
+  }
+
+  // ---- build SVG ----
+  var grid = '';
+  for (var gy = 64; gy < 640; gy += 64) grid += '<line x1="0" y1="' + gy + '" x2="880" y2="' + gy + '"/>';
+  for (var gx = 80; gx < 880; gx += 80) grid += '<line x1="' + gx + '" y1="0" x2="' + gx + '" y2="640"/>';
+
+  var regionsHtml = '';
+  var labelsHtml = '';
+  Object.keys(LOMBOK_MAP.regions).forEach(function(rk) {
+    var rg = LOMBOK_MAP.regions[rk];
+    if (rg.circles) {
+      var circles = rg.circles.map(function(c) {
+        return '<circle cx="' + c[0] + '" cy="' + c[1] + '" r="' + c[2] + '"/>';
+      }).join('');
+      regionsHtml += '<g class="lmap-region lmap-region--gili" data-region="' + rk + '">'
+        + '<rect x="' + rg.bbox[0] + '" y="' + rg.bbox[1] + '" width="' + rg.bbox[2] + '" height="' + rg.bbox[3] + '" fill="transparent" stroke="none"/>'
+        + circles + '</g>';
+    } else {
+      regionsHtml += '<path class="lmap-region" data-region="' + rk + '" d="' + rg.d + '"/>';
+    }
+    labelsHtml += '<g class="lmap-rlabel" data-region="' + rk + '" transform="translate(' + rg.label[0] + ',' + rg.label[1] + ')">'
+      + '<text class="lmap-rlabel-name" text-anchor="middle">' + regionLabel(rk) + '</text>'
+      + '<text class="lmap-rlabel-count" text-anchor="middle" dy="17"></text>'
+      + '</g>';
+  });
+
+  var areasHtml = '';
+  Object.keys(LOMBOK_MAP.areas).forEach(function(ak) {
+    var a = LOMBOK_MAP.areas[ak];
+    var end = a.anchor === 'end';
+    areasHtml += '<g class="lmap-amark" data-area="' + ak + '" data-region="' + a.r + '" transform="translate(' + a.p[0] + ',' + a.p[1] + ')">'
+      + '<circle class="lmap-amark-hit" r="14"/>'
+      + '<circle class="lmap-amark-dot" r="3.5"/>'
+      + '<text class="lmap-amark-label" x="' + (end ? -9 : 9) + '" y="3.5" text-anchor="' + (end ? 'end' : 'start') + '">' + areaLabel(ak) + '</text>'
+      + '</g>';
+  });
+
+  wrapEl.innerHTML =
+    '<svg class="lmap" viewBox="' + VB.join(' ') + '" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="' + t('map.aria', 'Lombok region map filter') + '">'
+    + '<g class="lmap-grid">' + grid + '</g>'
+    + '<path class="lmap-outline" d="' + LOMBOK_MAP.outline + '"/>'
+    + '<g class="lmap-regions">' + regionsHtml + '</g>'
+    + '<g class="lmap-labels">' + labelsHtml + '</g>'
+    + '<g class="lmap-areas">' + areasHtml + '</g>'
+    + '</svg>';
+
+  var svg = wrapEl.querySelector('svg.lmap');
+
+  // ---- viewBox zoom animation ----
+  function fitBBox(b) {
+    var pad = 0.16;
+    var x = b[0] - b[2] * pad / 2, y = b[1] - b[3] * pad / 2;
+    var w = b[2] * (1 + pad), h = b[3] * (1 + pad);
+    var aspect = VB[2] / VB[3];
+    if (w / h > aspect) { var nh = w / aspect; y -= (nh - h) / 2; h = nh; }
+    else { var nw = h * aspect; x -= (nw - w) / 2; w = nw; }
+    return [x, y, w, h];
+  }
+  function animateTo(target) {
+    if (animFrame) cancelAnimationFrame(animFrame);
+    var from = svg.getAttribute('viewBox').split(/[ ,]+/).map(Number);
+    var start = null, dur = 650;
+    function ease(p) { return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; }
+    function tick(ts) {
+      if (!svg.isConnected) return;
+      if (start === null) start = ts;
+      var p = Math.min(1, (ts - start) / dur);
+      var e = ease(p);
+      var cur = from.map(function(v, i) { return v + (target[i] - v) * e; });
+      svg.setAttribute('viewBox', cur.join(' '));
+      if (p < 1) animFrame = requestAnimationFrame(tick);
+    }
+    animFrame = requestAnimationFrame(tick);
+  }
+
+  // ---- state rendering ----
+  function applySelection() {
+    svg.classList.toggle('lmap--zoomed', !!selRegion);
+    svg.querySelectorAll('.lmap-region').forEach(function(n) {
+      n.classList.toggle('sel', n.getAttribute('data-region') === selRegion);
+    });
+    svg.querySelectorAll('.lmap-rlabel').forEach(function(n) {
+      n.classList.toggle('sel', n.getAttribute('data-region') === selRegion);
+    });
+    svg.querySelectorAll('.lmap-amark').forEach(function(n) {
+      var on = selRegion && n.getAttribute('data-region') === selRegion;
+      n.classList.toggle('visible', !!on);
+      n.classList.toggle('active', n.getAttribute('data-area') === selArea);
+    });
+    animateTo(selRegion && LOMBOK_MAP.regions[selRegion] ? fitBBox(LOMBOK_MAP.regions[selRegion].bbox) : VB.slice());
+  }
+
+  function applyCounts() {
+    Object.keys(LOMBOK_MAP.regions).forEach(function(rk) {
+      var n = counts.regions[rk] || 0;
+      var empty = n === 0;
+      svg.querySelectorAll('[data-region="' + rk + '"]').forEach(function(node) {
+        node.classList.toggle('lmap-region--empty', empty && node.classList.contains('lmap-region'));
+      });
+      var lbl = svg.querySelector('.lmap-rlabel[data-region="' + rk + '"]');
+      if (lbl) {
+        lbl.classList.toggle('empty', empty);
+        lbl.querySelector('.lmap-rlabel-count').textContent = empty
+          ? t('map.no_listings', 'No listings yet')
+          : n + ' ' + (n === 1 ? t('map.property', 'property') : t('map.properties', 'properties'));
+      }
+    });
+    Object.keys(LOMBOK_MAP.areas).forEach(function(ak) {
+      var mark = svg.querySelector('.lmap-amark[data-area="' + ak + '"]');
+      if (!mark) return;
+      var n = counts.areas[ak] || 0;
+      mark.classList.toggle('empty', n === 0);
+      var txt = mark.querySelector('.lmap-amark-label');
+      var base = areaLabel(ak);
+      txt.textContent = n > 0 ? base + ' · ' + n : base;
+    });
+  }
+
+  // ---- events ----
+  svg.addEventListener('click', function(e) {
+    var amark = e.target.closest('.lmap-amark');
+    if (amark && amark.classList.contains('visible')) {
+      var ak = amark.getAttribute('data-area');
+      if (opts.onSelect) opts.onSelect(amark.getAttribute('data-region'), ak === selArea ? null : ak);
+      return;
+    }
+    var region = e.target.closest('.lmap-region');
+    if (region && !region.classList.contains('lmap-region--empty')) {
+      var rk = region.getAttribute('data-region');
+      if (opts.onSelect) opts.onSelect(rk === selRegion && !selArea ? null : rk, null);
+    }
+  });
+
+  applySelection();
+
+  return {
+    setCounts: function(c) {
+      counts.regions = (c && c.regions) || {};
+      counts.areas = (c && c.areas) || {};
+      applyCounts();
+    },
+    setSelection: function(region, area) {
+      selRegion = region || '';
+      selArea = area || '';
+      applySelection();
+    }
+  };
+}
+
+// =====================================================
+// RENDER: LISTINGS (Find Land / Property)
+// Dynamic filter engine: filter changes re-render the grid
+// in place (no page re-render); state mirrored to the URL.
+// =====================================================
+
+// Per-type filter matrix — which filters make sense for which listing type.
+// Hidden filters are CLEARED from the active query, never silently applied.
+const LISTING_FILTER_MATRIX = {
+  land:             { beds: false, baths: false, building: false },
+  villa:            { beds: true,  baths: true,  building: true  },
+  house:            { beds: true,  baths: true,  building: true  },
+  apartment:        { beds: true,  baths: true,  building: true  },
+  long_term_rental: { beds: true,  baths: true,  building: true  },
+  commercial:       { beds: false, baths: false, building: true  },
+  warehouse:        { beds: false, baths: false, building: true  }
+};
+function listingTypeMatrix(type) {
+  return LISTING_FILTER_MATRIX[type] || { beds: true, baths: true, building: true };
+}
+function visibleFeatureTags(type) {
+  return (FilterData.feature_tags || []).filter(function(ft) {
+    if (!type) return true;
+    var ap = ft.applies_to || 'all';
+    return ap === 'all' || (',' + ap + ',').indexOf(',' + type + ',') >= 0;
+  });
+}
+
+// Price presets per Display Currency ([min, max] in that currency; 0 = open)
+const PRICE_PRESETS = {
+  IDR: [[0, 5e8], [5e8, 1e9], [1e9, 3e9], [3e9, 5e9], [5e9, 1e10], [1e10, 0]],
+  USD: [[0, 5e4], [5e4, 1e5], [1e5, 25e4], [25e4, 5e5], [5e5, 1e6], [1e6, 0]],
+  EUR: [[0, 5e4], [5e4, 1e5], [1e5, 25e4], [25e4, 5e5], [5e5, 1e6], [1e6, 0]],
+  AUD: [[0, 75e3], [75e3, 15e4], [15e4, 4e5], [4e5, 75e4], [75e4, 15e5], [15e5, 0]]
+};
+function pricePresetLabel(min, max, cur) {
+  if (!min) return t('filter.under', 'Under') + ' ' + Currency.format(max, cur);
+  if (!max) return Currency.format(min, cur) + '+';
+  return Currency.format(min, cur) + ' – ' + Currency.format(max, cur);
+}
+
 async function renderListings(el, params = {}) {
   await FilterData.load();
 
-  const filters = { ...params };
-  // Parse region from area value
-  if (filters.area && filters.area.startsWith('region:')) {
-    filters.region = filters.area.replace('region:', '');
-    delete filters.area;
+  // ---- state (parsed from URL params, incl. legacy param names) ----
+  var state = {
+    type: params.listing_type || '',
+    area: '', region: '',
+    price: params.price || '',          // "CUR:min-max" in display currency
+    size: params.size || '',
+    bsize: params.bsize || '',
+    cert: params.certificate_type || '',
+    beds: params.min_beds || '',
+    baths: params.min_baths || '',
+    tags: params.tags ? params.tags.split(',').filter(Boolean) : [],
+    sort: params.sort || '',
+    q: params.q || '',
+    agent_id: params.agent_id || '',
+    page: parseInt(params.page, 10) || 1
+  };
+  var areaParam = params.area || '';
+  if (areaParam.indexOf('region:') === 0) state.region = areaParam.slice(7);
+  else if (params.region) state.region = params.region;
+  else state.area = areaParam;
+  // Legacy deep links (pre-dynamic-engine URLs)
+  if (!state.price && (params.min_price_idr || params.max_price_idr)) {
+    state.price = 'IDR:' + (params.min_price_idr || 0) + '-' + (params.max_price_idr || 0);
   }
-  const [listRes] = await Promise.all([
-    DataLayer.getListings(filters),
-  ]);
+  if (!state.size && (params.min_size || params.max_size)) {
+    state.size = (params.min_size || 0) + '-' + (params.max_size || 0);
+  }
 
-  const listings = listRes.data;
-  const total = listRes.meta.total;
+  var lastItems = [];
+  var lastMeta = { total: 0, page: 1, per_page: 20, total_pages: 1 };
+  var map = null;
+  var isMobile = function() { return window.matchMedia('(max-width: 1023px)').matches; };
 
-  const areaOptions = buildAreaOptions(params.area || '');
-  const typeOptions = FilterData.listing_types.map(t => '<option value="' + t.key + '" ' + (params.listing_type === t.key ? 'selected' : '') + '>' + t.label + '</option>').join('');
-  const certOptions = FilterData.land_certificate_types.map(c => '<option value="' + c.key + '" ' + (params.certificate_type === c.key ? 'selected' : '') + '>' + c.label + '</option>').join('');
+  function areaRegionOf(areaKey) {
+    var row = (FilterData.areas || []).find(function(a) { return a.key === areaKey; });
+    return row ? (row.region_key || '') : '';
+  }
 
-  // Count active "more" filters
-  var moreActiveCount = 0;
-  if (params.certificate_type) moreActiveCount++;
-  if (params.min_beds) moreActiveCount++;
-  if (params.min_baths) moreActiveCount++;
-  if (params.q) moreActiveCount++;
-  var anyFilterActive = params.listing_type || params.area || params.min_price_idr || params.max_price_idr || params.min_size || params.max_size || moreActiveCount > 0;
+  // ---- option builders ----
+  function typeOptionsHtml() {
+    return FilterData.listing_types.map(function(o) {
+      return '<option value="' + o.key + '"' + (state.type === o.key ? ' selected' : '') + '>' + lookupLabel(o) + '</option>';
+    }).join('');
+  }
+  function certOptionsHtml() {
+    return FilterData.land_certificate_types.map(function(o) {
+      return '<option value="' + o.key + '"' + (state.cert === o.key ? ' selected' : '') + '>' + lookupLabel(o) + '</option>';
+    }).join('');
+  }
+  function priceOptionsHtml() {
+    var cur = Currency.get();
+    var presets = PRICE_PRESETS[cur] || PRICE_PRESETS.USD;
+    var matched = false;
+    var html = '<option value="">' + t('filter.any_price', 'Any price') + '</option>';
+    presets.forEach(function(p) {
+      var token = cur + ':' + p[0] + '-' + p[1];
+      var sel = state.price === token;
+      if (sel) matched = true;
+      html += '<option value="' + token + '"' + (sel ? ' selected' : '') + '>' + pricePresetLabel(p[0], p[1], cur) + '</option>';
+    });
+    // Active filter set in another currency → show it converted, keep it applied
+    if (state.price && !matched) {
+      var pr = parsePriceToken(state.price);
+      if (pr) {
+        var lbl = pricePresetLabel(
+          pr.min ? Math.round(Currency.convert(pr.min, pr.cur, cur)) : 0,
+          pr.max ? Math.round(Currency.convert(pr.max, pr.cur, cur)) : 0,
+          cur
+        );
+        html += '<option value="' + state.price + '" selected>' + lbl + '</option>';
+      }
+    }
+    return html;
+  }
+  function parsePriceToken(token) {
+    var m = /^([A-Z]{3}):(\d+)-(\d+)$/.exec(token || '');
+    if (!m) return null;
+    return { cur: m[1], min: parseInt(m[2], 10), max: parseInt(m[3], 10) };
+  }
+  function sizeOptionsHtml(presets, sel, unit) {
+    var html = '<option value="">' + t('filter.any_size', 'Any size') + '</option>';
+    presets.forEach(function(p) {
+      var v = p[0] + '-' + p[1];
+      var lbl;
+      if (!p[0]) lbl = t('filter.under', 'Under') + ' ' + p[1].toLocaleString() + ' ' + unit;
+      else if (!p[1]) lbl = p[0].toLocaleString() + '+ ' + unit;
+      else lbl = p[0].toLocaleString() + ' – ' + p[1].toLocaleString() + ' ' + unit;
+      html += '<option value="' + v + '"' + (sel === v ? ' selected' : '') + '>' + lbl + '</option>';
+    });
+    return html;
+  }
+  function tagChipsHtml() {
+    return visibleFeatureTags(state.type).map(function(ft) {
+      var on = state.tags.indexOf(ft.key) >= 0;
+      return '<button type="button" class="filter-tag' + (on ? ' active' : '') + '" data-tag="' + ft.key + '">' + lookupLabel(ft) + '</button>';
+    }).join('');
+  }
+  function currencyPillsHtml() {
+    var cur = Currency.get();
+    return Currency.LIST.map(function(c) {
+      return '<button type="button" class="cur-pill' + (c === cur ? ' active' : '') + '" data-cur="' + c + '" aria-pressed="' + (c === cur) + '">' + c + '</button>';
+    }).join('');
+  }
+  function selectionSummary() {
+    if (state.area) {
+      var aRow = (FilterData.areas || []).find(function(a) { return a.key === state.area; });
+      return aRow ? lookupLabel(aRow) : state.area;
+    }
+    if (state.region) {
+      var rRow = (FilterData.regions || []).find(function(r) { return r.region_key === state.region; });
+      return rRow ? lookupLabel(rRow) : state.region;
+    }
+    return t('map.all_lombok', 'All Lombok');
+  }
 
+  // ---- URL + API param building ----
+  function urlParams() {
+    var p = {};
+    if (state.type) p.listing_type = state.type;
+    if (state.area) p.area = state.area;
+    else if (state.region) p.area = 'region:' + state.region;
+    if (state.price) p.price = state.price;
+    if (state.size) p.size = state.size;
+    if (state.bsize) p.bsize = state.bsize;
+    if (state.cert) p.certificate_type = state.cert;
+    if (state.beds) p.min_beds = state.beds;
+    if (state.baths) p.min_baths = state.baths;
+    if (state.tags.length) p.tags = state.tags.join(',');
+    if (state.sort) p.sort = state.sort;
+    if (state.q) p.q = state.q;
+    if (state.agent_id) p.agent_id = state.agent_id;
+    if (state.page > 1) p.page = state.page;
+    return p;
+  }
+  function apiParams(skipLocation) {
+    var p = {};
+    if (state.type) p.listing_type = state.type;
+    if (!skipLocation) {
+      if (state.area) p.area = state.area;
+      else if (state.region) p.region = state.region;
+    }
+    var pr = parsePriceToken(state.price);
+    if (pr) {
+      // Canonical-IDR filtering (docs/adr/0006): bounds convert to IDR
+      var rate = Currency.rate(pr.cur, 'IDR');
+      if (pr.min) p.min_price_idr = Math.round(pr.min * rate);
+      if (pr.max) p.max_price_idr = Math.round(pr.max * rate);
+    }
+    if (state.size) {
+      var sp = state.size.split('-');
+      if (sp[0] && sp[0] !== '0') p.min_size = sp[0];
+      if (sp[1] && sp[1] !== '0') p.max_size = sp[1];
+    }
+    var matrix = listingTypeMatrix(state.type);
+    if (state.bsize && matrix.building) {
+      var bp = state.bsize.split('-');
+      if (bp[0] && bp[0] !== '0') p.min_building_size = bp[0];
+      if (bp[1] && bp[1] !== '0') p.max_building_size = bp[1];
+    }
+    if (state.cert) p.certificate_type = state.cert;
+    if (state.beds && matrix.beds) p.min_beds = state.beds;
+    if (state.baths && matrix.baths) p.min_baths = state.baths;
+    if (state.tags.length) p.tags = state.tags.join(',');
+    if (state.q) p.q = state.q;
+    if (state.agent_id) p.agent_id = state.agent_id;
+    if (state.sort === 'price_asc') { p.sort = 'price_idr'; p.dir = 'ASC'; }
+    else if (state.sort === 'price_desc') { p.sort = 'price_idr'; p.dir = 'DESC'; }
+    else if (state.sort === 'size_desc') { p.sort = 'land_size_sqm'; p.dir = 'DESC'; }
+    else { p.sort = 'created_at'; p.dir = 'DESC'; }
+    if (state.page > 1) p.page = state.page;
+    return p;
+  }
+  function syncUrl() {
+    var hash = '#' + buildHash('listings', urlParams());
+    if (window.location.hash !== hash) {
+      history.replaceState(null, '', hash);
+      if (typeof currentRoute === 'object' && currentRoute) currentRoute.params = urlParams();
+    }
+  }
+
+  // ---- shell ----
   el.innerHTML = `
     <div class="dir-hero">
       <div class="container">
-        <h1 class="dir-hero-title">Find Land & Property</h1>
-        <p class="dir-hero-desc">Discover your dream location across Lombok — land, villas, and investment properties.</p>
+        <h1 class="dir-hero-title">${t('listings.hero_title', 'Find Land & Property')}</h1>
+        <p class="dir-hero-desc">${t('listings.hero_desc', 'Discover your dream location across Lombok — land, villas, and investment properties.')}</p>
       </div>
     </div>
     <div class="section">
@@ -1859,146 +2369,111 @@ async function renderListings(el, params = {}) {
           <div class="filters-body open">
             <div class="filters-grid filters-grid--4">
               <div class="filter-group">
-                <label class="filter-label">Type</label>
-                <select id="fil-type" class="filter-select" aria-label="Property type">
-                  <option value="">All types</option>
-                  ${typeOptions}
+                <label class="filter-label" for="fil-type">${t('filter.type', 'Type')}</label>
+                <select id="fil-type" class="filter-select" aria-label="${t('filter.type', 'Type')}">
+                  <option value="">${t('filter.all_types', 'All types')}</option>
+                  ${typeOptionsHtml()}
                 </select>
               </div>
               <div class="filter-group">
-                <label class="filter-label">Area</label>
-                <select id="fil-area" class="filter-select" aria-label="Area">
-                  <option value="">All areas</option>
-                  ${areaOptions}
+                <label class="filter-label" for="fil-area">${t('filter.area', 'Area')}</label>
+                <select id="fil-area" class="filter-select" aria-label="${t('filter.area', 'Area')}">
+                  <option value="">${t('filter.all_areas', 'All areas')}</option>
+                  ${buildAreaOptions(state.area || (state.region ? 'region:' + state.region : ''))}
                 </select>
               </div>
               <div class="filter-group">
-                <label class="filter-label">Price (IDR)</label>
-                <select id="fil-price" class="filter-select" aria-label="Price range">
-                  <option value="">Any price</option>
-                  <option value="0-500000000" ${params.max_price_idr === '500000000' ? 'selected' : ''}>Under 500 Juta</option>
-                  <option value="500000000-1000000000" ${params.min_price_idr === '500000000' && params.max_price_idr === '1000000000' ? 'selected' : ''}>500 Jt - 1 M</option>
-                  <option value="1000000000-3000000000" ${params.min_price_idr === '1000000000' && params.max_price_idr === '3000000000' ? 'selected' : ''}>1 - 3 Miliar</option>
-                  <option value="3000000000-5000000000" ${params.min_price_idr === '3000000000' && params.max_price_idr === '5000000000' ? 'selected' : ''}>3 - 5 Miliar</option>
-                  <option value="5000000000-10000000000" ${params.min_price_idr === '5000000000' && params.max_price_idr === '10000000000' ? 'selected' : ''}>5 - 10 Miliar</option>
-                  <option value="10000000000-0" ${params.min_price_idr === '10000000000' && !params.max_price_idr ? 'selected' : ''}>10 Miliar+</option>
+                <label class="filter-label" for="fil-price">${t('filter.price', 'Price')} <span class="filter-label-cur" id="fil-price-cur">(${Currency.get()})</span></label>
+                <select id="fil-price" class="filter-select" aria-label="${t('filter.price', 'Price')}">
+                  ${priceOptionsHtml()}
                 </select>
               </div>
               <div class="filter-group">
-                <label class="filter-label">Land Size</label>
-                <select id="fil-size" class="filter-select" aria-label="Land size">
-                  <option value="">Any size</option>
-                  <option value="0-100" ${params.max_size === '100' ? 'selected' : ''}>Under 100 m&sup2;</option>
-                  <option value="100-500" ${params.min_size === '100' && params.max_size === '500' ? 'selected' : ''}>100 - 500 m&sup2;</option>
-                  <option value="500-1000" ${params.min_size === '500' && params.max_size === '1000' ? 'selected' : ''}>500 - 1,000 m&sup2;</option>
-                  <option value="1000-5000" ${params.min_size === '1000' && params.max_size === '5000' ? 'selected' : ''}>1,000 - 5,000 m&sup2;</option>
-                  <option value="5000-10000" ${params.min_size === '5000' && params.max_size === '10000' ? 'selected' : ''}>5,000 - 10,000 m&sup2;</option>
-                  <option value="10000-0" ${params.min_size === '10000' && !params.max_size ? 'selected' : ''}>10,000+ m&sup2;</option>
+                <label class="filter-label" for="fil-size">${t('filter.land_size', 'Land Size')}</label>
+                <select id="fil-size" class="filter-select" aria-label="${t('filter.land_size', 'Land Size')}">
+                  ${sizeOptionsHtml([[0, 100], [100, 500], [500, 1000], [1000, 5000], [5000, 10000], [10000, 0]], state.size, 'm²')}
                 </select>
               </div>
             </div>
             <div class="filters-more-row">
               <button class="filters-more-btn" id="moreFiltersBtn" type="button">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
-                More Filters${moreActiveCount > 0 ? ' (' + moreActiveCount + ')' : ''}
+                <span id="moreFiltersLabel">${t('filter.more_filters', 'More Filters')}</span>
               </button>
-              ${anyFilterActive ? '<button class="btn btn--ghost btn--sm" type="button" id="clearAllFiltersBtn" style="margin-left:auto;color:var(--color-accent);">Clear all</button>' : ''}
+              <button class="btn btn--ghost btn--sm" type="button" id="clearAllFiltersBtn" style="margin-left:auto;color:var(--color-accent);" hidden>${t('filter.clear_all', 'Clear all')}</button>
             </div>
             <div class="filters-more-panel" id="moreFiltersPanel">
-              <div class="filters-grid filters-grid--3">
-                <div class="filter-group">
-                  <label class="filter-label">Certificate</label>
-                  <select id="fil-cert" class="filter-select" aria-label="Certificate">
-                    <option value="">Any certificate</option>
-                    ${certOptions}
+              <div class="filters-grid filters-grid--4">
+                <div class="filter-group" id="fg-cert">
+                  <label class="filter-label" for="fil-cert">${t('filter.certificate', 'Certificate')}</label>
+                  <select id="fil-cert" class="filter-select" aria-label="${t('filter.certificate', 'Certificate')}">
+                    <option value="">${t('filter.any_certificate', 'Any certificate')}</option>
+                    ${certOptionsHtml()}
                   </select>
                 </div>
-                <div class="filter-group">
-                  <label class="filter-label">Bedrooms</label>
-                  <select id="fil-beds" class="filter-select" aria-label="Bedrooms">
-                    <option value="">Any</option>
-                    <option value="1" ${params.min_beds === '1' ? 'selected' : ''}>1+</option>
-                    <option value="2" ${params.min_beds === '2' ? 'selected' : ''}>2+</option>
-                    <option value="3" ${params.min_beds === '3' ? 'selected' : ''}>3+</option>
-                    <option value="4" ${params.min_beds === '4' ? 'selected' : ''}>4+</option>
-                    <option value="5" ${params.min_beds === '5' ? 'selected' : ''}>5+</option>
+                <div class="filter-group" id="fg-beds">
+                  <label class="filter-label" for="fil-beds">${t('filter.bedrooms', 'Bedrooms')}</label>
+                  <select id="fil-beds" class="filter-select" aria-label="${t('filter.bedrooms', 'Bedrooms')}">
+                    <option value="">${t('filter.any', 'Any')}</option>
+                    ${[1, 2, 3, 4, 5].map(function(n) { return '<option value="' + n + '"' + (state.beds === String(n) ? ' selected' : '') + '>' + n + '+</option>'; }).join('')}
                   </select>
                 </div>
-                <div class="filter-group">
-                  <label class="filter-label">Bathrooms</label>
-                  <select id="fil-baths" class="filter-select" aria-label="Bathrooms">
-                    <option value="">Any</option>
-                    <option value="1" ${params.min_baths === '1' ? 'selected' : ''}>1+</option>
-                    <option value="2" ${params.min_baths === '2' ? 'selected' : ''}>2+</option>
-                    <option value="3" ${params.min_baths === '3' ? 'selected' : ''}>3+</option>
-                    <option value="4" ${params.min_baths === '4' ? 'selected' : ''}>4+</option>
+                <div class="filter-group" id="fg-baths">
+                  <label class="filter-label" for="fil-baths">${t('filter.bathrooms', 'Bathrooms')}</label>
+                  <select id="fil-baths" class="filter-select" aria-label="${t('filter.bathrooms', 'Bathrooms')}">
+                    <option value="">${t('filter.any', 'Any')}</option>
+                    ${[1, 2, 3, 4].map(function(n) { return '<option value="' + n + '"' + (state.baths === String(n) ? ' selected' : '') + '>' + n + '+</option>'; }).join('')}
+                  </select>
+                </div>
+                <div class="filter-group" id="fg-building">
+                  <label class="filter-label" for="fil-bsize">${t('filter.building_size', 'Building Size')}</label>
+                  <select id="fil-bsize" class="filter-select" aria-label="${t('filter.building_size', 'Building Size')}">
+                    ${sizeOptionsHtml([[0, 100], [100, 200], [200, 400], [400, 0]], state.bsize, 'm²')}
                   </select>
                 </div>
               </div>
               <div class="filter-group" style="margin-top:var(--space-3)">
-                <label class="filter-label">Features</label>
-                <div class="filter-tags" id="fil-tags">
-                  ${['Ocean View','Beachfront','Pool','Furnished','Cliff Top','Rice Field View','Near Airport','Freehold (SHM)'].map(function(tag) {
-                    var tagKey = tag.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/_$/, '');
-                    var isActive = params.q && params.q.toLowerCase().indexOf(tag.toLowerCase()) >= 0;
-                    return '<button type="button" class="filter-tag' + (isActive ? ' active' : '') + '" data-tag="' + tag + '">' + tag + '</button>';
-                  }).join('')}
-                </div>
+                <label class="filter-label">${t('filter.features', 'Features')}</label>
+                <div class="filter-tags" id="fil-tags">${tagChipsHtml()}</div>
               </div>
             </div>
           </div>
         </div>
-        <div class="split-view" id="listings-split">
-          <div class="split-view-map" aria-label="Lombok property map">
-            <div class="split-view-map-topo" aria-hidden="true">
-              <svg viewBox="0 0 480 560" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
-                <rect width="480" height="560" fill="#f2ebe1"/>
-                <g stroke="#ddd5c2" stroke-width="0.4" opacity="0.8">
-                  <line x1="0" y1="56" x2="480" y2="56"/><line x1="0" y1="112" x2="480" y2="112"/><line x1="0" y1="168" x2="480" y2="168"/><line x1="0" y1="224" x2="480" y2="224"/><line x1="0" y1="280" x2="480" y2="280"/><line x1="0" y1="336" x2="480" y2="336"/><line x1="0" y1="392" x2="480" y2="392"/><line x1="0" y1="448" x2="480" y2="448"/><line x1="0" y1="504" x2="480" y2="504"/>
-                  <line x1="60" y1="0" x2="60" y2="560"/><line x1="120" y1="0" x2="120" y2="560"/><line x1="180" y1="0" x2="180" y2="560"/><line x1="240" y1="0" x2="240" y2="560"/><line x1="300" y1="0" x2="300" y2="560"/><line x1="360" y1="0" x2="360" y2="560"/><line x1="420" y1="0" x2="420" y2="560"/>
-                </g>
-                <path d="M 85,110 C 95,65 160,48 235,50 C 310,52 390,75 420,120 C 450,165 445,240 420,295 C 395,350 350,400 290,430 C 230,460 165,458 120,430 C 75,402 60,350 58,295 C 56,240 70,160 85,110 Z" fill="#e8dfd0" stroke="#c8b99a" stroke-width="1.5" opacity="0.75"/>
-                <ellipse cx="205" cy="155" rx="115" ry="88" fill="none" stroke="#c8b898" stroke-width="0.8" opacity="0.6"/>
-                <ellipse cx="205" cy="155" rx="92" ry="70" fill="none" stroke="#c2b08a" stroke-width="0.9" opacity="0.65"/>
-                <ellipse cx="205" cy="155" rx="72" ry="54" fill="none" stroke="#bca87e" stroke-width="1" opacity="0.7"/>
-                <ellipse cx="205" cy="155" rx="54" ry="40" fill="none" stroke="#b6a072" stroke-width="1" opacity="0.75"/>
-                <ellipse cx="205" cy="155" rx="38" ry="28" fill="none" stroke="#b09868" stroke-width="1.2" opacity="0.8"/>
-                <ellipse cx="205" cy="155" rx="24" ry="18" fill="none" stroke="#aa9060" stroke-width="1.3" opacity="0.85"/>
-                <ellipse cx="205" cy="155" rx="13" ry="9" fill="none" stroke="#a08855" stroke-width="1.5" opacity="0.9"/>
-                <ellipse cx="205" cy="155" rx="5" ry="4" fill="#9c8050" opacity="0.7"/>
-                <circle cx="205" cy="155" r="2.5" fill="#7a5e38" opacity="0.8"/>
-                <ellipse cx="300" cy="360" rx="70" ry="45" fill="none" stroke="#d0c4ac" stroke-width="0.7" opacity="0.5"/>
-                <ellipse cx="300" cy="360" rx="52" ry="33" fill="none" stroke="#c8b8a0" stroke-width="0.8" opacity="0.55"/>
-                <ellipse cx="300" cy="360" rx="35" ry="22" fill="none" stroke="#c0ae94" stroke-width="0.9" opacity="0.6"/>
-                <ellipse cx="300" cy="360" rx="20" ry="13" fill="none" stroke="#b8a488" stroke-width="1" opacity="0.65"/>
-                <ellipse cx="130" cy="330" rx="50" ry="32" fill="none" stroke="#d0c4ac" stroke-width="0.7" opacity="0.45"/>
-                <ellipse cx="130" cy="330" rx="35" ry="22" fill="none" stroke="#c4b89e" stroke-width="0.8" opacity="0.5"/>
-                <ellipse cx="130" cy="330" rx="20" ry="13" fill="none" stroke="#b8a890" stroke-width="0.9" opacity="0.55"/>
-                <ellipse cx="58" cy="138" rx="9" ry="6" fill="#e0d8c8" stroke="#c0b090" stroke-width="1" opacity="0.8"/>
-                <ellipse cx="44" cy="165" rx="6" ry="4" fill="#e0d8c8" stroke="#c0b090" stroke-width="1" opacity="0.75"/>
-                <ellipse cx="36" cy="190" rx="5" ry="3" fill="#e0d8c8" stroke="#c0b090" stroke-width="1" opacity="0.7"/>
-                <text x="462" y="14" font-family="monospace" font-size="7" fill="#b0a890" opacity="0.5" text-anchor="end">116.5°E</text>
-                <text x="10" y="550" font-family="monospace" font-size="7" fill="#b0a890" opacity="0.5">8.7°S</text>
-                <text x="10" y="14" font-family="monospace" font-size="7" fill="#b0a890" opacity="0.5">8.3°S</text>
-              </svg>
-            </div>
-            <div class="split-view-map-overlay">
-              <span class="map-status-badge">[ INTERACTIVE EXPANSION EXPLORER &bull; ARRIVING SOON ]</span>
-            </div>
-          </div>
-          <div class="split-view-list card-grid listings-grid" id="listings-grid">
-            ${listings.length > 0
-              ? listings.map((l, i) => renderListingCard(l, i)).join('')
-              : `<div class="empty-state"><h3 class="empty-state-title">${t('empty.no_listings_title', 'No listings found')}</h3><p class="empty-state-desc">${t('empty.no_listings_desc', 'Try adjusting your filters or check back soon for new properties.')}</p></div>`}
+
+        <div class="listings-toolbar">
+          <div class="listings-count" id="lst-count" aria-live="polite"></div>
+          <div class="listings-toolbar-right">
+            <div class="cur-pills" id="cur-pills" role="group" aria-label="${t('currency.label', 'Display currency')}">${currencyPillsHtml()}</div>
+            <select id="fil-sort" class="filter-select filter-select--sort" aria-label="${t('sort.label', 'Sort by')}">
+              <option value="">${t('sort.newest', 'Newest')}</option>
+              <option value="price_asc"${state.sort === 'price_asc' ? ' selected' : ''}>${t('sort.price_asc', 'Price: low to high')}</option>
+              <option value="price_desc"${state.sort === 'price_desc' ? ' selected' : ''}>${t('sort.price_desc', 'Price: high to low')}</option>
+              <option value="size_desc"${state.sort === 'size_desc' ? ' selected' : ''}>${t('sort.size_desc', 'Largest land')}</option>
+            </select>
           </div>
         </div>
-        ${total > (listRes.meta.per_page || 20) ? (
-          '<div class="pagination" style="margin-top:var(--space-8);text-align:center;">' +
-          Array.from({length: listRes.meta.total_pages || 1}, (_, i) =>
-            '<button class="pagination-btn ' + ((listRes.meta.page || 1) === i+1 ? 'active' : '') + '" onclick="applyListingFilters(' + (i+1) + ')">' + (i+1) + '</button>'
-          ).join('') +
-          '</div>'
-        ) : ''}
+
+        <div class="split-view" id="listings-split">
+          <div class="split-view-map split-view-map--interactive" aria-label="${t('map.aria', 'Lombok region map filter')}">
+            <div class="lmap-panel" id="lmap-panel">
+              <button type="button" class="lmap-toggle" id="lmap-toggle" aria-expanded="false" aria-controls="lmap-body">
+                <svg class="lmap-toggle-icon" viewBox="0 0 880 640" aria-hidden="true"><path d="${LOMBOK_MAP.outline}"/></svg>
+                <span class="lmap-toggle-text">
+                  <span class="lmap-toggle-title">${t('map.explore', 'Explore by Map')}</span>
+                  <span class="lmap-toggle-sub" id="lmap-toggle-sub"></span>
+                </span>
+                <span class="lmap-toggle-clear" id="lmap-toggle-clear" hidden aria-label="${t('map.clear', 'Clear location')}">&times;</span>
+                <svg class="lmap-toggle-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <div class="lmap-body" id="lmap-body">
+                <div class="lmap-svg-wrap" id="lmap-svg-wrap"></div>
+                <button type="button" class="lmap-reset" id="lmap-reset" hidden>&larr; ${t('map.all_lombok', 'All Lombok')}</button>
+              </div>
+            </div>
+          </div>
+          <div class="split-view-list card-grid listings-grid" id="listings-grid"></div>
+        </div>
+        <div class="listings-pagination" id="lst-pagination"></div>
       </div>
     </div>
 
@@ -2006,97 +2481,255 @@ async function renderListings(el, params = {}) {
     <div class="section" style="padding-top:0">
       <div class="container container--narrow" style="text-align:center">
         <div class="help-cta">
-          <h3 class="help-cta-title">Are you an agent?</h3>
-          <p class="help-cta-desc">List your properties on Build in Lombok and reach foreign investors.</p>
-          <button onclick="navigate('create-listing')" class="btn btn--primary">Post a Listing</button>
+          <h3 class="help-cta-title">${t('listings.agent_cta_title', 'Are you an agent?')}</h3>
+          <p class="help-cta-desc">${t('listings.agent_cta_desc', 'List your properties on Build in Lombok and reach foreign investors.')}</p>
+          <button onclick="navigate('create-listing')" class="btn btn--primary">${t('listings.agent_cta_btn', 'Post a Listing')}</button>
         </div>
       </div>
     </div>
     ` : ''}
   `;
 
-  function applyFilters(page) {
-    var type = el.querySelector('#fil-type').value;
-    var area = el.querySelector('#fil-area').value;
-    var cert = el.querySelector('#fil-cert') ? el.querySelector('#fil-cert').value : '';
-    var beds = el.querySelector('#fil-beds') ? el.querySelector('#fil-beds').value : '';
-    var baths = el.querySelector('#fil-baths') ? el.querySelector('#fil-baths').value : '';
-    var priceRange = el.querySelector('#fil-price').value;
-    var sizeRange = el.querySelector('#fil-size').value;
+  var grid = el.querySelector('#listings-grid');
+  var countEl = el.querySelector('#lst-count');
+  var pagEl = el.querySelector('#lst-pagination');
 
-    // Collect active feature tags
-    var activeTags = [];
-    var tagBtns = el.querySelectorAll('#fil-tags .filter-tag.active');
-    for (var t = 0; t < tagBtns.length; t++) {
-      activeTags.push(tagBtns[t].getAttribute('data-tag'));
+  // Cache filter-bar nodes once: the mobile filter drawer re-parents the
+  // filters out of `el` while open, so live el.querySelector would miss them.
+  var nodes = {
+    areaSel: el.querySelector('#fil-area'),
+    priceSel: el.querySelector('#fil-price'),
+    priceCur: el.querySelector('#fil-price-cur'),
+    fgBeds: el.querySelector('#fg-beds'),
+    fgBaths: el.querySelector('#fg-baths'),
+    fgBuilding: el.querySelector('#fg-building'),
+    tagWrap: el.querySelector('#fil-tags'),
+    clearBtn: el.querySelector('#clearAllFiltersBtn'),
+    moreLbl: el.querySelector('#moreFiltersLabel'),
+    resetBtn: el.querySelector('#lmap-reset'),
+    toggleSub: el.querySelector('#lmap-toggle-sub'),
+    toggleClear: el.querySelector('#lmap-toggle-clear')
+  };
+
+  // ---- map ----
+  map = createLombokMap(el.querySelector('#lmap-svg-wrap'), {
+    onSelect: function(region, area) {
+      state.region = area ? '' : (region || '');
+      state.area = area || '';
+      state.page = 1;
+      if (nodes.areaSel) nodes.areaSel.value = state.area || (state.region ? 'region:' + state.region : '');
+      if (area && isMobile()) setMapOpen(false);
+      refresh();
     }
-
-    var p = {};
-    if (type) p.listing_type = type;
-    if (area) p.area = area;
-    if (cert) p.certificate_type = cert;
-    if (beds) p.min_beds = beds;
-    if (baths) p.min_baths = baths;
-    if (priceRange) {
-      var pParts = priceRange.split('-');
-      if (pParts[0] && pParts[0] !== '0') p.min_price_idr = pParts[0];
-      if (pParts[1] && pParts[1] !== '0') p.max_price_idr = pParts[1];
-    }
-    if (sizeRange) {
-      var sParts = sizeRange.split('-');
-      if (sParts[0] && sParts[0] !== '0') p.min_size = sParts[0];
-      if (sParts[1] && sParts[1] !== '0') p.max_size = sParts[1];
-    }
-    if (activeTags.length > 0) p.q = activeTags.join(' ');
-    if (page && page > 1) p.page = page;
-    navigate(buildHash('listings', p));
-  }
-
-  window.applyListingFilters = applyFilters;
-
-  // Main filter selects
-  ['fil-type', 'fil-area', 'fil-price', 'fil-size'].forEach(function(id) {
-    var sel = el.querySelector('#' + id);
-    if (sel) sel.addEventListener('change', function() { applyFilters(1); });
   });
 
-  // More filters selects
-  ['fil-cert', 'fil-beds', 'fil-baths'].forEach(function(id) {
+  function mapSelection() {
+    if (state.area) {
+      var rk = LOMBOK_MAP.areas[state.area] ? LOMBOK_MAP.areas[state.area].r : areaRegionOf(state.area);
+      map.setSelection(rk, state.area);
+    } else {
+      map.setSelection(state.region, null);
+    }
+    if (nodes.resetBtn) nodes.resetBtn.hidden = !(state.region || state.area);
+    if (nodes.toggleSub) nodes.toggleSub.textContent = selectionSummary();
+    if (nodes.toggleClear) nodes.toggleClear.hidden = !(state.region || state.area);
+  }
+
+  // Mobile collapsible panel
+  function setMapOpen(open) {
+    var body = el.querySelector('#lmap-body');
+    var tog = el.querySelector('#lmap-toggle');
+    if (!body || !tog) return;
+    body.classList.toggle('open', open);
+    tog.setAttribute('aria-expanded', open ? 'true' : 'false');
+    tog.classList.toggle('open', open);
+  }
+  el.querySelector('#lmap-toggle').addEventListener('click', function(e) {
+    if (e.target.closest('#lmap-toggle-clear')) {
+      state.region = ''; state.area = ''; state.page = 1;
+      if (nodes.areaSel) nodes.areaSel.value = '';
+      refresh();
+      return;
+    }
+    setMapOpen(!el.querySelector('#lmap-body').classList.contains('open'));
+  });
+  el.querySelector('#lmap-reset').addEventListener('click', function() {
+    state.region = ''; state.area = ''; state.page = 1;
+    if (nodes.areaSel) nodes.areaSel.value = '';
+    refresh();
+  });
+
+  // ---- per-type matrix ----
+  function applyMatrix() {
+    var m = listingTypeMatrix(state.type);
+    var changed = false;
+    var groups = { beds: nodes.fgBeds, baths: nodes.fgBaths, building: nodes.fgBuilding };
+    Object.keys(groups).forEach(function(k) {
+      if (!groups[k]) return;
+      groups[k].classList.toggle('fg-hidden', !m[k]);
+      if (!m[k]) {
+        var stateKey = k === 'building' ? 'bsize' : k;
+        if (state[stateKey]) { state[stateKey] = ''; changed = true; }
+        var sel = groups[k].querySelector('select');
+        if (sel) sel.value = '';
+      }
+    });
+    // Rebuild tag chips for this type; drop now-invisible selected tags
+    var visible = visibleFeatureTags(state.type).map(function(ft) { return ft.key; });
+    var kept = state.tags.filter(function(tg) { return visible.indexOf(tg) >= 0; });
+    if (kept.length !== state.tags.length) { state.tags = kept; changed = true; }
+    if (nodes.tagWrap) nodes.tagWrap.innerHTML = tagChipsHtml();
+    return changed;
+  }
+
+  // ---- grid rendering ----
+  function renderGrid() {
+    grid.innerHTML = lastItems.length > 0
+      ? lastItems.map(function(l, i) { return renderListingCard(l, i); }).join('')
+      : '<div class="empty-state"><h3 class="empty-state-title">' + t('empty.no_listings_title', 'No listings found') + '</h3><p class="empty-state-desc">' + t('empty.no_listings_desc', 'Try adjusting your filters or check back soon for new properties.') + '</p></div>';
+
+    var total = lastMeta.total || 0;
+    var from = total === 0 ? 0 : ((lastMeta.page - 1) * lastMeta.per_page) + 1;
+    var to = Math.min(total, lastMeta.page * lastMeta.per_page);
+    countEl.textContent = total === 0
+      ? t('listings.none_found', 'No properties found')
+      : t('listings.showing', 'Showing') + ' ' + from + '–' + to + ' ' + t('listings.of', 'of') + ' ' + total + ' ' + (total === 1 ? t('map.property', 'property') : t('map.properties', 'properties'));
+
+    if ((lastMeta.total_pages || 1) > 1) {
+      pagEl.innerHTML =
+        '<button type="button" class="pagination-btn" id="pag-prev"' + (lastMeta.page <= 1 ? ' disabled' : '') + '>&larr;</button>'
+        + '<span class="pagination-info">' + lastMeta.page + ' / ' + lastMeta.total_pages + '</span>'
+        + '<button type="button" class="pagination-btn" id="pag-next"' + (lastMeta.page >= lastMeta.total_pages ? ' disabled' : '') + '>&rarr;</button>';
+      var prev = pagEl.querySelector('#pag-prev'), next = pagEl.querySelector('#pag-next');
+      if (prev) prev.addEventListener('click', function() { state.page = Math.max(1, state.page - 1); refresh(true); });
+      if (next) next.addEventListener('click', function() { state.page = Math.min(lastMeta.total_pages, state.page + 1); refresh(true); });
+    } else {
+      pagEl.innerHTML = '';
+    }
+
+    var anyActive = state.type || state.area || state.region || state.price || state.size || state.bsize || state.cert || state.beds || state.baths || state.tags.length || state.q;
+    if (nodes.clearBtn) nodes.clearBtn.hidden = !anyActive;
+    var moreCount = [state.cert, state.beds, state.baths, state.bsize].filter(Boolean).length + state.tags.length;
+    if (nodes.moreLbl) nodes.moreLbl.textContent = t('filter.more_filters', 'More Filters') + (moreCount > 0 ? ' (' + moreCount + ')' : '');
+
+    requestAnimationFrame(function() { animateCards(grid); });
+  }
+
+  // ---- the dynamic refresh: grid + counts only, no page re-render ----
+  var refreshSeq = 0;
+  async function refresh(scrollToGrid) {
+    applyMatrix();
+    syncUrl();
+    mapSelection();
+    var seq = ++refreshSeq;
+    grid.classList.add('grid-loading');
+    try {
+      var results = await Promise.all([
+        DataLayer.getListings(apiParams(false)),
+        DataLayer.getListingCounts(apiParams(true)).catch(function() { return null; })
+      ]);
+      if (seq !== refreshSeq || !grid.isConnected) return; // stale response
+      lastItems = results[0].data;
+      lastMeta = results[0].meta || lastMeta;
+      renderGrid();
+      if (results[1]) map.setCounts(results[1]);
+    } catch (e) {
+      if (seq !== refreshSeq) return;
+      console.error('Listings refresh failed:', e);
+      grid.innerHTML = '<div class="empty-state"><h3 class="empty-state-title">' + t('empty.error_title', 'Something went wrong') + '</h3><p class="empty-state-desc">' + t('empty.error_desc', 'Please try again in a moment.') + '</p></div>';
+    }
+    grid.classList.remove('grid-loading');
+    if (scrollToGrid) {
+      var top = el.querySelector('.listings-toolbar');
+      if (top) top.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
+  // ---- filter events ----
+  function bindSelect(id, key) {
     var sel = el.querySelector('#' + id);
-    if (sel) sel.addEventListener('change', function() { applyFilters(1); });
+    if (!sel) return;
+    sel.addEventListener('change', function() {
+      state[key] = sel.value;
+      state.page = 1;
+      refresh();
+    });
+  }
+  bindSelect('fil-price', 'price');
+  bindSelect('fil-size', 'size');
+  bindSelect('fil-bsize', 'bsize');
+  bindSelect('fil-cert', 'cert');
+  bindSelect('fil-beds', 'beds');
+  bindSelect('fil-baths', 'baths');
+  bindSelect('fil-sort', 'sort');
+
+  el.querySelector('#fil-type').addEventListener('change', function() {
+    state.type = this.value;
+    state.page = 1;
+    refresh();
+  });
+  el.querySelector('#fil-area').addEventListener('change', function() {
+    var v = this.value;
+    if (v.indexOf('region:') === 0) { state.region = v.slice(7); state.area = ''; }
+    else { state.area = v; state.region = ''; }
+    state.page = 1;
+    refresh();
+  });
+
+  el.querySelector('#fil-tags').addEventListener('click', function(e) {
+    var btn = e.target.closest('.filter-tag');
+    if (!btn) return;
+    var tag = btn.getAttribute('data-tag');
+    var i = state.tags.indexOf(tag);
+    if (i >= 0) state.tags.splice(i, 1); else state.tags.push(tag);
+    btn.classList.toggle('active', i < 0);
+    state.page = 1;
+    refresh();
+  });
+
+  // Currency pills — presentation only: re-render prices + presets, no refetch
+  el.querySelector('#cur-pills').addEventListener('click', function(e) {
+    var pill = e.target.closest('.cur-pill');
+    if (!pill) return;
+    Currency.set(pill.getAttribute('data-cur'));
+    el.querySelectorAll('.cur-pill').forEach(function(p) {
+      var on = p.getAttribute('data-cur') === Currency.get();
+      p.classList.toggle('active', on);
+      p.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    if (nodes.priceSel) nodes.priceSel.innerHTML = priceOptionsHtml();
+    if (nodes.priceCur) nodes.priceCur.textContent = '(' + Currency.get() + ')';
+    renderGrid();
   });
 
   // More Filters toggle
   var moreBtn = el.querySelector('#moreFiltersBtn');
   var morePanel = el.querySelector('#moreFiltersPanel');
-  if (moreBtn && morePanel) {
-    // Auto-open if more filters are active
-    if (moreActiveCount > 0) morePanel.classList.add('open');
-    moreBtn.addEventListener('click', function() {
-      morePanel.classList.toggle('open');
-      moreBtn.classList.toggle('active');
+  if ([state.cert, state.beds, state.baths, state.bsize].some(Boolean) || state.tags.length) {
+    morePanel.classList.add('open');
+    moreBtn.classList.add('active');
+  }
+  moreBtn.addEventListener('click', function() {
+    morePanel.classList.toggle('open');
+    moreBtn.classList.toggle('active');
+  });
+
+  el.querySelector('#clearAllFiltersBtn').addEventListener('click', function() {
+    state = { type: '', area: '', region: '', price: '', size: '', bsize: '', cert: '', beds: '', baths: '', tags: [], sort: '', q: '', agent_id: '', page: 1 };
+    ['fil-type', 'fil-area', 'fil-price', 'fil-size', 'fil-bsize', 'fil-cert', 'fil-beds', 'fil-baths', 'fil-sort'].forEach(function(id) {
+      var sel = document.getElementById(id);
+      if (sel) sel.value = '';
     });
-  }
+    refresh();
+  });
 
-  // Clear all filters
-  var clearBtn = el.querySelector('#clearAllFiltersBtn');
-  if (clearBtn) {
-    clearBtn.addEventListener('click', function() { navigate('listings'); });
-  }
+  // Desktop: map always open; mobile: open if a location filter arrived in the URL
+  if (!isMobile() || state.region || state.area) setMapOpen(true);
 
-  // Feature tag toggles
-  var tagContainer = el.querySelector('#fil-tags');
-  if (tagContainer) {
-    tagContainer.addEventListener('click', function(e) {
-      var btn = e.target.closest('.filter-tag');
-      if (!btn) return;
-      btn.classList.toggle('active');
-      applyFilters(1);
-    });
-  }
-
-  requestAnimationFrame(() => animateCards(el));
+  // ---- initial load ----
+  await refresh();
 }
+
 
 // =====================================================
 // RENDER: LISTING DETAIL
@@ -2111,7 +2744,7 @@ async function renderListingDetail(el, slug) {
   const images = listing.images || [];
   const primaryImg = images.find(i => i.is_primary) || images[0];
   const features = listing.features || [];
-  const priceStr = listing.price_usd ? formatUSD(listing.price_usd) : (listing.price_idr ? formatIDR(listing.price_idr) : 'Price on request');
+  const priceStr = Currency.priceHtml(listing);
   const sizeStr = formatLandSize(listing.land_size_sqm, listing.land_size_are);
   const typeLabel = listing.listing_type_label || '';
   const certLabel = listing.certificate_type_label || '';
@@ -3440,7 +4073,7 @@ function renderProjectCard(p, index = 0) {
       <div class="card-facts-row">
         <div class="card-fact">
           <span class="card-fact-label">From</span>
-          <span class="card-fact-value">${formatUSD(p.min_investment_usd)}</span>
+          <span class="card-fact-value">${projectPriceHtml(p.min_investment_usd)}</span>
         </div>
         <div class="card-fact">
           <span class="card-fact-label">Yield</span>
@@ -3580,7 +4213,12 @@ async function renderProjects(el, params = {}) {
             </div>
           </div>
         </div>
-        <p class="results-count" id="proj-count"></p>
+        <div class="listings-toolbar">
+          <p class="results-count" id="proj-count" style="margin:0"></p>
+          <div class="cur-pills" id="proj-cur-pills" role="group" aria-label="${t('currency.label', 'Display currency')}">
+            ${Currency.LIST.map(c => `<button type="button" class="cur-pill${c === Currency.get() ? ' active' : ''}" data-cur="${c}" aria-pressed="${c === Currency.get()}">${c}</button>`).join('')}
+          </div>
+        </div>
         <div class="card-grid" id="project-grid"></div>
       </div>
     </div>
@@ -3590,6 +4228,18 @@ async function renderProjects(el, params = {}) {
     filters[key] = value;
     applyAndRender();
   };
+
+  el.querySelector('#proj-cur-pills').addEventListener('click', function(e) {
+    const pill = e.target.closest('.cur-pill');
+    if (!pill) return;
+    Currency.set(pill.getAttribute('data-cur'));
+    el.querySelectorAll('#proj-cur-pills .cur-pill').forEach(p => {
+      const on = p.getAttribute('data-cur') === Currency.get();
+      p.classList.toggle('active', on);
+      p.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    applyAndRender();
+  });
 
   applyAndRender();
 }
@@ -3627,7 +4277,7 @@ async function renderProjectDetail(el, slug) {
         <div class="key-facts" style="margin-bottom:var(--space-8);">
           <div class="key-fact">
             <div class="key-fact-label">Min Investment</div>
-            <div class="key-fact-value">${formatUSD(p.min_investment_usd)}</div>
+            <div class="key-fact-value">${projectPriceHtml(p.min_investment_usd)}</div>
           </div>
           <div class="key-fact">
             <div class="key-fact-label">Expected Yield</div>

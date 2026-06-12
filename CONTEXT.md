@@ -22,6 +22,38 @@ A Vendor in the `suppliers_materials` group — a business that sells building m
 A subset of Vendors, not a separate entity.
 _Avoid_: Store, merchant, shop.
 
+## Listings & map
+
+**Region**:
+One of the six *market* regions of Lombok used to group listings: South Lombok, West
+Lombok, Central Lombok, East Lombok, North Lombok, Gili Islands. Deliberately NOT the
+administrative kabupaten — e.g. Kuta sits in Kabupaten Lombok Tengah but belongs to the
+South Lombok Region, because that is how buyers think. Table: `area_regions`.
+_Avoid_: kabupaten, regency, district.
+
+**Area**:
+A named locality within a Region — the finest location granularity a listing has
+(e.g. Kuta, Selong Belanak, Are Guling). Listings carry an `area_key`; they have no
+coordinates. Every Area belongs to exactly one Region. Table: `areas`.
+_Avoid_: location, zone, suburb.
+
+**Display Currency**:
+The currency a visitor chooses to *view* listing and development prices in (IDR, USD,
+EUR, AUD). A presentation setting only — it never changes what a listing costs or how
+it is stored. Scoped to property listings and developments; materials and RAB prices
+are always IDR.
+
+**Price on Request**:
+A listing with no price in any currency. Shown without a price and excluded from
+results only while a price filter is active.
+
+**Feature Tag**:
+A canonical amenity/attribute key on a listing (beachfront, ocean_view, pool,
+furnished, cliff_top, rice_field_view, near_airport, …) with EN and ID labels.
+Assigned automatically at import by keyword scan and correctable by admins; the only
+thing feature filters are allowed to match against. Table: `listing_tags`.
+_Avoid_: feature, amenity, keyword (as schema/code names).
+
 ## Quote engine
 
 **Get Quotes (manual)**:
