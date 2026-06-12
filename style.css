@@ -8932,19 +8932,23 @@ body.cmd-palette-open { overflow: hidden; }
 :root, [data-theme="light"] {
   --lmap-sea:        #f2ebe1;
   --lmap-grid:       #ddd5c2;
-  --lmap-land:       #e8dfd0;
-  --lmap-land-hover: #e0d3bc;
-  --lmap-land-sel:   #dbcdb2;
+  /* Light theme: AI terrain underlay shows through translucent region tints */
+  --lmap-land:       rgba(166, 143, 99, 0.05);
+  --lmap-land-hover: rgba(166, 143, 99, 0.18);
+  --lmap-land-sel:   rgba(140, 116, 72, 0.28);
+  --lmap-empty:      rgba(242, 235, 225, 0.55);
   --lmap-coast:      #c8b99a;
-  --lmap-border:     #b6a47e;
+  --lmap-border:     #a8946a;
   --lmap-text:       #6b5f4a;
 }
 [data-theme="dark"] {
   --lmap-sea:        #1c1a15;
   --lmap-grid:       #262219;
+  /* Dark theme: terrain image hidden, solid land fills */
   --lmap-land:       #2b271e;
   --lmap-land-hover: #353023;
   --lmap-land-sel:   #3d3727;
+  --lmap-empty:      #1c1a15;
   --lmap-coast:      #4d4434;
   --lmap-border:     #5c5138;
   --lmap-text:       #aaa089;
@@ -8958,7 +8962,9 @@ body.cmd-palette-open { overflow: hidden; }
 .lmap { width: 100%; height: 100%; display: block; }
 
 .lmap-grid line { stroke: var(--lmap-grid); stroke-width: 0.4; opacity: 0.7; }
-.lmap-outline { fill: none; stroke: var(--lmap-coast); stroke-width: 2; stroke-linejoin: round; opacity: 0.9; }
+.lmap-terrain-img { opacity: 1; }
+[data-theme="dark"] .lmap-terrain-img { display: none; }
+.lmap-outline { fill: none; stroke: var(--lmap-coast); stroke-width: 1.4; stroke-linejoin: round; opacity: 0.8; }
 
 .lmap-region {
   fill: var(--lmap-land);
@@ -8974,9 +8980,9 @@ body.cmd-palette-open { overflow: hidden; }
 .lmap-region--empty {
   cursor: default;
   pointer-events: none;
-  fill: var(--lmap-sea);
+  fill: var(--lmap-empty);
   stroke-dasharray: 4 4;
-  opacity: 0.7;
+  opacity: 0.85;
 }
 .lmap-region--gili { fill: transparent; }
 .lmap-region--gili circle { fill: var(--lmap-land); stroke: var(--lmap-border); stroke-width: 1; transition: fill 0.4s cubic-bezier(0.25, 1, 0.5, 1); }
@@ -8991,19 +8997,27 @@ body.cmd-palette-open { overflow: hidden; }
   font-weight: 600;
   letter-spacing: 0.18em;
   fill: var(--lmap-text);
+  paint-order: stroke;
+  stroke: var(--lmap-sea);
+  stroke-width: 3px;
+  stroke-linejoin: round;
 }
 .lmap-rlabel-count {
   font-family: var(--font-display);
   font-size: 14px;
   font-style: italic;
   fill: var(--lmap-text);
-  opacity: 0.85;
+  opacity: 0.9;
+  paint-order: stroke;
+  stroke: var(--lmap-sea);
+  stroke-width: 3px;
+  stroke-linejoin: round;
 }
 .lmap-rlabel.empty { opacity: 0.55; }
 .lmap--zoomed .lmap-rlabel { opacity: 0; }
 
 .lmap-amark { opacity: 0; pointer-events: none; cursor: pointer; transition: opacity 0.45s cubic-bezier(0.25, 1, 0.5, 1); }
-.lmap-amark.visible { opacity: 1; pointer-events: auto; }
+.lmap-amark.visible { opacity: 1; pointer-events: auto; pointer-events: bounding-box; }
 .lmap-amark.visible.empty { opacity: 0.5; }
 .lmap-amark-hit { fill: transparent; stroke: none; }
 .lmap-amark-dot {
@@ -9057,7 +9071,9 @@ body.cmd-palette-open { overflow: hidden; }
 /* ---- Mobile: prominent collapsible map panel ---- */
 .lmap-toggle { display: none; }
 @media (max-width: 1023px) {
-  .split-view-map--interactive { min-height: 0; }
+  /* Override the legacy "hide map on mobile" rule — the interactive map
+     collapses into a prominent panel instead of disappearing. */
+  .split-view-map--interactive { display: block; min-height: 0; height: auto; position: static; }
   .lmap-toggle {
     display: flex;
     align-items: center;
@@ -9186,3 +9202,6 @@ body.cmd-palette-open { overflow: hidden; }
   font-style: italic;
   color: var(--color-text-muted);
 }
+
+/* [hidden] must win over .btn display rules */
+#clearAllFiltersBtn[hidden], .lmap-reset[hidden] { display: none !important; }
