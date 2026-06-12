@@ -106,11 +106,30 @@ function lc_label_is_per_sqm($label) {
  *   confidence,  // 'ok' | 'verify' | 'review'
  *   note         // human-readable reason
  * )
+ *
+ * $is_land: the per-m² band is a LAND sanity gate only. A built property
+ * (house/villa/apartment) is priced as a total that includes the building, so
+ * land per-m² is meaningless — we keep the number as a total and never gate or
+ * multiply it (only the absolute total ceiling still applies).
  */
-function lc_infer_price($amount, $size_sqm, $label_hint = '') {
+function lc_infer_price($amount, $size_sqm, $label_hint = '', $is_land = true) {
     $amount = (int)round((float)$amount);
     $res = array('total'=>null,'per_sqm'=>null,'per_are'=>null,'interp'=>'unknown','confidence'=>'review','note'=>'');
     if ($amount <= 0) { $res['note'] = 'no amount'; return $res; }
+
+    // ── Built property: price is a total incl. building. No per-m² gate. ──
+    if (!$is_land) {
+        $res['interp'] = 'total';
+        $res['total']  = $amount;
+        if (lc_trustworthy_size_sqm($size_sqm)) {
+            // land per-m² shown for reference only — NOT used to accept/reject.
+            $res['per_sqm'] = (int)round($amount / (int)$size_sqm);
+            $res['per_are'] = (int)round($amount / (int)$size_sqm * 100);
+        }
+        if ($amount > LC_TOTAL_HARD_MAX) { $res['confidence'] = 'review'; $res['note'] = 'total above sane ceiling'; }
+        else { $res['confidence'] = 'ok'; $res['note'] = 'built property — kept as total (land per-m² not gated)'; }
+        return $res;
+    }
 
     $size_ok = lc_trustworthy_size_sqm($size_sqm);
     $S = (int)$size_sqm;
@@ -199,10 +218,19 @@ function lc_infer_price($amount, $size_sqm, $label_hint = '') {
  *   - if a unit price has no trustworthy size, price_idr is NULL and flagged=1
  *     (better Price-on-Request than a wrong total that poisons filters).
  */
-function lc_canonical_price($raw_amount, $unit_label, $land_size_sqm) {
+function lc_canonical_price($raw_amount, $unit_label, $land_size_sqm, $is_land = true) {
     $amount = (int)round((float)$raw_amount);
     $out = array('price_idr' => null, 'price_idr_per_sqm' => null, 'price_label' => 'Total', 'flagged' => 0);
     if ($amount <= 0) return $out;
+
+    // Built property is a total incl. building — per-are/per-m² is a land-only
+    // convention and the per-m² ceiling does not apply. Keep the number as-is.
+    if (!$is_land) {
+        $out['price_idr'] = $amount;
+        if (lc_trustworthy_size_sqm($land_size_sqm)) $out['price_idr_per_sqm'] = (int)round($amount / (int)$land_size_sqm);
+        if ($amount > LC_TOTAL_HARD_MAX) { $out['price_idr'] = null; $out['price_idr_per_sqm'] = null; $out['flagged'] = 1; }
+        return $out;
+    }
 
     $label = mb_strtolower((string)$unit_label, 'UTF-8');
     $is_per_are = (strpos($label, '/are') !== false) || (strpos($label, 'per are') !== false) || ($label === 'per are');
@@ -271,6 +299,71 @@ function lc_is_price_surprise($old_idr, $new_idr) {
     if ($old <= 0 || $new <= 0) return false;
     $ratio = $new > $old ? $new / $old : $old / $new;
     return $ratio >= 5.0;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// AUTO-TAGS — mine the title/description for searchable features
+// ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Suggest feature tags for a listing from its title/short/long description.
+ * Returns canonical feature_tags KEYS (beachfront, ocean_view, …) — the SAME
+ * keys + bilingual keyword scans as the one-time backfill in
+ * migrations/2026_06_12_map_filters_currency.sql, so ongoing ingest stays
+ * consistent with the existing filter buttons. Pure — no DB.
+ *
+ * pool/furnished are built-property only (feature_tags.applies_to), so the
+ * listing type gates them here too.
+ */
+function lc_suggest_tags($title, $description = '', $short_description = '', $listing_type_key = '') {
+    $hay = mb_strtolower(trim((string)$title . ' ' . (string)$short_description . ' ' . (string)$description), 'UTF-8');
+    if ($hay === '') return array();
+    $built = in_array($listing_type_key, array('villa','house','apartment','commercial','long_term_rental'), true);
+
+    // canonical key => regex (mirrors the SQL REGEXP backfill)
+    $rules = array(
+        'beachfront'      => 'beachfront|beach front|tepi pantai|pinggir pantai|depan pantai',
+        'ocean_view'      => 'ocean view|sea view|seaview|oceanview|pemandangan laut|view laut',
+        'mountain_view'   => 'mountain view|rinjani view|view of (mount )?rinjani|pemandangan gunung|view gunung',
+        'rice_field_view' => 'rice ?field|rice ?paddy|paddy view|sawah',
+        'cliff_top'       => 'cliff ?top|clifftop|cliff front|on the cliff|cliff edge|tebing',
+        'near_airport'    => 'airport|bandara',
+    );
+    $out = array();
+    foreach ($rules as $key => $re) {
+        if (preg_match('/' . $re . '/u', $hay)) $out[] = $key;
+    }
+    if ($built) {
+        if (preg_match('/swimming ?pool|private pool|plunge pool|kolam renang/u', $hay)) $out[] = 'pool';
+        if (preg_match('/(fully|full|semi)? ?furnish(ed)?|berperabot/u', $hay) && !preg_match('/unfurnished/u', $hay)) $out[] = 'furnished';
+    }
+    return array_values(array_unique($out));
+}
+
+/**
+ * Persist auto tags into listing_tags (listing_id, tag). Existence-checked
+ * (the table has no UNIQUE key — the SQL backfill uses NOT EXISTS), so it never
+ * duplicates an existing tag, auto or manual. Returns count newly inserted.
+ * No-op if the table is absent.
+ */
+function lc_save_tags($db, $listing_id, array $tags) {
+    if (!$listing_id || !$tags) return 0;
+    try {
+        $chk = $db->prepare("SELECT 1 FROM listing_tags WHERE listing_id = ? AND tag = ? LIMIT 1");
+        $ins = $db->prepare("INSERT INTO listing_tags (listing_id, tag) VALUES (?, ?)");
+    } catch (Exception $e) { return 0; }
+    $n = 0;
+    foreach ($tags as $t) {
+        $t = trim((string)$t);
+        if ($t === '') continue;
+        try {
+            $chk->execute(array($listing_id, $t));
+            if ($chk->fetchColumn()) continue;
+            $ins->execute(array($listing_id, $t));
+            $n++;
+        } catch (Exception $e) {}
+    }
+    return $n;
 }
 
 // ─────────────────────────────────────────────────────────────────────

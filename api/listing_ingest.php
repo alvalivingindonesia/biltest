@@ -137,9 +137,10 @@ function handle_post_listing() {
     $photos     = isset($d['photos']) && is_array($d['photos']) ? array_values(array_filter($d['photos'])) : array();
     $source_url = isset($d['source_url']) ? trim((string)$d['source_url']) : '';
 
-    // ── Canonicalise price (per-are fix) ────────────────────────────
+    // ── Canonicalise price (per-are fix; land-only per-m² gate) ─────
+    $is_land = ($ltype === 'land');
     $idr_amount = lc_to_idr($db, $raw_amount, $currency);
-    $price = lc_canonical_price($idr_amount, $unit_label, $land_sqm);
+    $price = lc_canonical_price($idr_amount, $unit_label, $land_sqm, $is_land);
 
     // ── Resolve area_key (no silent default) ────────────────────────
     $loc_candidates = array();
@@ -236,6 +237,7 @@ function handle_post_listing() {
 
         $par[] = $id;
         $db->prepare("UPDATE listings SET " . implode(', ', $set) . " WHERE id = ?")->execute($par);
+        lc_save_tags($db, $id, lc_suggest_tags($title, $desc, $short, $ltype));
         json_out(array('ok' => true, 'listing_id' => $id, 'mode' => 'updated', 'price_flagged' => (int)$price['flagged']));
     }
 
@@ -275,6 +277,7 @@ function handle_post_listing() {
         !empty($photos) ? json_encode($photos, JSON_UNESCAPED_SLASHES) : null,
     ));
     $id = (int)$db->lastInsertId();
+    lc_save_tags($db, $id, lc_suggest_tags($title, $desc, $short, $ltype));
     json_out(array('ok' => true, 'listing_id' => $id, 'mode' => 'inserted', 'price_flagged' => (int)$price['flagged'], 'area_resolved' => $resolved_area ? 1 : 0));
 }
 

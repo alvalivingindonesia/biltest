@@ -2012,12 +2012,17 @@ function parse_lamudi_listing($item) {
         $data['land_size_sqm'] = intval($jsonld['floorSize']['value']);
     }
 
+    // ─── Property Type (needed before pricing: villas aren't per-m² gated) ─
+    $data['listing_type_key'] = detect_listing_type($data['title'], '');
+
     // ─── Canonical price (the per-are fix — docs/adr/0006, 0007) ──────────
     // parse_lamudi_price() returns the figure shown on the card, which on Lamudi
     // can be a PER-ARE unit price. lc_canonical_price multiplies by land size to
     // get the true total; with no trustworthy size it yields no total + a flag
-    // (Price on Request) rather than the old wrong per-are total.
-    $pc = lc_canonical_price($data['price_idr'], $data['price_label'], $data['land_size_sqm']);
+    // (Price on Request) rather than the old wrong per-are total. Built property
+    // (villa/house) is a total incl. building, so its land per-m² is not gated.
+    $is_land = ($data['listing_type_key'] === 'land');
+    $pc = lc_canonical_price($data['price_idr'], $data['price_label'], $data['land_size_sqm'], $is_land);
     $data['price_idr']         = $pc['price_idr'];
     $data['price_label']       = $pc['price_label'];
     if ($pc['price_idr_per_sqm']) $data['price_idr_per_sqm'] = $pc['price_idr_per_sqm'];
@@ -2034,9 +2039,6 @@ function parse_lamudi_listing($item) {
 
     // ─── Certificate ─────────────────────────────────────
     $data['certificate_type_key'] = detect_certificate($data['description']);
-
-    // ─── Property Type ───────────────────────────────────
-    $data['listing_type_key'] = detect_listing_type($data['title'], '');
 
     // ─── Area & Location Detection ───────────────────────
     $data['area_key'] = detect_area_key($data['district'], $data['title'], $data['description']);
