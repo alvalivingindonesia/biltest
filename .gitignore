@@ -3,3 +3,4 @@
 /config/
 deploy.bat
 agent/config.json
+.claude/
