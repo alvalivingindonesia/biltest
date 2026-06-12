@@ -285,7 +285,22 @@ function handle_post_listing() {
         $par[] = $id;
         $db->prepare("UPDATE listings SET " . implode(', ', $set) . " WHERE id = ?")->execute($par);
         lc_save_tags($db, $id, lc_suggest_tags($title, $desc, $short, $ltype));
-        json_out(array('ok' => true, 'listing_id' => $id, 'mode' => 'updated', 'price_flagged' => (int)$price['flagged']));
+
+        // De-dupe by source_url: keep the lowest-id active row, retire the rest.
+        // Self-heals duplicates a buggy earlier run may have inserted — whichever
+        // copy is re-checked, only the original (min id) stays active.
+        $deduped = 0;
+        if ($source_url !== '') {
+            $minq = $db->prepare("SELECT MIN(id) FROM listings WHERE source_url = ? AND status = 'active'");
+            $minq->execute(array($source_url));
+            $keep_id = (int)$minq->fetchColumn();
+            if ($keep_id > 0) {
+                $ddl = $db->prepare("UPDATE listings SET status = 'expired', recheck_status = 'duplicate', updated_at = NOW() WHERE source_url = ? AND status = 'active' AND id <> ?");
+                $ddl->execute(array($source_url, $keep_id));
+                $deduped = $ddl->rowCount();
+            }
+        }
+        json_out(array('ok' => true, 'listing_id' => $id, 'mode' => 'updated', 'price_flagged' => (int)$price['flagged'], 'deduped' => $deduped));
     }
 
     // ── New listing ─────────────────────────────────────────────────
