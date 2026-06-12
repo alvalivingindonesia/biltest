@@ -140,3 +140,14 @@ git push origin main
 - RAB tool improvements
 - Subscription conversion optimisation
 - Property listings module
+
+## Automated Listing Ingestion (ADR 0007 / 0008)
+A home-PC **Listing Worker** (Node + Playwright, `worker/`) crawls Lamudi/Rumah123/
+dotproperty on a residential IP and posts raw facts to `api/listing_ingest.php`
+(auth: `X-Worker-Key` = `WORKER_API_KEY`). The server canonicalises via
+`api/listing_canonical.php` (per-are→total, `area_key` via `area_aliases`, IDR,
+dedupe, trust model). Nightly re-check expires gone listings; `api/cron_reputation.php`
+recomputes agent Reputation. Operate it from `admin/ingest_console.php`; fix existing
+data once with `admin/recanonicalize_listings.php`. Schema:
+`migrations/2026_06_12_listing_ingestion.sql` (needs `WORKER_API_KEY` +
+`CRON_REPUTATION_TOKEN` in private config). Glossary in CONTEXT.md.

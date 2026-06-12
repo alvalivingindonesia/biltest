@@ -11,6 +11,7 @@
 
 session_start();
 require_once('/home/rovin629/config/biltest_config.php');
+require_once(__DIR__ . '/../api/listing_canonical.php'); // shared per-are/area rules (ADR 0006/0007)
 
 // ─── AUTH CHECK ──────────────────────────────────────────────────────
 $auth_error = '';
@@ -2011,10 +2012,17 @@ function parse_lamudi_listing($item) {
         $data['land_size_sqm'] = intval($jsonld['floorSize']['value']);
     }
 
-    // Price per sqm (calculate if total price and land size available)
-    if ($data['price_idr'] && $data['land_size_sqm'] && $data['land_size_sqm'] > 0 && $data['price_label'] === 'Total') {
-        $data['price_idr_per_sqm'] = intval($data['price_idr'] / $data['land_size_sqm']);
-    }
+    // ─── Canonical price (the per-are fix — docs/adr/0006, 0007) ──────────
+    // parse_lamudi_price() returns the figure shown on the card, which on Lamudi
+    // can be a PER-ARE unit price. lc_canonical_price multiplies by land size to
+    // get the true total; with no trustworthy size it yields no total + a flag
+    // (Price on Request) rather than the old wrong per-are total.
+    $pc = lc_canonical_price($data['price_idr'], $data['price_label'], $data['land_size_sqm']);
+    $data['price_idr']         = $pc['price_idr'];
+    $data['price_label']       = $pc['price_label'];
+    if ($pc['price_idr_per_sqm']) $data['price_idr_per_sqm'] = $pc['price_idr_per_sqm'];
+    $data['price_review_flag'] = $pc['flagged'];
+    $data['price_usd']         = idr_to_usd($data['price_idr']);
 
     // ─── Bedrooms & Bathrooms ────────────────────────────
     if (preg_match('/data-test="bed-value">\s*\n?([^<]+)/', $html, $bm)) {
@@ -2197,13 +2205,13 @@ function insert_lamudi_listing($db, $data, $agent_id) {
     try {
         $ins = $db->prepare(
             "INSERT INTO listings (slug, agent_id, listing_type_key, status, title, short_description, description,
-                                   area_key, location_detail, price_idr, price_usd, price_label, price_idr_per_sqm,
+                                   area_key, location_detail, price_idr, price_usd, price_label, price_idr_per_sqm, price_review_flag,
                                    land_size_sqm, land_size_are, certificate_type_key,
                                    building_size_sqm, bedrooms, bathrooms,
                                    is_featured, is_approved, source_site, source_url, source_listing_id, source_scraped_at,
                                    photo_urls)
              VALUES (?, ?, ?, 'active', ?, ?, ?,
-                     ?, ?, ?, ?, ?, ?,
+                     ?, ?, ?, ?, ?, ?, ?,
                      ?, ?, ?,
                      ?, ?, ?,
                      0, 1, 'lamudi', ?, ?, NOW(),
@@ -2225,6 +2233,7 @@ function insert_lamudi_listing($db, $data, $agent_id) {
             $data['price_usd'],
             $data['price_label'] ? $data['price_label'] : null,
             $data['price_idr_per_sqm'],
+            isset($data['price_review_flag']) ? $data['price_review_flag'] : 0,
             $data['land_size_sqm'],
             $land_size_are,
             $data['certificate_type_key'],

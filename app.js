@@ -3624,6 +3624,13 @@ async function adminAgentDetailSave(id, slug) {
   }
 }
 
+// Earned Reputation tier badge (ADR 0008). 'new' shows nothing to avoid clutter.
+function renderReputationBadge(tier) {
+  if (!tier || tier === 'new') return '';
+  const label = tier === 'top' ? 'Top Agent' : 'Established';
+  return '<span class="agent-rep agent-rep--' + tier + '">' + label + '</span>';
+}
+
 function renderAgentCard(agent, index = 0) {
   const _agentCard = `
     <a href="#agent/${agent.slug}" class="card agent-card" onclick="navigate('agent/${agent.slug}');return false;" style="animation-delay:${index * 60}ms">
@@ -3639,6 +3646,7 @@ function renderAgentCard(agent, index = 0) {
         <div class="agent-card-meta">
           ${agent.listing_count ? '<span>' + agent.listing_count + ' listing' + (agent.listing_count > 1 ? 's' : '') + '</span>' : ''}
           ${agent.is_verified ? '<span class="agent-verified">Verified</span>' : ''}
+          ${renderReputationBadge(agent.reputation_tier)}
         </div>
         ${agent.bio ? '<p class="agent-card-bio">' + (agent.bio.length > 120 ? agent.bio.substring(0, 120) + '...' : agent.bio) + '</p>' : ''}
       </div>
@@ -3745,6 +3753,7 @@ async function renderAgentDetail(el, slug) {
           <div class="detail-hero-info">
             <div class="detail-hero-badges">
               ${agent.is_verified ? '<span class="badge badge--trusted-light">\u2713 Verified Agent</span>' : ''}
+              ${agent.reputation_tier && agent.reputation_tier !== 'new' ? '<span class="badge badge--light">' + (agent.reputation_tier === 'top' ? 'Top Agent' : 'Established') + '</span>' : ''}
               ${agent.agency_name ? '<span class="badge badge--light">' + agent.agency_name + '</span>' : ''}
             </div>
             <h1 class="detail-hero-name">${agent.display_name}</h1>

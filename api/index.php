@@ -1058,7 +1058,7 @@ function _search_agents(PDO $db, string $q, int $limit): array {
                     (MATCH(ag.display_name, ag.agency_name, ag.bio) AGAINST(? IN BOOLEAN MODE)
                      + IF(ag.is_verified = 1, 0.3, 0)) AS score
              FROM agents ag
-             WHERE ag.is_active = 1
+             WHERE ag.is_active = 1" . _agent_visible_sql($db) . "
                AND MATCH(ag.display_name, ag.agency_name, ag.bio) AGAINST(? IN BOOLEAN MODE)
              ORDER BY score DESC
              LIMIT ?"
@@ -1078,7 +1078,7 @@ function _search_agents(PDO $db, string $q, int $limit): array {
                     ag.is_verified,
                     IF(ag.is_verified = 1, 0.3, 0) AS score
              FROM agents ag
-             WHERE ag.is_active = 1
+             WHERE ag.is_active = 1" . _agent_visible_sql($db) . "
                AND (ag.display_name LIKE ? OR ag.agency_name LIKE ? OR ag.bio LIKE ?)
              ORDER BY ag.is_verified DESC, ag.display_name ASC
              LIMIT ?"
@@ -1491,11 +1491,33 @@ function attach_listing_primary_image(array &$items): void {
 // AGENTS
 // =============================================================
 
+/** Cached column-existence check so new columns degrade gracefully pre-migration. */
+function _col_exists(PDO $db, string $table, string $col): bool {
+    static $cache = [];
+    $k = $table . '.' . $col;
+    if (!array_key_exists($k, $cache)) {
+        try {
+            $s = $db->prepare("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1");
+            $s->execute([$table, $col]);
+            $cache[$k] = (bool)$s->fetchColumn();
+        } catch (PDOException $e) { $cache[$k] = false; }
+    }
+    return $cache[$k];
+}
+
+/** WHERE fragment hiding non-browsable agents (hidden private sellers, merged dupes). */
+function _agent_visible_sql(PDO $db): string {
+    if (!_col_exists($db, 'agents', 'agent_kind')) return '';
+    return " AND ag.agent_kind = 'agent' AND ag.merged_into_agent_id IS NULL";
+}
+
 function handle_agents_list(): void {
     $db = get_db();
     [$page, $per_page, $offset] = get_page_params();
 
+    $has_rep = _col_exists($db, 'agents', 'reputation_tier');
     $where = ['ag.is_active = 1'];
+    if ($has_rep) { $where[] = "ag.agent_kind = 'agent'"; $where[] = 'ag.merged_into_agent_id IS NULL'; }
     $params = [];
 
     // Filter: area served
@@ -1516,7 +1538,9 @@ function handle_agents_list(): void {
 
     $where_sql = implode(' AND ', $where);
     $sort = get_sort_param(['display_name', 'created_at'], 'display_name');
-    $order = "ag.is_verified DESC, ag.{$sort} " . get_sort_dir();
+    // Earned Reputation leads the directory ranking when available (ADR 0008).
+    $rep_lead = $has_rep ? 'ag.reputation_score DESC, ' : '';
+    $order = $rep_lead . "ag.is_verified DESC, ag.{$sort} " . get_sort_dir();
 
     // Count
     $count_stmt = $db->prepare("SELECT COUNT(*) FROM agents ag WHERE {$where_sql}");
@@ -1524,11 +1548,15 @@ function handle_agents_list(): void {
     $total = (int)$count_stmt->fetchColumn();
 
     // Fetch
+    $rep_cols = $has_rep
+        ? "ag.reputation_tier, ag.reputation_score, ag.listings_total, ag.listings_active,"
+        : "";
     $stmt = $db->prepare(
         "SELECT ag.id, ag.slug, ag.display_name, ag.agency_name, ag.bio,
                 ag.phone, ag.whatsapp_number, ag.email, ag.website_url,
                 ag.areas_served, ag.languages, ag.is_verified,
                 ag.google_rating, ag.google_review_count, ag.profile_photo_url,
+                {$rep_cols}
                 (SELECT COUNT(*) FROM listings l WHERE l.agent_id = ag.id AND l.status = 'active') AS listing_count
          FROM agents ag
          WHERE {$where_sql}
@@ -1546,7 +1574,7 @@ function handle_agent_detail(string $slug): void {
     $stmt = $db->prepare(
         "SELECT ag.*
          FROM agents ag
-         WHERE ag.slug = ? AND ag.is_active = 1"
+         WHERE ag.slug = ? AND ag.is_active = 1" . _agent_visible_sql($db)
     );
     $stmt->execute([$slug]);
     $item = $stmt->fetch();

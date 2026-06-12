@@ -59,6 +59,16 @@ outranks a display-only one).
 - **Suggested fix:** Use the real `price_<cur>` keys.
 - **Resolution:** 2026-06-12 — fixed key names and aligned the function with the canonical-IDR model (docs/adr/0006): it now guarantees `price_idr` from any source currency instead of fanning out to all four columns — commit pending this session.
 
+### BUG-004 — Lamudi per-are price stored as the total; area silently defaulted to Praya
+- **Status:** fixed
+- **Severity:** high (data-integrity — poisoned price filters/sorts and mislocated listings)
+- **Area:** `admin/scrape_listings.php` (`parse_lamudi_listing`); area fallback in `detect_area_key`
+- **Reported:** 2026-06-12
+- **Description:** Lamudi listings priced "/are" had the per-are unit price stored directly in `price_idr` — the `Per Are` label was detected but never multiplied by land size, so a per-are figure masqueraded as the full price (and broke price filtering/sorting under ADR 0006). Separately, `detect_area_key()` dumped any location it couldn't keyword-match into `'praya'`, mislocating listings.
+- **Repro / example:** Import a Lamudi land card showing "Rp 275Jt/are" on 100 are → stored as Rp 275,000,000 instead of Rp 27,500,000,000.
+- **Suggested fix:** Canonicalise price/area server-side (docs/adr/0007). `lc_canonical_price()` multiplies per-are/per-m² by size (no trustworthy size → Price on Request + review flag); `lc_resolve_area_key()` maps structured location via `area_aliases` and never defaults.
+- **Resolution:** 2026-06-12 — added `api/listing_canonical.php`; routed the Lamudi parser through it; one-time corrector `admin/recanonicalize_listings.php` fixes existing rows; ongoing ingest via `api/listing_ingest.php` + home Worker (ADR 0007/0008) — commit pending this session.
+
 ### BUG-003 — IDR price filter silently excluded USD-only listings
 - **Status:** fixed
 - **Severity:** high (19 of 532 live listings invisible to any price-filtered search)

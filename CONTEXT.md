@@ -54,6 +54,115 @@ Assigned automatically at import by keyword scan and correctable by admins; the 
 thing feature filters are allowed to match against. Table: `listing_tags`.
 _Avoid_: feature, amenity, keyword (as schema/code names).
 
+## Listing ingestion
+
+**Source Site**:
+The external property portal a listing was ingested from — `lamudi`, `rumah123`,
+`dotproperty`, `olx`. Stored on the listing as `source_site` alongside
+`source_listing_id` (the portal's own id, stable identity for re-check) and
+`source_url` (the detail page). A listing has exactly one Source Site. Discovery
+actively scans Lamudi, Rumah123 and dotproperty only: **OLX owns Lamudi**, so scanning
+OLX would re-discover Lamudi stock as cross-site duplicates. OLX listings already in
+the DB are still Re-checked.
+_Avoid_: portal, origin, provider (Provider is the directory entity).
+
+**Listing Worker**:
+The always-on home PC that runs a headless browser to fetch source pages, extracts
+raw facts, and posts them to HostPapa over an outbound-only authenticated channel. The
+ingestion counterpart of the quote engine's worker (ADR 0002); never receives inbound
+calls. HostPapa's MySQL stays the single source of truth.
+_Avoid_: scraper, bot, crawler (as the named component).
+
+**Discovery**:
+Phase one of a crawl: reading a Source Site's *search-results* pages to learn which
+listings exist (their `source_listing_id` + detail URL). Finds new listings; does not
+produce authoritative per-listing data.
+_Avoid_: scrape, import (too broad).
+
+**Re-check**:
+Phase two and the steady-state job: fetching one listing's *detail* page to (a) confirm
+it is still active and (b) re-read its authoritative price/size/location. Runs as a
+nightly rolling window over the oldest-checked listings. Once ingestion is correct,
+re-check should rarely change anything except liveness.
+_Avoid_: refresh, sync, update (too broad).
+
+**Canonicalisation**:
+The server-side step at ingest that turns a Worker's raw extracted facts into stored
+columns: per-are/per-m² → total price, location string → `area_key`, any currency →
+canonical `price_idr` (ADR 0006), plus dedupe. The business rules live here, on
+HostPapa next to the DB — not on the Worker.
+_Avoid_: cleaning, processing.
+
+**Area Alias**:
+A saved mapping from a Source Site's structured administrative location (a kecamatan or
+desa name) to a canonical `area_key`. Created once by an admin when an unmapped
+location surfaces, then reused forever to auto-resolve `area_key` at Canonicalisation.
+The location counterpart of Material Alias; an unmapped location is queued for mapping,
+never silently defaulted to an area.
+_Avoid_: location map, region lookup.
+
+**Liveness**:
+Whether a listing still exists on its Source Site, read by a Re-check from the detail
+page. A **genuine removal** — 404, redirect to search, or "tidak tersedia"/"not
+available" text — expires the listing immediately (`status: active → expired`). A
+**fetch failure** — timeout, network blip, anti-bot block — is *not* a removal: it is
+skipped and retried next cycle, never counted against the listing. Liveness only ever
+moves `active → expired`; it never touches the market/human statuses `sold`,
+`under_offer`, or `draft`, and never hard-deletes (soft-delete rule). `status` (enum:
+`draft`, `active`, `under_offer`, `sold`, `expired`) is the listing lifecycle field;
+listings have no `is_active` column (that flag lives on providers/agents).
+_Avoid_: deleted, dead, removed (as the stored state — the state is `expired`).
+
+**Locked Field**:
+A specific listing field (price, area_key, land size, …) an admin has manually
+corrected, marked so the Worker's Re-check never overwrites *that* value. Locking is
+per-field, not per-listing: the Worker may still auto-update the untouched fields of a
+listing that has some locked ones. The guard that lets auto-apply ingestion coexist
+with hand-fixes.
+_Avoid_: locked listing (locking is field-level), pinned, frozen.
+
+## Agents
+
+**Agent**:
+A real-estate agent or agency that lists properties — the entity a Listing is attributed
+to via `agent_id`, and a browsable directory profile ("open by agent, see their
+listings"). A separate entity from Provider/Vendor (the trades/services directory):
+different table (`agents`), different purpose. One Agent has many Listings; a Listing
+has at most one Agent.
+_Avoid_: provider, vendor, seller (seller = the private-seller case below).
+
+**Agent Source**:
+One portal profile of an Agent — a `(source_site, source_agent_id, source_profile_url)`
+tuple. A single canonical Agent has one or more Agent Sources, because the same real
+agent posts on several portals. Matched and merged to the canonical Agent by normalised
+phone/WhatsApp number (name as tiebreak); ambiguous matches go to the review queue, not
+auto-merged. This is what lets "browse by agent" and Reputation see all of an agent's
+listings instead of a fragment.
+_Avoid_: agent row (the canonical Agent is the row that matters), duplicate.
+
+**Private Seller**:
+A listing posted by an individual with no agency. Bucketed into a single shared,
+**hidden** per-site Agent (e.g. "Private Seller (Lamudi)"): the listing keeps an
+`agent_id`, but the row is excluded from the Agent directory, search, and Reputation. A
+real person, just not a browsable agent.
+_Avoid_: treating as a normal Agent, or as a Platform Placeholder.
+
+**Platform Placeholder**:
+The portal's own name appearing as the seller ("Lamudi", "Rumah123") — not a person at
+all. Never stored as an Agent; such listings get `agent_id = NULL` and show no agent.
+Distinct from a Private Seller (a real human).
+_Avoid_: agent, private seller.
+
+**Reputation**:
+An Agent's *earned* trust, computed nightly from listing volume + tenure (time since
+first seen) + current active count. Deliberately separate from the manual `is_verified`
+(portal/verified badge) and `is_trusted` (editorial curation, ADR 0001) flags — those
+stay independent human levers. Tenure and track record count distinct listings *ever
+seen* (expired/sold included, which the soft-delete rule preserves), so Reputation does
+not evaporate when listings expire; active count is shown separately. Surfaced as a
+score + tier badge and usable for sort.
+_Avoid_: trust (ambiguous with `is_trusted`), rating (that is `google_rating`).
+
 ## Quote engine
 
 **Get Quotes (manual)**:
