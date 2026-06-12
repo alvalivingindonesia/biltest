@@ -146,9 +146,12 @@ WHERE (l.price_idr IS NULL OR l.price_idr = 0)
 
 
 -- ---------------------------------------------------------------------
--- 5. Indexes for the new query shapes (MariaDB: IF NOT EXISTS supported)
+-- 5. Indexes for the new query shapes
+--    Plain ADD INDEX for MySQL compatibility (IF NOT EXISTS is MariaDB-only).
+--    On a re-run these three error with "Duplicate key name" — that is
+--    expected and safe to ignore; everything above has its own guards.
 -- ---------------------------------------------------------------------
 
-ALTER TABLE listings     ADD INDEX IF NOT EXISTS idx_listings_price_idr (price_idr);
-ALTER TABLE listings     ADD INDEX IF NOT EXISTS idx_listings_area_status (area_key, status, is_approved);
-ALTER TABLE listing_tags ADD INDEX IF NOT EXISTS idx_listing_tags_tag (tag, listing_id);
+ALTER TABLE listings     ADD INDEX idx_listings_price_idr (price_idr);
+ALTER TABLE listings     ADD INDEX idx_listings_area_status (area_key, status, is_approved);
+ALTER TABLE listing_tags ADD INDEX idx_listing_tags_tag (tag, listing_id);
