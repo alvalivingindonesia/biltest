@@ -142,6 +142,18 @@ function handle_post_listing() {
     $idr_amount = lc_to_idr($db, $raw_amount, $currency);
     $price = lc_canonical_price($idr_amount, $unit_label, $land_sqm, $is_land);
 
+    // Fallback: when the card price is missing or untrustworthy, recover the
+    // real total from the description ("Hanya 1,9 M", "200 juta/are" × size).
+    if (($price['price_idr'] === null || $price['flagged']) && $desc !== '') {
+        $alt = lc_best_total_from_text($desc, $land_sqm);
+        if ($alt) {
+            $price['price_idr'] = $alt['total'];
+            $price['price_idr_per_sqm'] = ($is_land && lc_trustworthy_size_sqm($land_sqm)) ? (int)round($alt['total'] / (int)$land_sqm) : null;
+            $price['price_label'] = 'Total';
+            $price['flagged'] = 0;
+        }
+    }
+
     // ── Resolve area_key (no silent default) ────────────────────────
     $loc_candidates = array();
     foreach (array('kecamatan','desa','district','sub_district','address','location_detail') as $f) {

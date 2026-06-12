@@ -302,6 +302,95 @@ function lc_is_price_surprise($old_idr, $new_idr) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// PRICE FROM DESCRIPTION (fallback when the structured price is missing/wrong)
+// Many Lamudi listings bury the real total in the description ("Hanya 1,9 M",
+// "Jual 200 juta/are", "Rp 1.900.000.000"). This parses Indonesian price
+// phrasing so we can recover a trustworthy total when the card price failed.
+// ─────────────────────────────────────────────────────────────────────
+
+/** Parse one Indonesian-formatted number literal ("1,9", "1.900", "9.67"). */
+function lc_parse_id_number($s) {
+    $s = trim((string)$s);
+    if ($s === '') return 0.0;
+    if (strpos($s, ',') !== false) {
+        // comma = decimal, dots = thousands  ("1.234,5" -> 1234.5)
+        return (float) str_replace(',', '.', str_replace('.', '', $s));
+    }
+    $dots = substr_count($s, '.');
+    if ($dots === 1) {
+        $after = substr($s, strrpos($s, '.') + 1);
+        if (strlen($after) <= 2) return (float)$s;            // decimal: "1.9", "9.67"
+        return (float) str_replace('.', '', $s);              // thousands: "1.900"
+    }
+    if ($dots > 1) return (float) str_replace('.', '', $s);   // "1.900.000.000"
+    return (float)$s;
+}
+
+/**
+ * All price candidates found in free text. Each: array(amount, unit, raw)
+ * where unit is 'total' | 'per_are' | 'per_sqm'. A bare number only counts as
+ * a price if it has a scale word (m/juta/miliar/ribu), an Rp prefix, or is a
+ * large dotted figure — so land SIZES ("9.67 are", "967 m2") are not mistaken
+ * for prices.
+ */
+function lc_prices_from_text($text) {
+    $t = ' ' . mb_strtolower((string)$text, 'UTF-8') . ' ';
+    $t = str_replace(array("\n", "\r", "\t"), ' ', $t);
+    $out = array();
+    $re = '/(rp\.?\s*)?([0-9][0-9.,]*)\s*(miliar|milyar|juta|jt|ribu|rb|m(?![²2a-z0-9]))?\s*(\/\s*are|per\s+are|\/\s*m2|\/\s*m²|per\s+m2|per\s+m²)?/u';
+    if (!preg_match_all($re, $t, $ms, PREG_SET_ORDER)) return $out;
+    $mult = array('miliar'=>1e9,'milyar'=>1e9,'m'=>1e9,'juta'=>1e6,'jt'=>1e6,'ribu'=>1e3,'rb'=>1e3);
+    foreach ($ms as $m) {
+        $numStr = $m[2];
+        $scale  = isset($m[3]) ? $m[3] : '';
+        $perun  = isset($m[4]) ? $m[4] : '';
+        $hasRp  = isset($m[1]) && trim($m[1]) !== '';
+        $val = lc_parse_id_number($numStr);
+        if ($val <= 0) continue;
+        $amount = $scale !== '' ? $val * $mult[$scale] : $val;
+        $amount = (int)round($amount);
+        // qualify as a price (not a size/bedroom/etc.)
+        $qualifies = ($scale !== '') || $hasRp || ($amount >= 50000000);
+        if (!$qualifies || $amount < 1000000) continue;
+        $unit = (stripos($perun, 'are') !== false) ? 'per_are'
+              : ((stripos($perun, 'm') !== false) ? 'per_sqm' : 'total');
+        $out[] = array('amount' => $amount, 'unit' => $unit, 'raw' => trim($m[0]));
+    }
+    return $out;
+}
+
+/**
+ * Best TOTAL price recoverable from free text, sanity-checked against land size
+ * and the Lombok per-m² band. Prefers an explicit total ("Hanya 1,9 M") over a
+ * per-are unit; returns array(total, unit, amount, raw) or null.
+ */
+function lc_best_total_from_text($text, $size_sqm = null) {
+    $cands = lc_prices_from_text($text);
+    if (!$cands) return null;
+    $size_ok = lc_trustworthy_size_sqm($size_sqm);
+    $S = (int)$size_sqm;
+    $best = null;
+    foreach ($cands as $c) {
+        if ($c['unit'] === 'total')        $total = $c['amount'];
+        elseif ($c['unit'] === 'per_are')  $total = $size_ok ? (int)round($c['amount'] * ($S / 100.0)) : null;
+        else                               $total = $size_ok ? (int)round($c['amount'] * $S) : null;
+        if ($total === null) continue;
+        if ($total < 50000000 || $total > LC_TOTAL_HARD_MAX) continue;        // 50jt .. 500B
+        if ($size_ok) {
+            $perm2 = $total / $S;
+            if ($perm2 < LC_PERM2_MIN || $perm2 > LC_PERM2_HARD_MAX) continue;
+        }
+        // prefer an explicit total; tiebreak the larger figure (headline price)
+        $score = ($c['unit'] === 'total' ? 1e15 : 0) + $total;
+        if ($best === null || $score > $best['score']) {
+            $best = array('total' => $total, 'unit' => $c['unit'], 'amount' => $c['amount'], 'raw' => $c['raw'], 'score' => $score);
+        }
+    }
+    if ($best) unset($best['score']);
+    return $best;
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // AUTO-TAGS — mine the title/description for searchable features
 // ─────────────────────────────────────────────────────────────────────
 

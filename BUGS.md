@@ -78,3 +78,23 @@ outranks a display-only one).
 - **Repro / example:** Live audit 2026-06-12: 19 USD-only listings disappear when any IDR price band is applied.
 - **Suggested fix:** Canonical-IDR model — backfill `price_idr` for all priced listings and auto-fill it on every save.
 - **Resolution:** 2026-06-12 — `normalize_listing_price_idr()` added to all listing write paths (`api/user.php`, `admin/console.php`) plus one-time backfill in `migrations/2026_06_12_map_filters_currency.sql` (fully fixed once Jon runs the migration) — commit pending this session.
+
+### BUG-005 — Worker didn't detect Rumah123 "iklan sudah tidak aktif" inactive ads
+- **Status:** fixed
+- **Severity:** high (dead listings stay live with stale price/location)
+- **Area:** `worker/lib/extractors.js` `GONE_MARKERS`
+- **Reported:** 2026-06-12
+- **Description:** Rumah123 keeps the detail page reachable (HTTP 200, URL unchanged) for expired ads, showing only a banner "Iklan ini sudah tidak aktif … belum diperbarui oleh pemilik iklan". `detectGone()` didn't list that phrase, so the re-check treated the listing as present and kept its stale price/location. Example: https://www.rumah123.com/properti/lombok-tengah/las8731478/ (listing #42) stays active.
+- **Repro / example:** Re-check an expired Rumah123 ad → `recheck_status='present'`, listing stays `active`.
+- **Suggested fix:** Add `tidak aktif`, `sudah tidak aktif`, `belum diperbarui`, `iklan ini sudah` to `GONE_MARKERS` (page text is already lowercased). On 'gone' the worker posts liveness only (never the price), and the server expires it.
+- **Resolution:** 2026-06-12 — markers added; existing #42 expires on the next Worker re-check (or set `status='expired'` manually in the console meanwhile) — commit pending this session.
+
+### BUG-006 — Real total price buried in the description was ignored
+- **Status:** fixed
+- **Severity:** high (per-are-only cards stored Price on Request despite a clear total in the text)
+- **Area:** `api/listing_canonical.php` (price parsing); `api/listing_ingest.php`; `admin/recanonicalize_listings.php`; worker extractors
+- **Reported:** 2026-06-12
+- **Description:** Many Lamudi cards show only a per-are unit ("Jual 200 juta/are") while the description states the actual total ("Hanya 1,9 M"). The pipeline only read the structured card price, so these became Price on Request / per-are flags even though the total was right there in the text.
+- **Repro / example:** https://www.lamudi.co.id/properti/41032-73-52f21a7e305b-bc52-ce4058cb-a6b8-422f — desc "LT 9.67 are … Jual 200 juta/are … Hanya 1,9 M"; the Rp 1.9 B total was discarded.
+- **Suggested fix:** Indonesian description price parser (`lc_prices_from_text` / `lc_best_total_from_text`) that understands `1,9 M`, `200 juta/are`, `Rp 1.900.000.000`, ignores sizes (`9.67 are`, `967 m2`), and sanity-checks the recovered total against land size + the per-m² band. Use it as a fallback in ingest, and prefill the corrector's price field with it.
+- **Resolution:** 2026-06-12 — parser added; `listing_ingest.php` falls back to the description total when the card price is missing/flagged; the worker now sends the full `description`; the recanonicalize desk shows "📝 from description: Rp …" and prefills the Save field — commit pending this session.

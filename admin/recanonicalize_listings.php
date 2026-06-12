@@ -139,6 +139,7 @@ foreach ($rows as $r) {
     // ── PRICE — re-evaluate by magnitude, not by label ───────────────
     if ($cur_idr !== null && $cur_idr > 0) {
         $inf = lc_infer_price($cur_idr, $sqm, $label, $is_land);
+        $dsug = $is_land ? lc_best_total_from_text($r['description'], $sqm) : null;
         $row = array(
             'id' => $id, 'title' => $r['title'], 'source_url' => $r['source_url'],
             'type' => $type, 'area_key' => $r['area_key'],
@@ -146,6 +147,7 @@ foreach ($rows as $r) {
             'stored' => $cur_idr, 'interp' => $inf['interp'], 'note' => $inf['note'],
             'total' => $inf['total'], 'per_sqm' => $inf['per_sqm'], 'per_are' => $inf['per_are'],
             'confidence' => $inf['confidence'], 'tags' => $tags,
+            'desc_total' => $dsug ? $dsug['total'] : null, 'desc_raw' => $dsug ? $dsug['raw'] : '',
         );
 
         if (!$sqm_ok && $is_land) {
@@ -227,9 +229,16 @@ $tag_chips = function($tags) use ($esc, $tag_labels) {
     return $out;
 };
 // Inline Save (area + price) / Accept controls for one flagged row.
-$action_form = function($f) use ($areas, $esc) {
-    $prefill = $f['total'] !== null ? (int)$f['total'] : (int)$f['stored'];
+// $with_price=false for area-only rows (so Save can't zero a good price).
+$action_form = function($f, $with_price = true) use ($areas, $esc, $fmt) {
+    // Prefer a total recovered from the description, then the inferred total.
+    $has_desc = !empty($f['desc_total']);
+    $prefill = $has_desc ? (int)$f['desc_total'] : ($f['total'] !== null ? (int)$f['total'] : (int)$f['stored']);
     ob_start(); ?>
+    <?php if ($with_price && $has_desc): ?>
+      <div style="font-size:11px;color:#0c7c84;margin-bottom:3px">📝 from description: <strong><?= $fmt($f['desc_total']) ?></strong>
+        <span style="color:#888">(“<?= $esc(mb_substr($f['desc_raw'],0,24)) ?>”)</span></div>
+    <?php endif; ?>
     <form method="post" style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin:0">
       <input type="hidden" name="do" value="row_action">
       <input type="hidden" name="listing_id" value="<?= (int)$f['id'] ?>">
@@ -239,7 +248,9 @@ $action_form = function($f) use ($areas, $esc) {
           <option value="<?= $esc($a['key']) ?>"<?= $sel ?>><?= $esc($a['label']) ?></option>
         <?php endforeach; ?>
       </select>
-      <input name="price_idr" value="<?= $prefill ?>" size="13" title="total price IDR" style="font-variant-numeric:tabular-nums">
+      <?php if ($with_price): ?>
+        <input name="price_idr" value="<?= $prefill ?>" size="13" title="total price IDR" style="font-variant-numeric:tabular-nums">
+      <?php endif; ?>
       <button name="act" value="save" style="background:#1677ff;color:#fff;border:0;border-radius:5px">Save</button>
       <button name="act" value="accept" style="background:#e6ffed;border:1px solid #95de64;border-radius:5px">Looks right ✓</button>
     </form>
@@ -349,10 +360,10 @@ $action_form = function($f) use ($areas, $esc) {
 
 <h2>⑤ Area conflicts → review (NOT auto-changed; pick the right one)</h2>
 <table><tr><th>ID</th><th>Title</th><th>Source</th><th>Location text</th><th>Current</th><th>Suggested</th><th>Set area</th></tr>
-<?php foreach ($area_flips as $f): $af = $f + array('total'=>null,'stored'=>0,'area_key'=>$f['old']); ?>
+<?php foreach ($area_flips as $f): $af = $f + array('total'=>null,'stored'=>0,'area_key'=>$f['old'],'desc_total'=>null,'desc_raw'=>''); ?>
  <tr id="l<?= $f['id'] ?>"><td><?= $f['id'] ?></td><td><?= $esc(mb_substr($f['title'],0,40)) ?></td><td><?= $src_link($f['source_url']) ?></td>
  <td><?= $esc($f['loc']) ?></td><td><?= $esc($f['old']) ?></td><td class="new"><?= $esc($f['new']) ?></td>
- <td><?= $action_form($af) ?></td></tr>
+ <td><?= $action_form($af, false) ?></td></tr>
 <?php endforeach; if (!$area_flips) echo '<tr><td colspan="7">None.</td></tr>'; ?>
 </table>
 

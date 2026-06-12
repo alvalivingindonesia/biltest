@@ -16,6 +16,9 @@ const GONE_MARKERS = [
   'tidak tersedia', 'tidak ditemukan', 'halaman tidak', 'sudah terjual',
   'no longer available', 'not available', 'page not found', 'listing has been removed',
   'iklan tidak ditemukan', '404',
+  // inactive/expired ad banners (Rumah123: "Iklan ini sudah tidak aktif",
+  // "Iklan ini tidak aktif dan belum diperbarui oleh pemilik iklan")
+  'tidak aktif', 'sudah tidak aktif', 'belum diperbarui', 'iklan ini sudah',
 ];
 
 // Pull all JSON-LD blocks + a bit of context from any page.
@@ -102,6 +105,7 @@ const lamudi = {
       bedrooms: numFrom(product.numberOfBedrooms),
       bathrooms: numFrom(product.numberOfBathroomsTotal || product.numberOfBathrooms),
       certificate_text: String(product.description || pg.text || ''),
+      description: String(product.description || pg.text || ''), // full text — carries the pricing guide ("Hanya 1,9 M")
       kecamatan: addr.addressLocality || '',
       desa: addr.addressRegion || '',
       district: [addr.addressLocality, addr.addressRegion].filter(Boolean).join(', '),
@@ -149,6 +153,7 @@ const rumah123 = {
       bedrooms: numFrom(product.numberOfBedrooms),
       bathrooms: numFrom(product.numberOfBathroomsTotal || product.numberOfBathrooms),
       certificate_text: String(product.description || pg.text || ''),
+      description: String(product.description || pg.text || ''),
       kecamatan: addr.addressLocality || '',
       desa: addr.addressRegion || '',
       district: [addr.streetAddress, addr.addressLocality].filter(Boolean).join(', '),
@@ -196,6 +201,7 @@ const dotproperty = {
       bedrooms: numFrom(product.numberOfBedrooms),
       bathrooms: numFrom(product.numberOfBathroomsTotal || product.numberOfBathrooms),
       certificate_text: String(product.description || pg.text || ''),
+      description: String(product.description || pg.text || ''),
       kecamatan: addr.addressLocality || '',
       desa: addr.addressRegion || '',
       district: [addr.addressLocality, addr.addressRegion].filter(Boolean).join(', '),
