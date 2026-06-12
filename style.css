@@ -860,9 +860,11 @@
   background-repeat: no-repeat;
   clip-path: inset(100% 0 0 0);
   -webkit-clip-path: inset(100% 0 0 0);
+  /* NOTE: no translateZ(0)/backface-visibility here. Promoting this layer to a
+     compositor texture caches the cover-scaled background at a softer raster,
+     so it rendered visibly blurrier than the base layer below the clip seam.
+     clip-path animates smoothly without forced promotion. */
   will-change: clip-path;
-  transform: translateZ(0);
-  backface-visibility: hidden;
   pointer-events: none;
 }
 
@@ -8952,6 +8954,36 @@ body.cmd-palette-open { overflow: hidden; }
   --lmap-coast:      #4d4434;
   --lmap-border:     #5c5138;
   --lmap-text:       #aaa089;
+}
+
+/* ---- Listings layout grid ----
+   Mobile: single column, source order = map first, then filters, toolbar,
+   grid, pagination. Desktop: grid-areas keep the filter bar + toolbar full
+   width on top, with the map in a sticky left column beside the listings. */
+.listings-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+.listings-layout > .lst-filters { margin: 0; }
+.listings-layout > .lst-toolbar { margin: 0; }
+@media (min-width: 1024px) {
+  .listings-layout {
+    grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.1fr);
+    column-gap: var(--space-6);
+    row-gap: var(--space-4);
+    grid-template-areas:
+      "filters filters"
+      "toolbar toolbar"
+      "map     list"
+      "map     pagination";
+  }
+  .lst-map        { grid-area: map; }
+  .lst-filters    { grid-area: filters; }
+  .lst-toolbar    { grid-area: toolbar; }
+  .lst-grid       { grid-area: list; }
+  .lst-pagination { grid-area: pagination; }
 }
 
 .split-view-map--interactive { background: var(--lmap-sea); }

@@ -1095,18 +1095,18 @@ var HeroReveal = {
     // the revealed finish out of alignment with the wireframe seam).
     hero.classList.add('hero-xray');
 
-    // Where the wipe begins, as a % down from the top of the viewport. The top
-    // band of the frame is sky/ocean — identical in both layers — so wiping it
-    // shows no motion and pushes the visible reveal off-screen. Start the clip
-    // edge just above the villa roofline so the sweep happens over the building.
-    // Tune this single value if the roof sits higher/lower in the crop.
-    var WIPE_START = 25;
-    var startInset = 'inset(' + WIPE_START + '% 0 0 0)';
+    // Full-overlay initial state: the wireframe covers the ENTIRE frame (clip
+    // fully open), so there's no seam between a "revealed" top band and the
+    // wire. The wipe then sweeps the whole image from the very top.
+    gsap.set(wire, { clipPath: 'inset(0% 0 0 0)', webkitClipPath: 'inset(0% 0 0 0)' });
+    if (scan) gsap.set(scan, { top: '0%', opacity: 0 });
 
-    // Initial state: top band already "revealed" (it's identical sky anyway),
-    // full villa wireframe visible below, scan line parked at the roofline.
-    gsap.set(wire, { clipPath: startInset, webkitClipPath: startInset });
-    if (scan) gsap.set(scan, { top: WIPE_START + '%', opacity: 0 });
+    // Wipe pace differs by device. Mobile feels right at a short window; on
+    // desktop that same window is far too fast, so the reveal is stretched over
+    // more scroll. Tune the two values independently.
+    var isDesktop = !window.matchMedia ||
+      window.matchMedia('(min-width: 768px)').matches;
+    var endDistance = isDesktop ? '+=55%' : '+=20%';
 
     var tl = gsap.timeline({
       // duration:1 makes every primary tween span the full scrubbed timeline,
@@ -1117,24 +1117,30 @@ var HeroReveal = {
         start: 'top top',
         // No pin: the page scrolls naturally while the wipe scrubs against it,
         // so the hero scrolls up the screen as the wireframe dissolves away.
-        end: '+=20%',         // short window: ~one scroll clears half the mesh
-        // scrub:true tracks scroll position 1:1 (no time-based catch-up). With
-        // the short window a numeric scrub lags badly on fast scroll-up, leaving
-        // the mesh stuck partway when you return to the top. 1:1 always reaches
-        // both ends exactly, so the wipe fully reverses back to the roofline.
+        end: endDistance,
+        // scrub:true tracks scroll position 1:1 (no time-based catch-up) so the
+        // wipe always reaches both ends exactly and fully reverses on scroll-up.
         scrub: true,
-        invalidateOnRefresh: true
+        invalidateOnRefresh: true,
+        onLeave: function (self) {
+          // Wipe fully completed (scrolled past the end) — lock the finished
+          // photo and never replay the wireframe on scroll-up. A PARTIAL wipe
+          // still reverses normally; only a completed one sticks.
+          self.disable(false);
+          gsap.set(wire, { clipPath: 'inset(100% 0 0 0)', webkitClipPath: 'inset(100% 0 0 0)' });
+          if (scan) gsap.set(scan, { opacity: 0 });
+        }
       }
     });
 
-    // Wipe the wireframe away from the roofline down, revealing the finished villa.
+    // Wipe the wireframe away top->bottom, revealing the finished villa.
     tl.fromTo(wire,
-      { clipPath: startInset, webkitClipPath: startInset },
+      { clipPath: 'inset(0% 0 0 0)', webkitClipPath: 'inset(0% 0 0 0)' },
       { clipPath: 'inset(100% 0 0 0)', webkitClipPath: 'inset(100% 0 0 0)' }, 0);
 
     // Scan line rides the clip edge; fades in at the start, out at the finish.
     if (scan) {
-      tl.fromTo(scan, { top: WIPE_START + '%' }, { top: '100%' }, 0);
+      tl.fromTo(scan, { top: '0%' }, { top: '100%' }, 0);
       tl.to(scan, { opacity: 1, duration: 0.06 }, 0);
       tl.to(scan, { opacity: 0, duration: 0.08 }, 0.92);
     }
@@ -2382,21 +2388,39 @@ async function renderListings(el, params = {}) {
     </div>
     <div class="section">
       <div class="container">
-        <div class="filters-bar">
+        <div class="listings-layout" id="listings-layout">
+        <div class="split-view-map split-view-map--interactive lst-map" aria-label="${t('map.aria', 'Lombok region map filter')}">
+          <div class="lmap-panel" id="lmap-panel">
+            <button type="button" class="lmap-toggle" id="lmap-toggle" aria-expanded="false" aria-controls="lmap-body">
+              <svg class="lmap-toggle-icon" viewBox="0 0 880 640" aria-hidden="true"><path d="${LOMBOK_MAP.outline}"/></svg>
+              <span class="lmap-toggle-text">
+                <span class="lmap-toggle-title">${t('map.explore', 'Explore by Map')}</span>
+                <span class="lmap-toggle-sub" id="lmap-toggle-sub"></span>
+              </span>
+              <span class="lmap-toggle-clear" id="lmap-toggle-clear" hidden aria-label="${t('map.clear', 'Clear location')}">&times;</span>
+              <svg class="lmap-toggle-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="lmap-body" id="lmap-body">
+              <div class="lmap-svg-wrap" id="lmap-svg-wrap"></div>
+              <button type="button" class="lmap-reset" id="lmap-reset" hidden>&larr; ${t('map.all_lombok', 'All Lombok')}</button>
+            </div>
+          </div>
+        </div>
+        <div class="filters-bar lst-filters">
           <div class="filters-body open">
             <div class="filters-grid filters-grid--4">
-              <div class="filter-group">
-                <label class="filter-label" for="fil-type">${t('filter.type', 'Type')}</label>
-                <select id="fil-type" class="filter-select" aria-label="${t('filter.type', 'Type')}">
-                  <option value="">${t('filter.all_types', 'All types')}</option>
-                  ${typeOptionsHtml()}
-                </select>
-              </div>
               <div class="filter-group">
                 <label class="filter-label" for="fil-area">${t('filter.area', 'Area')}</label>
                 <select id="fil-area" class="filter-select" aria-label="${t('filter.area', 'Area')}">
                   <option value="">${t('filter.all_areas', 'All areas')}</option>
                   ${buildAreaOptions(state.area || (state.region ? 'region:' + state.region : ''))}
+                </select>
+              </div>
+              <div class="filter-group">
+                <label class="filter-label" for="fil-type">${t('filter.type', 'Type')}</label>
+                <select id="fil-type" class="filter-select" aria-label="${t('filter.type', 'Type')}">
+                  <option value="">${t('filter.all_types', 'All types')}</option>
+                  ${typeOptionsHtml()}
                 </select>
               </div>
               <div class="filter-group">
@@ -2457,7 +2481,7 @@ async function renderListings(el, params = {}) {
           </div>
         </div>
 
-        <div class="listings-toolbar">
+        <div class="listings-toolbar lst-toolbar">
           <div class="listings-count" id="lst-count" aria-live="polite"></div>
           <div class="listings-toolbar-right">
             <div class="cur-pills" id="cur-pills" role="group" aria-label="${t('currency.label', 'Display currency')}">${currencyPillsHtml()}</div>
@@ -2470,27 +2494,9 @@ async function renderListings(el, params = {}) {
           </div>
         </div>
 
-        <div class="split-view" id="listings-split">
-          <div class="split-view-map split-view-map--interactive" aria-label="${t('map.aria', 'Lombok region map filter')}">
-            <div class="lmap-panel" id="lmap-panel">
-              <button type="button" class="lmap-toggle" id="lmap-toggle" aria-expanded="false" aria-controls="lmap-body">
-                <svg class="lmap-toggle-icon" viewBox="0 0 880 640" aria-hidden="true"><path d="${LOMBOK_MAP.outline}"/></svg>
-                <span class="lmap-toggle-text">
-                  <span class="lmap-toggle-title">${t('map.explore', 'Explore by Map')}</span>
-                  <span class="lmap-toggle-sub" id="lmap-toggle-sub"></span>
-                </span>
-                <span class="lmap-toggle-clear" id="lmap-toggle-clear" hidden aria-label="${t('map.clear', 'Clear location')}">&times;</span>
-                <svg class="lmap-toggle-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"/></svg>
-              </button>
-              <div class="lmap-body" id="lmap-body">
-                <div class="lmap-svg-wrap" id="lmap-svg-wrap"></div>
-                <button type="button" class="lmap-reset" id="lmap-reset" hidden>&larr; ${t('map.all_lombok', 'All Lombok')}</button>
-              </div>
-            </div>
-          </div>
-          <div class="split-view-list card-grid listings-grid" id="listings-grid"></div>
+        <div class="split-view-list card-grid listings-grid lst-grid" id="listings-grid"></div>
+        <div class="listings-pagination lst-pagination" id="lst-pagination"></div>
         </div>
-        <div class="listings-pagination" id="lst-pagination"></div>
       </div>
     </div>
 
