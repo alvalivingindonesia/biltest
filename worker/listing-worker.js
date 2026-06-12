@@ -77,6 +77,11 @@ async function recheck(ctx, rechecks) {
           log('gone → expired', r.id, r.source_url);
         } else {
           const facts = await SITES[site].extractDetail(page, r.source_url);
+          // Authoritative identity from the re-check record so the server UPDATES
+          // this exact row instead of inserting a duplicate.
+          facts.listing_id = r.id;
+          facts.source_site = site;
+          if (r.source_listing_id) facts.source_listing_id = r.source_listing_id;
           const res = await api.postListing(facts);
           present++;
           log('present', r.id, res.mode, facts.title?.slice(0, 50), res.price_flagged ? '(price flagged)' : '');

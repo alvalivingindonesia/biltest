@@ -187,9 +187,27 @@ function handle_post_listing() {
     $land_are = $land_sqm ? round($land_sqm / 100, 2) : null;
 
     // ── Existing listing? ───────────────────────────────────────────
-    $st = $db->prepare("SELECT * FROM listings WHERE source_site = ? AND source_listing_id = ? LIMIT 1");
-    $st->execute(array($site, $src_id));
-    $existing = $st->fetch();
+    // Match priority: explicit listing_id (re-check is authoritative about WHICH
+    // row it is) → source tuple → source_url. This prevents the worker from
+    // inserting a DUPLICATE when its derived source_listing_id differs from the
+    // value the original import stored.
+    $existing = false;
+    $listing_id_in = isset($d['listing_id']) ? (int)$d['listing_id'] : 0;
+    if ($listing_id_in > 0) {
+        $st = $db->prepare("SELECT * FROM listings WHERE id = ? LIMIT 1");
+        $st->execute(array($listing_id_in));
+        $existing = $st->fetch();
+    }
+    if (!$existing) {
+        $st = $db->prepare("SELECT * FROM listings WHERE source_site = ? AND source_listing_id = ? LIMIT 1");
+        $st->execute(array($site, $src_id));
+        $existing = $st->fetch();
+    }
+    if (!$existing && $source_url !== '') {
+        $st = $db->prepare("SELECT * FROM listings WHERE source_url = ? ORDER BY id ASC LIMIT 1");
+        $st->execute(array($source_url));
+        $existing = $st->fetch();
+    }
 
     if ($existing) {
         $id = (int)$existing['id'];
