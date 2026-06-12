@@ -30,6 +30,17 @@ function lc_make_slug($text) {
     return $text === '' ? 'item' : substr($text, 0, 150);
 }
 
+/**
+ * A breadcrumb/category title like "Tanah Dijual di Lombok Tengah" — Lamudi's
+ * generated heading, never the real listing name. Used to avoid overwriting a
+ * good title with a generic one on re-check.
+ */
+function lc_is_generic_title($title) {
+    $t = trim(mb_strtolower((string)$title, 'UTF-8'));
+    if ($t === '' || mb_strlen($t) <= 6) return true;
+    return (bool)preg_match('/^(tanah|rumah|vila|villa|apartemen|ruko|gudang|kavling|kapling|properti)\s+(dijual|disewa)\b/u', $t);
+}
+
 function lc_normalize_area_text($s) {
     $s = mb_strtolower(trim((string)$s), 'UTF-8');
     // strip common admin prefixes so "Kecamatan Praya" == "praya"

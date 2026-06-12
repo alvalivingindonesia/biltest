@@ -223,8 +223,11 @@ function handle_post_listing() {
             lc_queue_review($db, $id, 'unmapped_area', array('candidates' => $loc_candidates, 'source_url' => $source_url));
         }
 
-        // Objective fields (auto-apply, respecting locks).
-        $apply('title', $title);
+        // Title: take the scraped one, but never replace a real title with a
+        // generic breadcrumb ("Tanah Dijual di Lombok Tengah").
+        if ($title !== '' && !(lc_is_generic_title($title) && !empty($existing['title']) && !lc_is_generic_title($existing['title']))) {
+            $apply('title', $title);
+        }
         $apply('short_description', $short);
         $apply('description', $desc !== '' ? $desc : $existing['description']);
         $apply('land_size_sqm', $land_sqm);

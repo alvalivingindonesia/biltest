@@ -1948,13 +1948,19 @@ function parse_lamudi_listing($item) {
     $data['source_url'] = 'https://www.lamudi.co.id/properti/' . $alt_id;
 
     // ─── Title ───────────────────────────────────────────
-    if (preg_match('/snippet__content__title"[^>]*>\s*\n?([^<]+)/', $html, $tm)) {
-        $data['title'] = trim($tm[1]);
+    // Prefer the real listing name over the generic breadcrumb heading
+    // ("Tanah Dijual di Lombok Tengah"). Try JSON-LD name, the on-page h1, then
+    // the snippet — first non-generic wins.
+    $snip = '';
+    if (preg_match('/snippet__content__title"[^>]*>\s*\n?([^<]+)/', $html, $tm)) $snip = trim($tm[1]);
+    $ld_title = isset($jsonld['name']) ? trim($jsonld['name']) : '';
+    $h1_title = '';
+    if (preg_match('/<h1[^>]*>\s*([^<]+?)\s*<\/h1>/i', $html, $h1m)) $h1_title = html_entity_decode(trim($h1m[1]), ENT_QUOTES, 'UTF-8');
+    $data['title'] = '';
+    foreach (array($ld_title, $h1_title, $snip) as $cand) {
+        if ($cand !== '' && !lc_is_generic_title($cand)) { $data['title'] = $cand; break; }
     }
-    // JSON-LD may have a better title
-    if (isset($jsonld['name']) && strlen($jsonld['name']) > strlen($data['title'])) {
-        $data['title'] = $jsonld['name'];
-    }
+    if ($data['title'] === '') $data['title'] = $ld_title ?: ($h1_title ?: $snip); // all generic — take what we have
     if (!$data['title']) return null;
 
     // ─── Description ─────────────────────────────────────

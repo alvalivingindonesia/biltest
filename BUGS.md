@@ -108,3 +108,13 @@ outranks a display-only one).
 - **Repro / example:** Listings #700/#721/#724 etc. (correct areas) all suggested → Kuta; #659 "Mertak" (correctly Kuta) suggested → Praya.
 - **Suggested fix:** Resolve candidates in priority order (structured/title first), word-boundary match, and only let the **title** override an already-set area; fill default/blank areas from the best signal (description → review, not auto). Remap Pujut villages to `kuta`.
 - **Resolution:** 2026-06-13 — resolver rewritten (order-preserving, `\b` match) + `lc_resolve_area_with_source`; recanonicalize only flags a set-area conflict on explicit title evidence and leaves correct areas alone; alias fix in `migrations/2026_06_13_fix_area_aliases.sql` (+ corrected seed) — commit pending this session.
+
+### BUG-008 — Lamudi listings stored the generic breadcrumb title, not the real name
+- **Status:** fixed
+- **Severity:** medium (every Lamudi listing showed "Tanah Dijual di Lombok Tengah"; descriptions/location/features lost)
+- **Area:** `worker/lib/extractors.js`; `admin/scrape_listings.php` (`parse_lamudi`); `api/listing_ingest.php`
+- **Reported:** 2026-06-13
+- **Description:** The Lamudi title came from the breadcrumb/snippet ("Tanah Dijual di Lombok Tengah") instead of the real heading ("GILI NUSA ESTATE - Lokasi Kapling berada di bukit tertinggi"), and the full description wasn't captured — losing location ("Teluk Are Guling"), pricing guide and feature text we want for the site + area/tag detection.
+- **Repro / example:** https://www.lamudi.co.id/properti/41032-73-… shows the real title + a rich description; the DB had the generic title and no description.
+- **Suggested fix:** Prefer JSON-LD name / `<h1>` over the breadcrumb, rejecting generic titles (`lc_is_generic_title`); capture the full description (worker `readDescription`, paste importer JSON-LD/h1); guard the server so re-check never overwrites a real title with a generic one. Existing rows self-heal as the Worker re-checks them.
+- **Resolution:** 2026-06-13 — `pickTitle`/`readDescription` in the worker (all 3 sites send the full `description`); paste importer prefers the non-generic title; `lc_is_generic_title` guard in `listing_ingest.php` — commit pending this session. Existing listings get corrected on the next Worker re-check cycle.

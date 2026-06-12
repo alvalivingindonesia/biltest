@@ -62,6 +62,22 @@ function numFrom(s) {
   return d ? parseInt(d, 10) : null;
 }
 
+// A breadcrumb/category title like "Tanah Dijual di Lombok Tengah" — never the
+// real listing name. Prefer the actual heading over this.
+const GENERIC_TITLE = /^\s*(tanah|rumah|vila|villa|apartemen|ruko|gudang|kavling|kapling|properti)\s+(dijual|disewa)\b/i;
+function pickTitle(...cands) {
+  const clean = cands.map((c) => (c == null ? '' : String(c)).trim()).filter(Boolean);
+  return clean.find((c) => c.length > 6 && !GENERIC_TITLE.test(c)) || clean[0] || '';
+}
+// Best full description: JSON-LD, then an on-page description block, then body text.
+async function readDescription(page, productDescription, pageText) {
+  let dom = '';
+  try {
+    dom = (await page.locator('[class*="escription"], [data-test*="escription"], #description').first().textContent({ timeout: 1500 }).catch(() => '')) || '';
+  } catch (_) { dom = ''; }
+  return String(productDescription || dom || pageText || '').replace(/\s+/g, ' ').trim();
+}
+
 // Generic liveness: response status + redirect-away + gone markers.
 function detectGone(finalUrl, status, pageText, detailUrlPattern) {
   if (status && status >= 400) return true;
@@ -85,8 +101,10 @@ const lamudi = {
     const product = findLd(pg.ld, ['Product', 'RealEstateListing', 'Residence', 'Place'])[0] || {};
     const offer = product.offers || {};
     const addr = product.address || {};
-    const title = product.name
-      || (await page.locator('h1').first().textContent().catch(() => '')) || '';
+    // Real heading, never the breadcrumb "Tanah Dijual di Lombok Tengah".
+    const h1 = (await page.locator('h1').first().textContent().catch(() => '')) || '';
+    const title = pickTitle(product.name, h1);
+    const description = await readDescription(page, product.description, pg.text);
     // Price: prefer DOM price (carries the /are unit), fall back to JSON-LD offer.
     const priceText = (await page.locator('[class*="Price"], [class*="price"]').first().textContent().catch(() => '')) || '';
     const unit = /\/?are/i.test(priceText) ? '/are' : (/\/?m²|\/?m2|per m/i.test(priceText) ? '/m²' : 'Total');
@@ -104,8 +122,8 @@ const lamudi = {
       building_size_sqm: null,
       bedrooms: numFrom(product.numberOfBedrooms),
       bathrooms: numFrom(product.numberOfBathroomsTotal || product.numberOfBathrooms),
-      certificate_text: String(product.description || pg.text || ''),
-      description: String(product.description || pg.text || ''), // full text — carries the pricing guide ("Hanya 1,9 M")
+      certificate_text: description,
+      description, // full text — carries the location + pricing guide ("KISARAN HARGA: …")
       kecamatan: addr.addressLocality || '',
       desa: addr.addressRegion || '',
       district: [addr.addressLocality, addr.addressRegion].filter(Boolean).join(', '),
@@ -139,7 +157,9 @@ const rumah123 = {
     const product = findLd(pg.ld, ['Product', 'RealEstateListing', 'Residence', 'Place', 'Offer'])[0] || {};
     const offer = product.offers || product || {};
     const addr = product.address || {};
-    const title = product.name || (await page.locator('h1').first().textContent().catch(() => '')) || '';
+    const h1 = (await page.locator('h1').first().textContent().catch(() => '')) || '';
+    const title = pickTitle(product.name, h1);
+    const description = await readDescription(page, product.description, pg.text);
     return {
       source_site: 'rumah123',
       source_listing_id: rumah123.idFromUrl(url),
@@ -152,8 +172,8 @@ const rumah123 = {
       building_size_sqm: numFrom(product.floorSize?.value),
       bedrooms: numFrom(product.numberOfBedrooms),
       bathrooms: numFrom(product.numberOfBathroomsTotal || product.numberOfBathrooms),
-      certificate_text: String(product.description || pg.text || ''),
-      description: String(product.description || pg.text || ''),
+      certificate_text: description,
+      description,
       kecamatan: addr.addressLocality || '',
       desa: addr.addressRegion || '',
       district: [addr.streetAddress, addr.addressLocality].filter(Boolean).join(', '),
@@ -187,7 +207,9 @@ const dotproperty = {
     const product = findLd(pg.ld, ['Product', 'RealEstateListing', 'Residence', 'Place'])[0] || {};
     const offer = product.offers || {};
     const addr = product.address || {};
-    const title = product.name || (await page.locator('h1').first().textContent().catch(() => '')) || '';
+    const h1 = (await page.locator('h1').first().textContent().catch(() => '')) || '';
+    const title = pickTitle(product.name, h1);
+    const description = await readDescription(page, product.description, pg.text);
     return {
       source_site: 'dotproperty',
       source_listing_id: dotproperty.idFromUrl(url),
@@ -200,8 +222,8 @@ const dotproperty = {
       building_size_sqm: numFrom(product.floorSize?.value),
       bedrooms: numFrom(product.numberOfBedrooms),
       bathrooms: numFrom(product.numberOfBathroomsTotal || product.numberOfBathrooms),
-      certificate_text: String(product.description || pg.text || ''),
-      description: String(product.description || pg.text || ''),
+      certificate_text: description,
+      description,
       kecamatan: addr.addressLocality || '',
       desa: addr.addressRegion || '',
       district: [addr.addressLocality, addr.addressRegion].filter(Boolean).join(', '),
