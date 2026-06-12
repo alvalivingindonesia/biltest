@@ -55,6 +55,52 @@ function get_db() {
 
 $db = get_db();
 
+// ─── bulk apply (checkbox selection) — POST, then redirect (PRG) ─────────
+// Each table is one form; checked rows post ids[] plus their area[id]/price[id]
+// (and loc[id] for area conflicts so we can learn the alias). Only checked rows
+// are written.
+if (($_POST['do'] ?? '') === 'bulk_apply') {
+    $ids    = isset($_POST['ids'])   && is_array($_POST['ids'])   ? $_POST['ids']   : array();
+    $areaM  = isset($_POST['area'])  && is_array($_POST['area'])  ? $_POST['area']  : array();
+    $priceM = isset($_POST['price']) && is_array($_POST['price']) ? $_POST['price'] : array();
+    $locM   = isset($_POST['loc'])   && is_array($_POST['loc'])   ? $_POST['loc']   : array();
+
+    $upd_psqm  = $db->prepare(
+        "UPDATE listings SET price_idr_per_sqm = CASE WHEN listing_type_key = 'land' AND land_size_sqm > 0 AND land_size_sqm < 50000000
+                                                      THEN ROUND(price_idr / land_size_sqm) ELSE price_idr_per_sqm END WHERE id = ?");
+    $resolve   = $db->prepare(
+        "UPDATE listing_review_queue SET status = 'resolved', resolved_at = NOW()
+          WHERE listing_id = ? AND status = 'open' AND kind IN ('price_uncertain','price_verify','area_flip','unmapped_area')");
+    $alias_ins = $db->prepare("INSERT IGNORE INTO area_aliases (alias_text, area_key) VALUES (?, ?)");
+
+    $n = 0;
+    foreach ($ids as $rawid) {
+        $lid = (int)$rawid; if ($lid <= 0) continue;
+        $sets = array(); $vals = array();
+        if (isset($priceM[$lid])) {
+            $p = (int)preg_replace('/\D+/', '', (string)$priceM[$lid]);
+            if ($p > 0) { $sets[] = 'price_idr = ?'; $vals[] = $p; }
+        }
+        $area = isset($areaM[$lid]) ? trim((string)$areaM[$lid]) : '';
+        if ($area !== '') { $sets[] = 'area_key = ?'; $vals[] = $area; }
+        $sets[] = 'price_review_flag = 0';
+        $sets[] = 'updated_at = NOW()';
+        $vals[] = $lid;
+        $db->prepare("UPDATE listings SET " . implode(', ', $sets) . " WHERE id = ?")->execute($vals);
+        $upd_psqm->execute(array($lid));
+        // Teach the area alias from the conflict's location text so future
+        // imports map automatically (same as the ingest console does).
+        if ($area !== '' && !empty($locM[$lid])) {
+            $norm = lc_normalize_area_text((string)$locM[$lid]);
+            if ($norm !== '') $alias_ins->execute(array($norm, $area));
+        }
+        $resolve->execute(array($lid));
+        $n++;
+    }
+    header('Location: recanonicalize_listings.php?done=' . $n);
+    exit;
+}
+
 // ─── per-row actions (Save / Accept) — POST, then redirect (PRG) ─────────
 if (($_POST['do'] ?? '') === 'row_action') {
     $lid = (int)($_POST['listing_id'] ?? 0);
@@ -228,32 +274,27 @@ $tag_chips = function($tags) use ($esc, $tag_labels) {
     }
     return $out;
 };
-// Inline Save (area + price) / Accept controls for one flagged row.
-// $with_price=false for area-only rows (so Save can't zero a good price).
-$action_form = function($f, $with_price = true) use ($areas, $esc, $fmt) {
-    // Prefer a total recovered from the description, then the inferred total.
+// Area <select name="area[ID]"> — pre-selects the SUGGESTED area when given
+// (so area-conflict rows just need a tick), else the current area.
+$area_select = function($id, $current, $suggest = '') use ($areas, $esc) {
+    $want = $suggest !== '' ? $suggest : $current;
+    ob_start(); ?>
+    <select name="area[<?= (int)$id ?>]" title="area">
+      <option value="">— keep (<?= $esc($current ?: 'none') ?>) —</option>
+      <?php foreach ($areas as $a): $sel = ($a['key'] === $want) ? ' selected' : ''; ?>
+        <option value="<?= $esc($a['key']) ?>"<?= $sel ?>><?= $esc($a['label']) ?></option>
+      <?php endforeach; ?>
+    </select>
+    <?php return ob_get_clean();
+};
+// Price <input name="price[ID]"> prefilled with the description total if found,
+// else the inferred total — with a small "from description" hint above it.
+$price_input = function($f) use ($fmt) {
     $has_desc = !empty($f['desc_total']);
     $prefill = $has_desc ? (int)$f['desc_total'] : ($f['total'] !== null ? (int)$f['total'] : (int)$f['stored']);
     ob_start(); ?>
-    <?php if ($with_price && $has_desc): ?>
-      <div style="font-size:11px;color:#0c7c84;margin-bottom:3px">📝 from description: <strong><?= $fmt($f['desc_total']) ?></strong>
-        <span style="color:#888">(“<?= $esc(mb_substr($f['desc_raw'],0,24)) ?>”)</span></div>
-    <?php endif; ?>
-    <form method="post" style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin:0">
-      <input type="hidden" name="do" value="row_action">
-      <input type="hidden" name="listing_id" value="<?= (int)$f['id'] ?>">
-      <select name="area_key" title="area">
-        <option value="">— keep area (<?= $esc($f['area_key'] ?: 'none') ?>) —</option>
-        <?php foreach ($areas as $a): $sel = $a['key'] === $f['area_key'] ? ' selected' : ''; ?>
-          <option value="<?= $esc($a['key']) ?>"<?= $sel ?>><?= $esc($a['label']) ?></option>
-        <?php endforeach; ?>
-      </select>
-      <?php if ($with_price): ?>
-        <input name="price_idr" value="<?= $prefill ?>" size="13" title="total price IDR" style="font-variant-numeric:tabular-nums">
-      <?php endif; ?>
-      <button name="act" value="save" style="background:#1677ff;color:#fff;border:0;border-radius:5px">Save</button>
-      <button name="act" value="accept" style="background:#e6ffed;border:1px solid #95de64;border-radius:5px">Looks right ✓</button>
-    </form>
+    <?php if ($has_desc): ?><div style="font-size:11px;color:#0c7c84;margin-bottom:2px">📝 <?= $fmt($f['desc_total']) ?></div><?php endif; ?>
+    <input name="price[<?= (int)$f['id'] ?>]" value="<?= $prefill ?>" size="13" style="font-variant-numeric:tabular-nums">
     <?php return ob_get_clean();
 };
 ?>
@@ -271,16 +312,26 @@ $action_form = function($f, $with_price = true) use ($areas, $esc, $fmt) {
  a{color:#1677ff} select,input,button{padding:5px;font:inherit;cursor:pointer}
  .type{font-size:11px;color:#666;text-transform:uppercase}
  tr:target{outline:3px solid #ffd591}
+ .bulkbar{position:sticky;bottom:0;background:#fff;border-top:2px solid #1677ff;padding:10px 0;margin-top:6px}
+ .bulkbtn{padding:9px 18px;background:#1677ff;color:#fff;border:0;border-radius:6px;font-weight:600;cursor:pointer}
+ .chkcol{width:34px;text-align:center}
 </style>
+<script>
+ function toggleAll(master, cls){ document.querySelectorAll('.'+cls).forEach(c => c.checked = master.checked); }
+</script>
 <h1>Re-canonicalise listings <a href="?logout=1" style="font-size:12px;float:right">log out</a></h1>
 
+<?php if (isset($_GET['done'])): ?>
+  <div class="banner applied"><strong><?= (int)$_GET['done'] ?> listing(s) updated.</strong> They've been removed from the lists below.</div>
+<?php endif; ?>
 <?php if ($apply): ?>
   <div class="banner applied"><strong>APPLIED.</strong> Bulk corrections + tags written.
-  Flagged rows below still have per-row controls so you can finish verifying them.
+  Tick the flagged rows below and use <em>Apply checked</em> to finish verifying.
   Remaining queue is in the <a href="ingest_console.php">ingest console</a>.</div>
 <?php else: ?>
-  <div class="banner dry"><strong>DRY RUN.</strong> Nothing bulk-changed yet. The per-row
-  <em>Save</em> / <em>Looks right</em> buttons below DO act immediately. &nbsp;
+  <div class="banner dry"><strong>DRY RUN.</strong> The Confident/Area-corrected/Tags sections only write when you hit
+  <em>Apply bulk changes</em>. The <strong>Verify</strong>, <strong>Review</strong> and <strong>Area conflict</strong>
+  sections are interactive: tick rows and press <em>Apply checked</em> (those write immediately). &nbsp;
   <a class="btn" href="?apply=1" onclick="return confirm('Apply all bulk price/area/tag changes below?')">Apply bulk changes</a></div>
 <?php endif; ?>
 
@@ -299,28 +350,38 @@ $action_form = function($f, $with_price = true) use ($areas, $esc, $fmt) {
   Built property (villa/house/apartment) is always a total — its land per-m² is not gated.
 </p>
 
-<h2>① Verify — please check the source & confirm <span style="font-weight:400;font-size:12px;color:#666">(high per-m² or also-plausible-as-per-are; price kept as total)</span></h2>
+<h2>① Verify — tick the ones that look right, then Apply checked <span style="font-weight:400;font-size:12px;color:#666">(high per-m² or also-plausible-as-per-are; price kept as total)</span></h2>
+<form method="post">
+<input type="hidden" name="do" value="bulk_apply">
 <table><tr>
-  <th>ID</th><th>Title / type</th><th>Source</th><th>Land</th><th>Total</th><th>per m²</th><th>per are</th><th>Note</th><th>Fix / confirm</th></tr>
+  <th class="chkcol"><input type="checkbox" onclick="toggleAll(this,'cv')" title="select all / none"></th>
+  <th>ID</th><th>Title / type</th><th>Source</th><th>Land</th><th>per m²</th><th>Note</th><th>Area</th><th>Total price (IDR)</th></tr>
 <?php foreach ($price_verify as $f): ?>
  <tr id="l<?= $f['id'] ?>">
+  <td class="chkcol"><input type="checkbox" class="cv" name="ids[]" value="<?= (int)$f['id'] ?>"></td>
   <td><?= $f['id'] ?></td>
   <td><?= $esc(mb_substr($f['title'],0,40)) ?><br><span class="type"><?= $esc($f['type']) ?></span><?= $tag_chips($f['tags']) ?></td>
   <td><?= $src_link($f['source_url']) ?></td>
   <td><?= $sqm_fmt($f['sqm']) ?><br><span style="color:#888"><?= $are_fmt($f['are']) ?></span></td>
-  <td class="new"><?= $fmt($f['total']) ?></td>
-  <td><?= $fmt($f['per_sqm']) ?></td><td><?= $fmt($f['per_are']) ?></td>
+  <td><?= $fmt($f['per_sqm']) ?><br><span style="color:#888;font-size:11px"><?= $fmt($f['per_are']) ?>/are</span></td>
   <td style="font-size:11px"><?= $esc($f['note']) ?></td>
-  <td><?= $action_form($f) ?></td>
+  <td><?= $area_select($f['id'], $f['area_key']) ?></td>
+  <td><?= $price_input($f) ?></td>
  </tr>
 <?php endforeach; if (!$price_verify) echo '<tr><td colspan="9">None.</td></tr>'; ?>
 </table>
+<?php if ($price_verify): ?><div class="bulkbar"><button type="submit" class="bulkbtn">✓ Apply checked — set price + area, clear flag</button></div><?php endif; ?>
+</form>
 
-<h2>② Review — no plausible reading <span style="font-weight:400;font-size:12px;color:#666">(too expensive even as a total, or the land size looks wrong; price NOT changed)</span></h2>
+<h2>② Review — no plausible reading <span style="font-weight:400;font-size:12px;color:#666">(too expensive even as a total, or the land size looks wrong; price NOT changed — fix or confirm here)</span></h2>
+<form method="post">
+<input type="hidden" name="do" value="bulk_apply">
 <table><tr>
-  <th>ID</th><th>Title / type</th><th>Source</th><th>Land</th><th>Stored price</th><th>Implied per m²</th><th>Note</th><th>Fix / confirm</th></tr>
+  <th class="chkcol"><input type="checkbox" onclick="toggleAll(this,'cr')" title="select all / none"></th>
+  <th>ID</th><th>Title / type</th><th>Source</th><th>Land</th><th>Stored price</th><th>Implied per m²</th><th>Note</th><th>Area</th><th>Total price (IDR)</th></tr>
 <?php foreach (array_merge($price_review, $price_nosize) as $f): ?>
  <tr id="l<?= $f['id'] ?>">
+  <td class="chkcol"><input type="checkbox" class="cr" name="ids[]" value="<?= (int)$f['id'] ?>"></td>
   <td><?= $f['id'] ?></td>
   <td><?= $esc(mb_substr($f['title'],0,40)) ?><br><span class="type"><?= $esc($f['type']) ?></span><?= $tag_chips($f['tags']) ?></td>
   <td><?= $src_link($f['source_url']) ?></td>
@@ -328,10 +389,13 @@ $action_form = function($f, $with_price = true) use ($areas, $esc, $fmt) {
   <td class="old"><?= $fmt($f['stored']) ?></td>
   <td><?= $fmt($f['per_sqm']) ?></td>
   <td style="font-size:11px"><?= $esc($f['note']) ?></td>
-  <td><?= $action_form($f) ?></td>
+  <td><?= $area_select($f['id'], $f['area_key']) ?></td>
+  <td><?= $price_input($f) ?></td>
  </tr>
-<?php endforeach; if (!$price_review && !$price_nosize) echo '<tr><td colspan="8">None.</td></tr>'; ?>
+<?php endforeach; if (!$price_review && !$price_nosize) echo '<tr><td colspan="10">None.</td></tr>'; ?>
 </table>
+<?php if ($price_review || $price_nosize): ?><div class="bulkbar"><button type="submit" class="bulkbtn">✓ Apply checked — set price + area, clear flag</button></div><?php endif; ?>
+</form>
 
 <h2>③ Confident — bulk-applied on Apply <span style="font-weight:400;font-size:12px;color:#666">(already-sane totals; only label/per-m² normalised)</span></h2>
 <table><tr>
@@ -358,14 +422,23 @@ $action_form = function($f, $with_price = true) use ($areas, $esc, $fmt) {
 <?php endforeach; if (!$area_fixes) echo '<tr><td colspan="6">None.</td></tr>'; ?>
 </table>
 
-<h2>⑤ Area conflicts → review (NOT auto-changed; pick the right one)</h2>
-<table><tr><th>ID</th><th>Title</th><th>Source</th><th>Location text</th><th>Current</th><th>Suggested</th><th>Set area</th></tr>
-<?php foreach ($area_flips as $f): $af = $f + array('total'=>null,'stored'=>0,'area_key'=>$f['old'],'desc_total'=>null,'desc_raw'=>''); ?>
- <tr id="l<?= $f['id'] ?>"><td><?= $f['id'] ?></td><td><?= $esc(mb_substr($f['title'],0,40)) ?></td><td><?= $src_link($f['source_url']) ?></td>
- <td><?= $esc($f['loc']) ?></td><td><?= $esc($f['old']) ?></td><td class="new"><?= $esc($f['new']) ?></td>
- <td><?= $action_form($af, false) ?></td></tr>
-<?php endforeach; if (!$area_flips) echo '<tr><td colspan="7">None.</td></tr>'; ?>
+<h2>⑤ Area conflicts → tick to confirm the suggested area, then Apply checked <span style="font-weight:400;font-size:12px;color:#666">(dropdown is pre-set to the suggestion; change it if wrong)</span></h2>
+<form method="post">
+<input type="hidden" name="do" value="bulk_apply">
+<table><tr>
+  <th class="chkcol"><input type="checkbox" onclick="toggleAll(this,'ca')" title="select all / none"></th>
+  <th>ID</th><th>Title</th><th>Source</th><th>Location text</th><th>Current</th><th>Suggested</th><th>Set area</th></tr>
+<?php foreach ($area_flips as $f): ?>
+ <tr id="l<?= $f['id'] ?>">
+  <td class="chkcol"><input type="checkbox" class="ca" name="ids[]" value="<?= (int)$f['id'] ?>"></td>
+  <td><?= $f['id'] ?></td><td><?= $esc(mb_substr($f['title'],0,40)) ?></td><td><?= $src_link($f['source_url']) ?></td>
+  <td><?= $esc($f['loc']) ?></td><td><?= $esc($f['old']) ?></td><td class="new"><?= $esc($f['new']) ?></td>
+  <td><?= $area_select($f['id'], $f['old'], $f['new']) ?><input type="hidden" name="loc[<?= (int)$f['id'] ?>]" value="<?= $esc($f['loc']) ?>"></td>
+ </tr>
+<?php endforeach; if (!$area_flips) echo '<tr><td colspan="8">None.</td></tr>'; ?>
 </table>
+<?php if ($area_flips): ?><div class="bulkbar"><button type="submit" class="bulkbtn">✓ Apply checked areas (and learn the alias)</button></div><?php endif; ?>
+</form>
 
 <h2>⑥ Feature tags mined from descriptions <span style="font-weight:400;font-size:12px;color:#666">(written on Apply; never clobbers manual tags)</span></h2>
 <table><tr><th>ID</th><th>Title</th><th>Tags</th></tr>
