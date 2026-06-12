@@ -826,7 +826,7 @@
 .hero-bg {
   position: absolute;
   inset: 0;
-  background-image: url('./images/hero-main.jpg');
+  background-image: url('./images/hero-main.webp');
   background-size: cover;
   background-position: center 40%;
   background-repeat: no-repeat;
@@ -854,7 +854,7 @@
   position: absolute;
   inset: 0;
   z-index: 1;
-  background-image: url('./images/hero-wire.jpg');
+  background-image: url('./images/hero-wire.webp');
   background-size: cover;
   background-position: center 40%;
   background-repeat: no-repeat;
@@ -2583,7 +2583,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  background-image: url('./images/hero-construction.jpg');
+  background-image: url('./images/hero-construction.webp');
   background-size: cover;
   background-position: center;
   opacity: 0.25;
@@ -2770,7 +2770,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  background-image: url('./images/hero-lifestyle.jpg');
+  background-image: url('./images/hero-lifestyle.webp');
   background-size: cover;
   background-position: center;
   opacity: 0.22;
@@ -3100,7 +3100,7 @@
   inset: 0;
   background-size: cover;
   background-position: center 30%;
-  background-image: url('hero-lifestyle.jpg');
+  background-image: url('./images/hero-lifestyle.webp');
   transform: scale(1.04);
   transition: transform 8s cubic-bezier(0.25, 1, 0.5, 1);
 }

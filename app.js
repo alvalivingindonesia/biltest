@@ -728,9 +728,9 @@ async function renderHome(el) {
   el.innerHTML = `
     <!-- HERO — Full bleed, X-Ray materialization reveal -->
     <section class="hero" id="hero-reveal" aria-label="Build in Lombok hero">
-      <!-- Base layer: the finished, photorealistic villa (hero-main.jpg). -->
+      <!-- Base layer: the finished, photorealistic villa (hero-main.webp). -->
       <div class="hero-bg" id="hero-bg"></div>
-      <!-- Reveal layer: pixel-registered wireframe of the same frame (hero-wire.jpg).
+      <!-- Reveal layer: pixel-registered wireframe of the same frame (hero-wire.webp).
            Clipped away top-to-bottom on scroll to "materialize" the villa beneath.
            Hidden by default so no-JS / no-GSAP gracefully shows the finished photo. -->
       <div class="hero-wire" id="hero-wire" aria-hidden="true"></div>
@@ -943,8 +943,8 @@ async function renderHome(el) {
 // =====================================================
 // HERO X-RAY MATERIALIZATION REVEAL
 // =====================================================
-// Layers hero-wire.jpg (a pixel-registered wireframe of the same frame) over
-// the finished hero-main.jpg, then scrubs a clip-path wipe top->bottom while the
+// Layers hero-wire.webp (a pixel-registered wireframe of the same frame) over
+// the finished hero-main.webp, then scrubs a clip-path wipe top->bottom while the
 // hero is pinned for ~1 viewport. Above the moving edge the finished villa has
 // "materialized"; below it the wireframe remains. A thin gold scan line rides
 // the edge. Pixel-flawless because both layers are the same 2752px camera frame.
