@@ -8,6 +8,7 @@
   "scripts": {
     "start": "node listing-worker.js",
     "recheck": "node listing-worker.js --recheck-only",
+    "recheck-all": "node listing-worker.js --recheck-all",
     "discover": "node listing-worker.js --discover-only",
     "ping": "node listing-worker.js --ping",
     "postinstall": "playwright install chromium"

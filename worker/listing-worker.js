@@ -141,11 +141,48 @@ async function discover(ctx, sources) {
   return { imported };
 }
 
+// ── One-off: re-check EVERY active listing (fixes the whole backlog) ──
+// Pulls max-size batches repeatedly until no new listing comes back. Used to
+// back-fill real titles/descriptions/prices over existing rows in one
+// supervised run, rather than waiting for the nightly window.
+async function recheckAll(ctx) {
+  const processed = new Set();
+  const totals = { present: 0, gone: 0, failed: 0 };
+  let round = 0;
+  while (true) {
+    round++;
+    const work = await api.pullWork(500); // server caps at 500
+    const batch = work.rechecks.filter((r) => !processed.has(r.id));
+    log(`round ${round}: server returned ${work.rechecks.length}, ${batch.length} not-yet-done`);
+    if (batch.length === 0) break; // everything reachable has been processed
+    batch.forEach((r) => processed.add(r.id));
+    const rc = await recheck(ctx, batch);
+    totals.present += rc.present; totals.gone += rc.gone; totals.failed += rc.failed;
+    log(`round ${round} done`, rc, '· cumulative', totals, '· listings seen', processed.size);
+  }
+  return { listings: processed.size, ...totals };
+}
+
 // ── Main ────────────────────────────────────────────────────────────
 (async () => {
   if (ARGS.has('--ping')) {
     const r = await api.ping(); log('ping', JSON.stringify(r)); return;
   }
+
+  if (ARGS.has('--recheck-all')) {
+    log('RECHECK-ALL one-off starting (all active listings)', { DELAY_MIN, DELAY_MAX, HEADFUL });
+    const browser = await chromium.launch({ headless: !HEADFUL });
+    const ctx = await newContext(browser);
+    try {
+      const summary = await recheckAll(ctx);
+      log('RECHECK-ALL COMPLETE', summary);
+    } finally {
+      await ctx.close();
+      await browser.close();
+    }
+    return;
+  }
+
   log('Listing Worker starting', { RECHECK_LIMIT, DISCOVERY_LIMIT });
   const work = await api.pullWork(RECHECK_LIMIT);
   log('pulled', work.rechecks.length, 'rechecks,', work.discovery_sources.length, 'discovery sources');

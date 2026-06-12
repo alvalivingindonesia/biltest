@@ -47,19 +47,33 @@ function json_out($data, $status = 200) {
 }
 function json_error($status, $message) { json_out(array('error' => $message), $status); }
 
+function raw_post_body() {
+    static $raw = null;
+    if ($raw === null) $raw = file_get_contents('php://input');
+    return $raw;
+}
 function get_post_data() {
     $ct = isset($_SERVER['CONTENT_TYPE']) ? $_SERVER['CONTENT_TYPE'] : '';
     if (stripos($ct, 'application/json') !== false) {
-        $d = json_decode(file_get_contents('php://input'), true);
+        $d = json_decode(raw_post_body(), true);
         return is_array($d) ? $d : array();
     }
     return $_POST;
 }
 function read_worker_key() {
+    // 1) custom header (normal case)
     if (function_exists('getallheaders')) {
         foreach (getallheaders() as $k => $v) if (strcasecmp($k, 'X-Worker-Key') === 0) return trim($v);
     }
-    return isset($_SERVER['HTTP_X_WORKER_KEY']) ? trim($_SERVER['HTTP_X_WORKER_KEY']) : '';
+    if (isset($_SERVER['HTTP_X_WORKER_KEY']) && $_SERVER['HTTP_X_WORKER_KEY'] !== '') return trim($_SERVER['HTTP_X_WORKER_KEY']);
+    // 2) body fallback — some shared hosts strip custom request headers.
+    $ct = isset($_SERVER['CONTENT_TYPE']) ? $_SERVER['CONTENT_TYPE'] : '';
+    if (stripos($ct, 'application/json') !== false) {
+        $d = json_decode(raw_post_body(), true);
+        if (is_array($d) && !empty($d['worker_key'])) return trim((string)$d['worker_key']);
+    }
+    if (!empty($_POST['worker_key'])) return trim((string)$_POST['worker_key']);
+    return '';
 }
 function require_worker_auth() {
     if (!defined('WORKER_API_KEY') || WORKER_API_KEY === '') json_error(500, 'Worker API key not configured.');

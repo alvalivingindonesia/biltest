@@ -12,7 +12,8 @@ async function call(action, body) {
       'Content-Type': 'application/json',
       'X-Worker-Key': WORKER_KEY, // Authorization: Bearer is stripped by shared hosting (ADR 0002)
     },
-    body: JSON.stringify(body || {}),
+    // Also carry the key in the body: some shared hosts strip custom headers.
+    body: JSON.stringify({ ...(body || {}), worker_key: WORKER_KEY }),
   });
   const text = await res.text();
   let json;
