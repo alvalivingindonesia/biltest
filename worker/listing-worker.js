@@ -311,6 +311,7 @@ async function reextractLocations() {
       for (const src of sources) {
         const site = src.source_site;
         if (!SITES[site]) continue;
+        const seen = new Set(); // detect end-of-results / page looping back
         for (let p = 1; p <= IMG_PAGES; p++) {
           const url = src.search_url + (src.search_url.includes('?') ? '&' : '?') + 'page=' + p;
           const page = await ctx.newPage();
@@ -340,11 +341,16 @@ async function reextractLocations() {
           } catch (e) { diag = 'err: ' + e.message; }
           finally { await page.close(); }
           if (!cards.length) { log('images', site, 'p' + p, 'no cards —', diag); break; }
-          const payload = cards.map((c) => ({ source_listing_id: SITES[site].idFromUrl(c.url), url: c.url, image: c.img }));
+          // Only the cards not seen on earlier pages. No new cards ⇒ end of
+          // results (or Lamudi looped back to page 1) ⇒ stop this source.
+          const fresh = cards.filter((c) => !seen.has(c.url));
+          if (!fresh.length) { log('images', site, 'p' + p, '— no new cards (end of results)'); break; }
+          fresh.forEach((c) => seen.add(c.url));
+          const payload = fresh.map((c) => ({ source_listing_id: SITES[site].idFromUrl(c.url), url: c.url, image: c.img }));
           let res = { matched: 0, updated: 0 };
           try { res = await api.postCardImages(site, payload); } catch (e) { log('post images failed', e.message); }
           matched += res.matched || 0; updated += res.updated || 0;
-          log('images', site, src.label || '', 'p' + p, '—', cards.length, 'cards →', (res.updated || 0), 'filled (', (res.matched || 0), 'matched, total updated', updated + ')');
+          log('images', site, src.label || '', 'p' + p, '—', fresh.length, 'new of', cards.length, '→', (res.updated || 0), 'filled (', (res.matched || 0), 'matched, total', updated + ')');
           await sleep(imgDelay());
         }
       }
