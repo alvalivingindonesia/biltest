@@ -14,6 +14,7 @@
     "reputation": "node listing-worker.js --reputation",
     "reextract": "node listing-worker.js --reextract",
     "recrawl-thin": "node listing-worker.js --recrawl-thin --headful",
+    "backfill-images": "node listing-worker.js --backfill-images",
     "ping": "node listing-worker.js --ping",
     "postinstall": "playwright install chromium"
   },

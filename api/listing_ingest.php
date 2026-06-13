@@ -100,6 +100,7 @@ switch ($action) {
     case 'serve_text':    handle_serve_text(); break;       // Mode A source: stored {id,title,description}
     case 'post_location': handle_post_location(); break;    // Mode A sink: location/place/tags only
     case 'pull_recrawl':  handle_pull_recrawl(); break;     // targeted Mode B: only thin/no-location listings
+    case 'post_card_images': handle_post_card_images(); break; // backfill thumbnails from search-page cards
     default:              json_error(400, 'Unknown action.');
 }
 
@@ -168,6 +169,42 @@ function handle_pull_recrawl() {
     $rows = $st->fetchAll();
     $next = $rows ? (int)$rows[count($rows) - 1]['id'] : 0;
     json_out(array('ok' => true, 'rows' => $rows, 'next_after_id' => $next, 'count' => count($rows)));
+}
+
+// =====================================================================
+// POST CARD IMAGES — backfill thumbnails from search-results cards (no detail
+// fetch). Only fills listings that currently have NO image; matches by source
+// tuple, then source_url. Batch: {source_site, cards:[{source_listing_id,url,image}]}.
+// =====================================================================
+function handle_post_card_images() {
+    $db = get_db();
+    $d = get_post_data();
+    $site = trim((string)($d['source_site'] ?? ''));
+    $cards = isset($d['cards']) && is_array($d['cards']) ? $d['cards'] : array();
+    if ($site === '' || !$cards) { json_out(array('ok' => true, 'matched' => 0, 'updated' => 0)); }
+
+    $byId  = $db->prepare("SELECT id, photo_urls FROM listings WHERE source_site = ? AND source_listing_id = ? LIMIT 1");
+    $byUrl = $db->prepare("SELECT id, photo_urls FROM listings WHERE source_url = ? LIMIT 1");
+    $upd   = $db->prepare("UPDATE listings SET photo_urls = ?, updated_at = NOW() WHERE id = ?");
+    $matched = 0; $updated = 0;
+    foreach ($cards as $c) {
+        $img = trim((string)($c['image'] ?? ''));
+        if ($img === '') continue;
+        if (strpos($img, '//') === 0) $img = 'https:' . $img;          // protocol-relative
+        $sid = trim((string)($c['source_listing_id'] ?? ''));
+        $url = trim((string)($c['url'] ?? ''));
+        $row = false;
+        if ($sid !== '') { $byId->execute(array($site, $sid)); $row = $byId->fetch(); }
+        if (!$row && $url !== '') { $byUrl->execute(array($url)); $row = $byUrl->fetch(); }
+        if (!$row) continue;
+        $matched++;
+        $cur = trim((string)$row['photo_urls']);
+        if ($cur === '' || $cur === '[]' || $cur === 'null' || $cur === '""') {
+            $upd->execute(array(json_encode(array($img), JSON_UNESCAPED_SLASHES), (int)$row['id']));
+            $updated++;
+        }
+    }
+    json_out(array('ok' => true, 'matched' => $matched, 'updated' => $updated));
 }
 
 // =====================================================================

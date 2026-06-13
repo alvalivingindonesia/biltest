@@ -17,7 +17,7 @@ import { createHash } from 'crypto';
 import { writeFileSync, mkdirSync } from 'fs';
 import { chromium } from 'playwright';
 import { api } from './lib/api.js';
-import { SITES, readPage, detectGone, extractSearchLinks, isGenericTitle } from './lib/extractors.js';
+import { SITES, readPage, detectGone, extractSearchLinks, extractSearchCards, isGenericTitle } from './lib/extractors.js';
 import { ollamaEnabled, ollamaUp, extractLocationTags, extractListing } from './lib/ollama.js';
 
 const ARGS = new Set(process.argv.slice(2));
@@ -292,6 +292,46 @@ async function reextractLocations() {
   if (ARGS.has('--reextract')) {
     log('REEXTRACT (Mode A) starting — location/tags from stored text, no crawl');
     await reextractLocations();
+    return;
+  }
+
+  if (ARGS.has('--backfill-images')) {
+    // Fill thumbnails for imageless listings from the SEARCH-RESULTS cards — no
+    // detail-page fetch. Pages each discovery source; the server fills only
+    // listings that currently have no image.
+    const IMG_PAGES = parseInt(process.env.IMAGE_PAGES || '20', 10);
+    const imgDelay = () => 4000 + Math.floor(Math.random() * 5000); // search pages: gentler than detail crawl
+    log('BACKFILL-IMAGES starting', { IMG_PAGES, HEADFUL });
+    const work = await api.pullWork(1); // just for the discovery_sources list
+    const sources = work.discovery_sources || [];
+    const browser = await chromium.launch(LAUNCH_OPTS);
+    const ctx = await newContext(browser);
+    try {
+      let matched = 0, updated = 0;
+      for (const src of sources) {
+        const site = src.source_site;
+        if (!SITES[site]) continue;
+        for (let p = 1; p <= IMG_PAGES; p++) {
+          const url = src.search_url + (src.search_url.includes('?') ? '&' : '?') + 'page=' + p;
+          const page = await ctx.newPage();
+          let cards = [];
+          try { const nav = await goto(page, url); if (!nav.failed) cards = await extractSearchCards(page, site); }
+          catch (e) { log('cards error', url, e.message); }
+          finally { await page.close(); }
+          if (!cards.length) { log('images', site, 'p' + p, 'no cards — end of source'); break; }
+          const payload = cards.map((c) => ({ source_listing_id: SITES[site].idFromUrl(c.url), url: c.url, image: c.img }));
+          let res = { matched: 0, updated: 0 };
+          try { res = await api.postCardImages(site, payload); } catch (e) { log('post images failed', e.message); }
+          matched += res.matched || 0; updated += res.updated || 0;
+          log('images', site, src.label || '', 'p' + p, '—', cards.length, 'cards →', (res.updated || 0), 'filled (', (res.matched || 0), 'matched, total updated', updated + ')');
+          await sleep(imgDelay());
+        }
+      }
+      log('BACKFILL-IMAGES COMPLETE', { matched, updated });
+    } finally {
+      await ctx.close();
+      await browser.close();
+    }
     return;
   }
 

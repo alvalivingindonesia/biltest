@@ -319,4 +319,35 @@ async function extractSearchLinks(page, site) {
   return [...found];
 }
 
-export { SITES, readPage, detectGone, extractSearchLinks, isGenericTitle };
+// Extract {detail-url, image} pairs from a SEARCH-RESULTS page — so we can
+// backfill thumbnails without opening each detail page. Handles lazy-loaded imgs.
+async function extractSearchCards(page, site) {
+  const cfg = SITES[site];
+  if (!cfg) return [];
+  return await page.evaluate((patSrc) => {
+    const re = new RegExp(patSrc, 'i');
+    const seen = {}; const out = [];
+    document.querySelectorAll('a[href]').forEach((a) => {
+      let href = a.href; if (!re.test(href)) return;
+      href = href.split('?')[0];
+      if (seen[href]) return;
+      // image inside the anchor, else within the surrounding card container
+      let img = a.querySelector('img');
+      if (!img) {
+        const card = a.closest('article, li, [class*="card"], [class*="Card"], [class*="item"], [class*="listing"]') || a.parentElement;
+        if (card) img = card.querySelector('img');
+      }
+      let src = '';
+      if (img) {
+        src = img.getAttribute('src') || '';
+        if (!src || src.startsWith('data:')) src = img.getAttribute('data-src') || img.getAttribute('data-lazy-src') || img.getAttribute('data-original') || '';
+        if ((!src || src.startsWith('data:')) && img.getAttribute('srcset')) src = img.getAttribute('srcset').split(',')[0].trim().split(' ')[0];
+        if ((!src || src.startsWith('data:')) && img.currentSrc) src = img.currentSrc;
+      }
+      if (src && !src.startsWith('data:')) { seen[href] = 1; out.push({ url: href, img: src }); }
+    });
+    return out;
+  }, cfg.detailUrlPattern.source);
+}
+
+export { SITES, readPage, detectGone, extractSearchLinks, extractSearchCards, isGenericTitle };
