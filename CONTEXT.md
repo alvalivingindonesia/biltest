@@ -32,10 +32,26 @@ South Lombok Region, because that is how buyers think. Table: `area_regions`.
 _Avoid_: kabupaten, regency, district.
 
 **Area**:
-A named locality within a Region — the finest location granularity a listing has
-(e.g. Kuta, Selong Belanak, Are Guling). Listings carry an `area_key`; they have no
-coordinates. Every Area belongs to exactly one Region. Table: `areas`.
-_Avoid_: location, zone, suburb.
+A distinct, named, market-meaningful locality within a Region — the level the
+interactive map pins and the primary location filter. Kept deliberately fine-grained
+as the product's edge: a Lombok-only site treats Kuta, Mawun, Are Guling, Selong
+Belanak, Mawi, Awang and Ekas as **separate** Areas rather than clubbing them under one
+"Kuta", because buyers treat them as separate destinations and a general portal never
+makes that distinction. An Area earns a row only if it is an anchor destination worth a
+map marker; finer spots are Places that roll up to it. Listings carry `area_key`; every
+Area belongs to exactly one Region. Table: `areas`.
+_Avoid_: location, zone, suburb, kabupaten.
+
+**Place**:
+A finer named locality that rolls up to a parent Area — searchable and displayed on its
+own merit, but *not* its own map marker. Torok and Serangan are Places in the Selong
+Belanak Area; Mertak and Bumbang in Kuta; Pengantap, Buwun Mas and Gili Gede in
+Sekotong. A listing carries an optional `place_key` alongside its `area_key`: it
+**displays** as the Place ("Mertak", never "Kuta"), a place filter narrows to it
+exactly, yet the parent Area's map marker and filter still find it. The level that lets
+the site name a spot precisely without cluttering the map. Table: `places` (`place_key`,
+`label`, parent `area_key`).
+_Avoid_: calling a Place an Area; storing a Place only as free-text `location_detail`.
 
 **Display Currency**:
 The currency a visitor chooses to *view* listing and development prices in (IDR, USD,
@@ -86,19 +102,31 @@ nightly rolling window over the oldest-checked listings. Once ingestion is corre
 re-check should rarely change anything except liveness.
 _Avoid_: refresh, sync, update (too broad).
 
+**Extractor**:
+The local-LLM (Ollama) step **inside** the Worker that reads a listing's raw page
+signals and returns structured JSON facts — title, price, sizes, certificate, the
+verbatim description, and the location (ADR 0009). It *finds* facts; Canonicalisation
+still *decides* what is stored. Prose is copied verbatim, numbers normalised, the LLM
+is primary with JSON-LD as a hint and a deterministic fallback when Ollama is down.
+Distinct from the quote engine's separate `agent/` process — the Extractor is an inline
+function call, not a service. _Avoid_: agent (overloaded), AI, parser.
+
 **Canonicalisation**:
 The server-side step at ingest that turns a Worker's raw extracted facts into stored
-columns: per-are/per-m² → total price, location string → `area_key`, any currency →
-canonical `price_idr` (ADR 0006), plus dedupe. The business rules live here, on
-HostPapa next to the DB — not on the Worker.
+columns: per-are/per-m² → total price, location string → `place_key`/`area_key`, any
+currency → canonical `price_idr` (ADR 0006), plus dedupe. The business rules live here,
+on HostPapa next to the DB — not on the Worker or in the Extractor.
 _Avoid_: cleaning, processing.
 
 **Area Alias**:
-A saved mapping from a Source Site's structured administrative location (a kecamatan or
-desa name) to a canonical `area_key`. Created once by an admin when an unmapped
-location surfaces, then reused forever to auto-resolve `area_key` at Canonicalisation.
-The location counterpart of Material Alias; an unmapped location is queued for mapping,
-never silently defaulted to an area.
+A saved mapping from a location surface-form (a kecamatan/desa or place name as
+written, or a shorthand like "Awang" for "Teluk Awang") to a canonical `place_key`
+and/or `area_key`. **Many aliases may point to one locality** — that is how synonyms and
+spellings ("Klancing"/"Lancing", "Pink Beach"/"Tangsi", "Sira"/"Sire") all resolve to
+the same place. A Place alias implies its parent Area. Created once by an admin — or
+seeded — when an unmapped location surfaces, then reused forever to auto-resolve location
+at Canonicalisation, and injected into the Extractor prompt so the LLM learns it too. An
+unmapped location is queued for mapping, never silently defaulted.
 _Avoid_: location map, region lookup.
 
 **Liveness**:

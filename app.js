@@ -1882,7 +1882,10 @@ function renderListingCard(l, index) {
   var typeLabel = l.listing_type_label || l.listing_type_key || '';
   var certLabel = l.certificate_type_label || '';
   var areaLabel = l.area_label || '';
-  var locationDetail = l.location_detail || '';
+  // Prefer the specific Place name ("Mertak", "Teluk Awang") for the meta line;
+  // the broad Area still shows in the category tag and the map finds it (Place
+  // tier, docs/adr/0010).
+  var locationDetail = l.place_label || l.location_detail || '';
 
   // Editorial category tag: "TYPE • AREA" in card body (replaces image overlay badge)
   var categoryParts = [];

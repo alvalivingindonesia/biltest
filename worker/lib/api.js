@@ -29,4 +29,7 @@ export const api = {
   postListing:         (facts)  => call('post_listing', facts),
   postLiveness:        (p)      => call('post_liveness', p),
   recomputeReputation: ()       => call('recompute_reputation', {}),
+  geography:           ()       => call('geography', {}),
+  serveText:           (after, limit) => call('serve_text', { after_id: after, limit }),
+  postLocation:        (p)      => call('post_location', p),
 };

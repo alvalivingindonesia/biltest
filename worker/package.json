@@ -12,6 +12,7 @@
     "recheck-all": "node listing-worker.js --recheck-all",
     "discover": "node listing-worker.js --discover-only",
     "reputation": "node listing-worker.js --reputation",
+    "reextract": "node listing-worker.js --reextract",
     "ping": "node listing-worker.js --ping",
     "postinstall": "playwright install chromium"
   },

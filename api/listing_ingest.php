@@ -96,6 +96,9 @@ switch ($action) {
     case 'post_listing':  handle_post_listing(); break;
     case 'post_liveness': handle_post_liveness(); break;
     case 'recompute_reputation': handle_recompute_reputation(); break;
+    case 'geography':     handle_geography(); break;       // areas + places + aliases for the Extractor prompt
+    case 'serve_text':    handle_serve_text(); break;       // Mode A source: stored {id,title,description}
+    case 'post_location': handle_post_location(); break;    // Mode A sink: location/place/tags only
     default:              json_error(400, 'Unknown action.');
 }
 
@@ -122,8 +125,10 @@ function handle_pull_work() {
     $disc = $db->query("SELECT id, source_site, label, search_url, max_pages FROM discovery_sources WHERE is_active = 1 ORDER BY id")->fetchAll();
 
     // Oldest-checked active listings first (NULL last_rechecked_at = never checked = first).
+    // source_hash exists only post-migration — tolerate the older DB.
+    $hash_col = lc_col_exists($db, 'listings', 'source_hash') ? 'source_hash' : "NULL AS source_hash";
     $sel = $db->prepare(
-        "SELECT id, source_site, source_listing_id, source_url, price_idr, area_key, land_size_sqm, locked_fields
+        "SELECT id, source_site, source_listing_id, source_url, price_idr, area_key, land_size_sqm, locked_fields, $hash_col
            FROM listings
           WHERE status = 'active' AND source_url IS NOT NULL AND source_url <> ''
           ORDER BY last_rechecked_at IS NULL DESC, last_rechecked_at ASC, id ASC
@@ -133,6 +138,110 @@ function handle_pull_work() {
     $rechecks = $sel->fetchAll();
 
     json_out(array('ok' => true, 'discovery_sources' => $disc, 'rechecks' => $rechecks, 'batch' => count($rechecks)));
+}
+
+// =====================================================================
+// GEOGRAPHY — areas + places + aliases, injected into the Extractor prompt
+// so the LLM knows the taxonomy AND every alias an admin has added.
+// =====================================================================
+function handle_geography() {
+    $db = get_db();
+    $areas = $db->query("SELECT `key`, label, region_key FROM areas ORDER BY region_key, sort_order, label")->fetchAll();
+    $places = array();
+    try { $places = $db->query("SELECT place_key, label, area_key FROM places WHERE is_active = 1 ORDER BY area_key, sort_order, label")->fetchAll(); } catch (Exception $e) {}
+    // A compact alias hint list (text → key) so the model learns local synonyms.
+    $aliases = array();
+    try { $aliases = $db->query("SELECT alias_text, area_key, place_key FROM area_aliases ORDER BY alias_text LIMIT 1000")->fetchAll(); } catch (Exception $e) {}
+    json_out(array('ok' => true, 'areas' => $areas, 'places' => $places, 'aliases' => $aliases));
+}
+
+// =====================================================================
+// SERVE TEXT — Mode A source: stored title+description for re-extraction
+// (location/tags only, no re-crawl). Cursor by id.
+// =====================================================================
+function handle_serve_text() {
+    $db = get_db();
+    $d = get_post_data();
+    $after = isset($d['after_id']) ? (int)$d['after_id'] : 0;
+    $limit = isset($d['limit']) ? max(1, min(500, (int)$d['limit'])) : 100;
+    $pcol = lc_col_exists($db, 'listings', 'place_key') ? 'place_key' : "NULL AS place_key";
+    $st = $db->prepare(
+        "SELECT id, title, description, area_key, $pcol, locked_fields
+           FROM listings
+          WHERE status = 'active' AND id > ? AND description IS NOT NULL AND description <> ''
+          ORDER BY id ASC LIMIT $limit"
+    );
+    $st->execute(array($after));
+    $rows = $st->fetchAll();
+    $next = $rows ? (int)$rows[count($rows) - 1]['id'] : 0;
+    json_out(array('ok' => true, 'rows' => $rows, 'next_after_id' => $next, 'count' => count($rows)));
+}
+
+// =====================================================================
+// POST LOCATION — Mode A sink: update only place/area (+ tags) for one
+// listing from a stored-text re-extraction. Never touches price/size/title.
+// =====================================================================
+function handle_post_location() {
+    $db = get_db();
+    $d = get_post_data();
+    $id = isset($d['listing_id']) ? (int)$d['listing_id'] : 0;
+    if (!$id) json_error(400, 'listing_id required.');
+    $st = $db->prepare("SELECT * FROM listings WHERE id = ? LIMIT 1");
+    $st->execute(array($id));
+    $existing = $st->fetch();
+    if (!$existing) json_error(404, 'Listing not found.');
+
+    $locked   = $existing['locked_fields'];
+    $llm_area = isset($d['llm_area_key']) ? trim((string)$d['llm_area_key']) : '';
+    $llm_place= isset($d['llm_place']) ? trim((string)$d['llm_place']) : '';
+    $conf     = isset($d['extraction_confidence']) && $d['extraction_confidence'] !== '' ? (float)$d['extraction_confidence'] : null;
+    $tags     = isset($d['tags']) && is_array($d['tags']) ? array_values(array_filter($d['tags'])) : array();
+
+    // Resolve place_key + area_key (same priority as the full path).
+    $area = null; $place = null;
+    if ($llm_place !== '') {
+        $r = lc_resolve_location($db, array($llm_place));
+        if ($r['place_key']) { $place = $r['place_key']; $area = $r['area_key'] ?: lc_place_area($db, $place); }
+        elseif ($r['area_key']) { $area = $r['area_key']; }
+    }
+    if (!$area && $llm_area !== '' && $llm_area !== 'unknown' && lc_area_exists($db, $llm_area)) $area = $llm_area;
+    if ($place && !$area) $area = lc_place_area($db, $place);
+
+    $set = array(); $par = array(); $changed = array();
+    if ($area && !lc_is_locked($locked, 'area_key')) {
+        if (empty($existing['area_key']) || $existing['area_key'] === $area) {
+            if ((string)$existing['area_key'] !== (string)$area) { lc_record_revision($db, $id, 'area_key', $existing['area_key'], $area, 'extractor'); $changed[] = 'area_key'; }
+            $set[] = "area_key = ?"; $par[] = $area;
+            if ($place && !lc_is_locked($locked, 'place_key')) {
+                if ((string)$existing['place_key'] !== (string)$place) { lc_record_revision($db, $id, 'place_key', $existing['place_key'], $place, 'extractor'); $changed[] = 'place_key'; }
+                $set[] = "place_key = ?"; $par[] = $place;
+            }
+            if ($llm_place !== '' && !lc_is_locked($locked, 'location_detail')) { $set[] = "location_detail = ?"; $par[] = $llm_place; }
+        } else {
+            // genuine conflict with a curated/different area → review, don't overwrite
+            lc_queue_review($db, $id, 'area_flip', array('old_area_key' => $existing['area_key'], 'new_area_key' => $area, 'new_place_key' => $place, 'evidence' => 'extractor', 'place' => $llm_place));
+        }
+    } elseif (!$area) {
+        lc_queue_review($db, $id, 'unmapped_area', array('place' => $llm_place, 'title' => $existing['title']));
+    }
+    // Certificate (e.g. the LLM found "SHM" in the text) — mapped + lock-guarded.
+    if (!empty($d['certificate_text']) && !lc_is_locked($locked, 'certificate_type_key')) {
+        $cert = ingest_detect_certificate((string)$d['certificate_text']);
+        if ($cert && (string)$existing['certificate_type_key'] !== (string)$cert) {
+            lc_record_revision($db, $id, 'certificate_type_key', $existing['certificate_type_key'], $cert, 'extractor');
+            $set[] = "certificate_type_key = ?"; $par[] = $cert;
+        }
+    }
+    if ($conf !== null) { $set[] = "extraction_confidence = ?"; $par[] = $conf; }
+    $set[] = "extraction_method = 'llm-location'";
+    if ($set) {
+        $set[] = "updated_at = NOW()";
+        $par[] = $id;
+        $db->prepare("UPDATE listings SET " . implode(', ', $set) . " WHERE id = ?")->execute($par);
+    }
+    if (!empty($tags)) lc_save_tags($db, $id, $tags);
+
+    json_out(array('ok' => true, 'listing_id' => $id, 'area_key' => $area, 'place_key' => $place, 'changed' => $changed));
 }
 
 // =====================================================================
@@ -164,6 +273,18 @@ function handle_post_listing() {
     $photos     = isset($d['photos']) && is_array($d['photos']) ? array_values(array_filter($d['photos'])) : array();
     $source_url = isset($d['source_url']) ? trim((string)$d['source_url']) : '';
 
+    // Place tier + extraction columns exist only after the migration; tolerate
+    // the pre-migration DB so the nightly Worker never breaks before Jon runs it.
+    $ext_cols = lc_col_exists($db, 'listings', 'place_key');
+
+    // ── LLM Extractor fields (docs/adr/0009) ────────────────────────
+    $llm_area   = isset($d['llm_area_key']) ? trim((string)$d['llm_area_key']) : '';
+    $llm_place  = isset($d['llm_place']) ? trim((string)$d['llm_place']) : '';
+    $source_hash = isset($d['source_hash']) ? trim((string)$d['source_hash']) : null;
+    $extraction_method = isset($d['extraction_method']) ? trim((string)$d['extraction_method']) : null;
+    $extraction_conf = isset($d['extraction_confidence']) && $d['extraction_confidence'] !== '' ? (float)$d['extraction_confidence'] : null;
+    $llm_tags   = isset($d['tags']) && is_array($d['tags']) ? array_values(array_filter($d['tags'])) : array();
+
     // ── Canonicalise price (per-are fix; land-only per-m² gate) ─────
     $is_land = ($ltype === 'land');
     $idr_amount = lc_to_idr($db, $raw_amount, $currency);
@@ -181,16 +302,36 @@ function handle_post_listing() {
         }
     }
 
-    // ── Resolve area_key (no silent default) ────────────────────────
-    $loc_candidates = array();
-    foreach (array('kecamatan','desa','district','sub_district','address','location_detail') as $f) {
-        if (!empty($d[$f])) $loc_candidates[] = (string)$d[$f];
+    // ── Resolve location → place_key + area_key (Place tier; no default) ──
+    // Priority: the LLM's clean place name (it understood context, ignored
+    // "30 min to Kuta") → its validated area_key → alias-resolve structured
+    // fields + title. The raw description is used ONLY through the LLM, never
+    // keyword-scanned here (that is what mis-tagged Awang as Kuta).
+    $resolved_area = null; $resolved_place = null;
+    if ($llm_place !== '') {
+        $r = lc_resolve_location($db, array($llm_place));
+        if ($r['place_key']) { $resolved_place = $r['place_key']; $resolved_area = $r['area_key'] ?: lc_place_area($db, $r['place_key']); }
+        elseif ($r['area_key']) { $resolved_area = $r['area_key']; }
     }
-    $loc_candidates[] = $title;
-    if ($desc !== '') $loc_candidates[] = $desc;
-    $resolved_area = lc_resolve_area_key($db, $loc_candidates);
-    $location_detail = isset($d['kecamatan']) && $d['kecamatan'] !== '' ? trim((string)$d['kecamatan'])
-                     : (isset($d['district']) ? trim((string)$d['district']) : '');
+    if (!$resolved_area && $llm_area !== '' && $llm_area !== 'unknown' && lc_area_exists($db, $llm_area)) {
+        $resolved_area = $llm_area;
+    }
+    if (!$resolved_area) {
+        $cands = array();
+        if ($llm_place !== '') $cands[] = $llm_place;
+        foreach (array('kecamatan','desa','district','sub_district','address','location_detail') as $f) {
+            if (!empty($d[$f])) $cands[] = (string)$d[$f];
+        }
+        $cands[] = $title;
+        $r = lc_resolve_location($db, $cands);
+        $resolved_area = $r['area_key']; $resolved_place = $r['place_key'];
+    }
+    // A resolved Place always implies its Area.
+    if ($resolved_place && !$resolved_area) $resolved_area = lc_place_area($db, $resolved_place);
+    // location_detail = the specific place as named (LLM place preferred).
+    $location_detail = $llm_place !== '' ? $llm_place
+                     : (isset($d['kecamatan']) && $d['kecamatan'] !== '' ? trim((string)$d['kecamatan'])
+                     : (isset($d['district']) ? trim((string)$d['district']) : ''));
 
     // ── Resolve agent (cross-portal identity) ───────────────────────
     $agent_in = isset($d['agent']) && is_array($d['agent']) ? $d['agent'] : array();
@@ -266,18 +407,23 @@ function handle_post_listing() {
             $apply('price_label', $price['price_label']);
         }
 
-        // Area: auto-apply only if previously empty; a flip goes to review.
+        // Area/Place: auto-apply only if previously empty or unchanged; a flip
+        // goes to review. A resolved Place is applied with its Area.
         if (!lc_is_locked($locked, 'area_key') && $resolved_area) {
             if (empty($existing['area_key']) || $existing['area_key'] === $resolved_area) {
                 $apply('area_key', $resolved_area);
+                if ($resolved_place && $ext_cols) $apply('place_key', $resolved_place);
             } else {
                 lc_queue_review($db, $id, 'area_flip', array(
                     'old_area_key' => $existing['area_key'], 'new_area_key' => $resolved_area,
-                    'candidates' => $loc_candidates, 'source_url' => $source_url,
+                    'new_place_key' => $resolved_place, 'evidence' => 'extractor',
+                    'place' => $llm_place, 'source_url' => $source_url,
                 ));
             }
+        } elseif ($resolved_place && $ext_cols && !lc_is_locked($locked, 'place_key') && $existing['area_key'] === $resolved_area) {
+            $apply('place_key', $resolved_place); // same Area, just refine the Place
         } elseif (!$resolved_area && empty($existing['area_key'])) {
-            lc_queue_review($db, $id, 'unmapped_area', array('candidates' => $loc_candidates, 'source_url' => $source_url));
+            lc_queue_review($db, $id, 'unmapped_area', array('place' => $llm_place, 'candidates' => $loc_candidates, 'source_url' => $source_url));
         }
 
         // Title: take the scraped one, but never replace a real title with a
@@ -299,6 +445,13 @@ function handle_post_listing() {
         // Only adopt an agent when none is set (don't reassign admin/known agents).
         if (empty($existing['agent_id']) && $agent_id) $apply('agent_id', $agent_id);
 
+        // Extraction provenance + content-hash (for gating) — post-migration only.
+        if ($ext_cols) {
+            if ($source_hash !== null)       { $set[] = "source_hash = ?";            $par[] = $source_hash; }
+            if ($extraction_method !== null) { $set[] = "extraction_method = ?";      $par[] = $extraction_method; }
+            if ($extraction_conf !== null)   { $set[] = "extraction_confidence = ?";  $par[] = $extraction_conf; }
+        }
+
         // Liveness: confirmed present this cycle; revive if it had expired.
         $set[] = "last_seen_at = NOW()";
         $set[] = "last_rechecked_at = NOW()";
@@ -310,6 +463,7 @@ function handle_post_listing() {
         $par[] = $id;
         $db->prepare("UPDATE listings SET " . implode(', ', $set) . " WHERE id = ?")->execute($par);
         lc_save_tags($db, $id, lc_suggest_tags($title, $desc, $short, $ltype));
+        if (!empty($llm_tags)) lc_save_tags($db, $id, $llm_tags);
 
         // De-dupe by source_url: keep the lowest-id active row, retire the rest.
         // Self-heals duplicates a buggy earlier run may have inserted — whichever
@@ -342,29 +496,37 @@ function handle_post_listing() {
     $chk->execute(array($slug));
     if ($chk->fetchColumn() > 0) $slug .= '-' . substr(md5($site . $src_id), 0, 6);
 
+    // Post-migration columns (place_key + extraction provenance) added only when present.
+    $extra_cols = $ext_cols ? 'place_key, source_hash, extraction_method, extraction_confidence,' : '';
+    $extra_ph   = $ext_cols ? '?, ?, ?, ?,' : '';
+    $extra_vals = $ext_cols ? array($resolved_place, $source_hash, $extraction_method, $extraction_conf) : array();
     $ins = $db->prepare(
         "INSERT INTO listings
             (slug, agent_id, listing_type_key, status, title, short_description, description,
              area_key, location_detail, price_idr, price_label, price_idr_per_sqm, price_review_flag,
              land_size_sqm, land_size_are, certificate_type_key, building_size_sqm, bedrooms, bathrooms,
              is_featured, is_approved, source_site, source_url, source_listing_id,
+             {$extra_cols}
              source_scraped_at, first_seen_at, last_seen_at, last_rechecked_at, recheck_status, photo_urls)
          VALUES (?, ?, ?, 'active', ?, ?, ?,
              ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?,
              0, 1, ?, ?, ?,
+             {$extra_ph}
              NOW(), NOW(), NOW(), NOW(), 'present', ?)"
     );
-    $ins->execute(array(
+    $ins->execute(array_merge(array(
         $slug, $agent_id, $ltype, $title, $short, $desc,
         $resolved_area, $location_detail !== '' ? $location_detail : null,
         $price['price_idr'], $price['price_label'], $price['price_idr_per_sqm'], $price['flagged'],
         $land_sqm, $land_are, $cert, $build_sqm, $beds, $baths,
-        $site, $source_url !== '' ? $source_url : null, $src_id,
-        !empty($photos) ? json_encode($photos, JSON_UNESCAPED_SLASHES) : null,
+        $site, $source_url !== '' ? $source_url : null, $src_id),
+        $extra_vals,
+        array(!empty($photos) ? json_encode($photos, JSON_UNESCAPED_SLASHES) : null)
     ));
     $id = (int)$db->lastInsertId();
     lc_save_tags($db, $id, lc_suggest_tags($title, $desc, $short, $ltype));
+    if (!empty($llm_tags)) lc_save_tags($db, $id, $llm_tags);
     json_out(array('ok' => true, 'listing_id' => $id, 'mode' => 'inserted', 'price_flagged' => (int)$price['flagged'], 'area_resolved' => $resolved_area ? 1 : 0));
 }
 

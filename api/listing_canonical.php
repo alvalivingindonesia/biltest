@@ -479,20 +479,76 @@ function lc_save_tags($db, $listing_id, array $tags) {
  * Returns area_key, or null when nothing maps — caller decides, NEVER defaults.
  */
 function lc_resolve_area_key($db, array $candidates) {
-    $exact = $db->prepare("SELECT area_key FROM area_aliases WHERE alias_text = ? LIMIT 1");
+    $r = lc_resolve_location($db, $candidates);
+    return $r['area_key'];
+}
+
+/**
+ * Resolve BOTH place_key and area_key from candidates via area_aliases (which
+ * now carries place_key). A Place implies its Area. Returns
+ * array(area_key, place_key) — either may be null. Place tier (docs/adr/0010).
+ */
+function lc_resolve_location($db, array $candidates) {
+    // Tolerate the pre-migration DB (no place_key column yet).
+    static $pcol = null;
+    if ($pcol === null) {
+        try { $db->query("SELECT place_key FROM area_aliases LIMIT 1"); $pcol = 'place_key'; }
+        catch (Exception $e) { $pcol = 'NULL'; }
+    }
+    $sel = "area_key, $pcol AS place_key";
+    $exact = $db->prepare("SELECT $sel FROM area_aliases WHERE alias_text = ? LIMIT 1");
     $all = null;
     foreach ($candidates as $c) {
         $n = lc_normalize_area_text($c);
         if ($n === '') continue;
         $exact->execute(array($n));
-        $k = $exact->fetchColumn();
-        if ($k) return $k;
-        if ($all === null) $all = $db->query("SELECT alias_text, area_key FROM area_aliases ORDER BY CHAR_LENGTH(alias_text) DESC")->fetchAll();
+        $row = $exact->fetch();
+        if ($row && $row['area_key']) return array('area_key' => $row['area_key'], 'place_key' => $row['place_key'] ?: null);
+        if ($all === null) $all = $db->query("SELECT alias_text, area_key, $pcol AS place_key FROM area_aliases ORDER BY CHAR_LENGTH(alias_text) DESC")->fetchAll();
         foreach ($all as $a) {
-            if (preg_match('/\b' . preg_quote($a['alias_text'], '/') . '\b/u', $n)) return $a['area_key'];
+            if (preg_match('/\b' . preg_quote($a['alias_text'], '/') . '\b/u', $n)) {
+                return array('area_key' => $a['area_key'], 'place_key' => $a['place_key'] ?: null);
+            }
         }
     }
-    return null;
+    return array('area_key' => null, 'place_key' => null);
+}
+
+/** Cached column-existence check (tolerate pre-migration DB). */
+function lc_col_exists($db, $table, $col) {
+    static $cache = array();
+    $k = "$table.$col";
+    if (!isset($cache[$k])) {
+        try { $db->query("SELECT `$col` FROM `$table` LIMIT 1"); $cache[$k] = true; }
+        catch (Exception $e) { $cache[$k] = false; }
+    }
+    return $cache[$k];
+}
+
+/** Validate an area_key against the curated areas table (cached). */
+function lc_area_exists($db, $key) {
+    static $cache = array();
+    if ($key === null || $key === '') return false;
+    if (!isset($cache[$key])) {
+        $st = $db->prepare("SELECT 1 FROM areas WHERE `key` = ? LIMIT 1");
+        $st->execute(array($key));
+        $cache[$key] = (bool)$st->fetchColumn();
+    }
+    return $cache[$key];
+}
+
+/** A Place's parent area_key (validates the place exists), or null. */
+function lc_place_area($db, $place_key) {
+    static $cache = array();
+    if ($place_key === null || $place_key === '') return null;
+    if (!array_key_exists($place_key, $cache)) {
+        try {
+            $st = $db->prepare("SELECT area_key FROM places WHERE place_key = ? AND is_active = 1 LIMIT 1");
+            $st->execute(array($place_key));
+            $cache[$place_key] = $st->fetchColumn() ?: null;
+        } catch (Exception $e) { $cache[$place_key] = null; } // pre-migration: no places table
+    }
+    return $cache[$place_key];
 }
 
 /**

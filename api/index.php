@@ -1221,10 +1221,16 @@ function build_listing_filters(array $skip = []): array {
         $where[] = 'l.listing_type_key = ?';
         $params[] = $_GET['listing_type'];
     }
-    // Filter: area
+    // Filter: area (rolls up — includes all Places under the Area, since every
+    // Place listing also carries its parent area_key)
     if (!empty($_GET['area']) && !in_array('area', $skip)) {
         $where[] = 'l.area_key = ?';
         $params[] = $_GET['area'];
+    }
+    // Filter: place (narrows to exactly that Place — Place tier, docs/adr/0010)
+    if (!empty($_GET['place']) && !in_array('place', $skip)) {
+        $where[] = 'l.place_key = ?';
+        $params[] = $_GET['place'];
     }
     // Filter: region
     if (!empty($_GET['region']) && !in_array('region', $skip)) {
@@ -1381,6 +1387,12 @@ function handle_listings_list(): void {
     $count_stmt->execute($params);
     $total = (int)$count_stmt->fetchColumn();
 
+    // Place tier columns/join only after the migration (docs/adr/0010) — keep
+    // the public listings query working before Jon runs the SQL.
+    $has_place = _col_exists($db, 'listings', 'place_key');
+    $place_cols = $has_place ? ', l.place_key, pl.label AS place_label' : '';
+    $place_join = $has_place ? ' LEFT JOIN places pl ON pl.place_key = l.place_key' : '';
+
     // Fetch with joins
     $stmt = $db->prepare(
         "SELECT l.id, l.slug, l.title, l.short_description, l.listing_type_key, l.area_key,
@@ -1393,12 +1405,12 @@ function handle_listings_list(): void {
                 ag.display_name AS agent_name, ag.slug AS agent_slug,
                 lt.label AS listing_type_label,
                 lct.label AS certificate_type_label,
-                a.label AS area_label
+                a.label AS area_label{$place_cols}
          FROM listings l
          LEFT JOIN agents ag ON ag.id = l.agent_id
          LEFT JOIN listing_types lt ON lt.`key` = l.listing_type_key
          LEFT JOIN land_certificate_types lct ON lct.`key` = l.certificate_type_key
-         LEFT JOIN areas a ON a.`key` = l.area_key
+         LEFT JOIN areas a ON a.`key` = l.area_key{$place_join}
          WHERE {$where_sql}
          ORDER BY {$order}
          LIMIT ? OFFSET ?"

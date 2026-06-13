@@ -13,11 +13,15 @@
 //   node listing-worker.js --ping          (auth/connectivity check)
 
 import 'dotenv/config';
+import { createHash } from 'crypto';
 import { chromium } from 'playwright';
 import { api } from './lib/api.js';
 import { SITES, readPage, detectGone, extractSearchLinks } from './lib/extractors.js';
+import { ollamaEnabled, extractLocationTags, extractListing } from './lib/ollama.js';
 
 const ARGS = new Set(process.argv.slice(2));
+let GEO = null; // geography (areas/places/aliases) for the Extractor prompt
+const sourceHash = (title, desc) => createHash('sha256').update(String(title || '') + '\n' + String(desc || '')).digest('hex');
 const RECHECK_LIMIT   = parseInt(process.env.RECHECK_LIMIT || '80', 10);
 const DISCOVERY_LIMIT = parseInt(process.env.DISCOVERY_LIMIT || '40', 10);
 const DELAY_MIN = parseInt(process.env.DELAY_MIN_MS || '30000', 10);
@@ -89,14 +93,35 @@ async function recheck(ctx, rechecks) {
             await api.postLiveness({ listing_id: r.id, state: 'failed' }); failed++;
             log('no title (skip)', r.id, r.source_url);
           } else {
-            // Authoritative identity from the re-check record so the server
-            // UPDATES this exact row instead of inserting a duplicate.
-            facts.listing_id = r.id;
-            facts.source_site = site;
-            if (r.source_listing_id) facts.source_listing_id = r.source_listing_id;
-            const res = await api.postListing(facts);
-            present++;
-            log('present', r.id, res.mode, facts.title?.slice(0, 50), res.price_flagged ? '(price flagged)' : '');
+            // Content-hash gate (ADR 0009): if the seller's text is unchanged
+            // since last extraction, skip re-extraction/post — liveness only.
+            const hash = sourceHash(facts.title, facts.description);
+            if (r.source_hash && r.source_hash === hash) {
+              await api.postLiveness({ listing_id: r.id, state: 'present' });
+              present++;
+              log('unchanged (liveness only)', r.id);
+            } else {
+              // LLM location enrichment: ignores landmark refs, resolves place_key.
+              if (ollamaEnabled() && GEO) {
+                const ex = await extractLocationTags(facts.title, facts.description, GEO);
+                if (ex) {
+                  facts.llm_area_key = ex.area_key;
+                  facts.llm_place = ex.place;
+                  if (ex.tags && ex.tags.length) facts.tags = ex.tags;
+                  if (ex.certificate) facts.certificate_text = ex.certificate;
+                  facts.extraction_method = 'llm';
+                  facts.extraction_confidence = ex.confidence;
+                }
+              }
+              facts.source_hash = hash;
+              // Authoritative identity so the server UPDATES this exact row.
+              facts.listing_id = r.id;
+              facts.source_site = site;
+              if (r.source_listing_id) facts.source_listing_id = r.source_listing_id;
+              const res = await api.postListing(facts);
+              present++;
+              log('present', r.id, res.mode, facts.title?.slice(0, 40), facts.llm_place ? '@' + facts.llm_place : '');
+            }
           }
         }
       }
@@ -181,6 +206,40 @@ async function recheckAll(ctx) {
   return { listings: processed.size, ...totals };
 }
 
+// ── Mode A: re-extract location/place/tags from STORED text (no crawl) ──
+// (ADR 0009) Fast, headless, no browser — fixes locations corpus-wide via the
+// local LLM over descriptions we already stored. Cursor by id.
+async function reextractLocations() {
+  if (!ollamaEnabled()) { log('OLLAMA_LOCATION not enabled in .env — nothing to do'); return; }
+  GEO = await api.geography();
+  log('geography:', (GEO.areas || []).length, 'areas,', (GEO.places || []).length, 'places');
+  let after = 0, done = 0, changed = 0, unmapped = 0;
+  while (true) {
+    const batch = await api.serveText(after, 100);
+    if (!batch.rows.length) break;
+    for (const row of batch.rows) {
+      try {
+        const ex = await extractLocationTags(row.title, row.description, GEO);
+        if (!ex) { log('llm miss', row.id); continue; }
+        const res = await api.postLocation({
+          listing_id: row.id,
+          llm_area_key: ex.area_key,
+          llm_place: ex.place,
+          tags: ex.tags,
+          certificate_text: ex.certificate,
+          extraction_confidence: ex.confidence,
+        });
+        done++;
+        if (res.changed && res.changed.length) changed++;
+        if (!res.area_key) unmapped++;
+        log('reextract', row.id, '→', res.area_key || 'UNMAPPED', res.place_key ? '/' + res.place_key : '', '(' + (ex.place || '?') + ')');
+      } catch (e) { log('reextract error', row.id, e.message); }
+    }
+    after = batch.next_after_id;
+  }
+  log('REEXTRACT COMPLETE', { processed: done, changed, unmapped });
+}
+
 // ── Main ────────────────────────────────────────────────────────────
 (async () => {
   if (ARGS.has('--ping')) {
@@ -190,6 +249,15 @@ async function recheckAll(ctx) {
   if (ARGS.has('--reputation')) {
     const r = await api.recomputeReputation(); log('reputation recomputed', JSON.stringify(r)); return;
   }
+
+  if (ARGS.has('--reextract')) {
+    log('REEXTRACT (Mode A) starting — location/tags from stored text, no crawl');
+    await reextractLocations();
+    return;
+  }
+
+  // Fetch geography once for LLM location enrichment (Mode B).
+  if (ollamaEnabled()) { try { GEO = await api.geography(); log('geography:', (GEO.areas || []).length, 'areas,', (GEO.places || []).length, 'places'); } catch (e) { log('geography fetch failed', e.message); } }
 
   if (ARGS.has('--recheck-all')) {
     log('RECHECK-ALL one-off starting (all active listings)', { DELAY_MIN, DELAY_MAX, HEADFUL });
