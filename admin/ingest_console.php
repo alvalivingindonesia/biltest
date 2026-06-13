@@ -51,6 +51,8 @@ $flash = '';
 // ─── POST actions ────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['do'])) {
     $do = $_POST['do'];
+    $ajax = !empty($_POST['ajax']);
+    $ic_json = function($a) { header('Content-Type: application/json; charset=utf-8'); echo json_encode($a, JSON_UNESCAPED_UNICODE); exit; };
     try {
         if ($do === 'review_resolve') {
             $rid = (int)$_POST['review_id'];
@@ -84,7 +86,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['do'])) {
                 $db->prepare("UPDATE listing_review_queue SET status=?, resolved_at=NOW() WHERE id=?")
                    ->execute(array($action === 'apply' ? 'resolved' : 'dismissed', $rid));
                 $flash = "Review #$rid {$action}d.";
+                if ($ajax) $ic_json(array('ok' => true, 'ids' => array($rid), 'action' => $action));
             }
+            if ($ajax) $ic_json(array('ok' => false, 'msg' => 'not found'));
         }
         elseif ($do === 'bulk_review') {
             $ids = isset($_POST['ids']) && is_array($_POST['ids']) ? array_map('intval', $_POST['ids']) : array();
@@ -111,6 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['do'])) {
                 $n++;
             }
             $flash = "$n review(s) " . ($res === 'apply' ? 'applied' : 'dismissed') . ".";
+            if ($ajax) $ic_json(array('ok' => true, 'ids' => $ids, 'action' => $res, 'n' => $n));
         }
         elseif ($do === 'alias_add') {
             $norm = lc_normalize_area_text($_POST['alias_text'] ?? '');
@@ -214,7 +219,7 @@ $counts = array(
      <label><input type="checkbox" onclick="selAll(this)"> select all</label>
      <button name="resolution" value="apply" style="background:#1677ff;color:#fff">✓ Apply selected</button>
      <button name="resolution" value="dismiss">✕ Dismiss selected</button>
-     <span class="muted"><?= count($items) ?> open</span>
+     <span class="muted" id="openCount"><?= count($items) ?> open</span>
    </div>
  </form>
  <table><tr><th></th><th>#</th><th>Kind</th><th>Listing</th><th>Source</th><th>Detail</th><th>Resolve one</th></tr>
@@ -240,7 +245,35 @@ $counts = array(
  <?php endforeach; if (!$items) echo '<tr><td colspan="7" class="muted">Queue is empty. 🎉</td></tr>'; ?>
  </table>
  <p class="muted" style="margin-top:8px">Rows tinted green resolved to a specific <strong>Place</strong> (high confidence). Bare area guesses (no place) on thin descriptions are the unreliable ones — spot-check via ↗, or dismiss and let the corrected re-extract redo them.</p>
- <p class="muted" style="margin-top:8px">Rows tinted green resolved to a specific <strong>Place</strong> (high confidence). Bare area guesses (no place) on thin descriptions are the unreliable ones — spot-check via ↗, or dismiss and let the corrected re-extract redo them.</p>
+ <script>
+ (function(){
+   document.addEventListener('submit', async function(e){
+     var f = e.target, d = f.querySelector('input[name="do"]');
+     if (!d || (d.value !== 'review_resolve' && d.value !== 'bulk_review')) return;
+     e.preventDefault();
+     var fd = new FormData(f); fd.append('ajax','1');
+     if (e.submitter && e.submitter.name) fd.append(e.submitter.name, e.submitter.value);
+     var btn = e.submitter; if (btn) btn.disabled = true;
+     try {
+       var res = await fetch('ingest_console.php?tab=review', { method:'POST', body: fd });
+       var j = await res.json();
+       if (j.ok) {
+         (j.ids||[]).forEach(function(id){
+           var cb = document.querySelector('.rchk[value="'+id+'"]');
+           if (cb && cb.closest('tr')) cb.closest('tr').remove();
+         });
+         toast((j.action==='apply'?'Applied ':'Dismissed ') + ((j.ids||[]).length) + ' ✓');
+         var n = document.querySelectorAll('.rchk').length, el = document.getElementById('openCount');
+         if (el) el.textContent = n + ' open';
+       } else { toast('Nothing to do'); }
+     } catch(err){ toast('Error'); }
+     if (btn) btn.disabled = false;
+   });
+   function toast(m){ var n=document.createElement('div'); n.textContent=m;
+     n.style.cssText='position:fixed;right:18px;bottom:18px;background:#093;color:#fff;padding:8px 14px;border-radius:8px;font:13px system-ui;z-index:9';
+     document.body.appendChild(n); setTimeout(function(){n.remove();},1700); }
+ })();
+ </script>
 
 <?php elseif ($tab === 'aliases'): ?>
  <h2>Add area alias</h2>
