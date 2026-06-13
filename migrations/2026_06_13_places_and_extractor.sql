@@ -155,7 +155,9 @@ INSERT INTO area_aliases (alias_text, area_key, place_key) VALUES
     ('awang', 'awang', NULL), ('teluk awang', 'awang', NULL), ('awang bay', 'awang', NULL),
     ('gunung tunak', 'awang', 'gunung_tunak'),
     -- Mawun (Area)
-    ('mawun', 'mawun', NULL), ('pantai mawun', 'mawun', NULL)
+    ('mawun', 'mawun', NULL), ('pantai mawun', 'mawun', NULL),
+    -- Administrative names buyers don't use: the desa Tumpak IS Are Guling.
+    ('tumpak', 'are_guling', NULL), ('areguling', 'are_guling', NULL), ('are guling', 'are_guling', NULL)
 ON DUPLICATE KEY UPDATE area_key = VALUES(area_key), place_key = VALUES(place_key);
 
 -- Done. Next: run the LLM Extractor Mode A pass (worker --reextract) to fill

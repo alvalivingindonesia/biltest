@@ -214,6 +214,7 @@ async function reextractLocations() {
   GEO = await api.geography();
   log('geography:', (GEO.areas || []).length, 'areas,', (GEO.places || []).length, 'places');
   let after = 0, done = 0, changed = 0, unmapped = 0;
+  const unmappedTally = new Map(); // place name → count, for the alias to-do list
   while (true) {
     const batch = await api.serveText(after, 100);
     if (!batch.rows.length) break;
@@ -233,13 +234,23 @@ async function reextractLocations() {
         });
         done++;
         if (res.changed && res.changed.length) changed++;
-        if (!res.area_key) unmapped++;
+        if (!res.area_key) {
+          unmapped++;
+          const p = (ex.place || '?').trim().toLowerCase();
+          unmappedTally.set(p, (unmappedTally.get(p) || 0) + 1);
+        }
         log('reextract', row.id, '→', res.area_key || 'UNMAPPED', res.place_key ? '/' + res.place_key : '', '(' + (ex.place || '?') + ')');
       } catch (e) { log('reextract error', row.id, e.message); }
     }
     after = batch.next_after_id;
   }
   log('REEXTRACT COMPLETE', { processed: done, changed, unmapped });
+  // Frequency list of unmapped places — add the recurring ones as aliases.
+  const top = [...unmappedTally.entries()].filter(([p]) => p && p !== '?').sort((a, b) => b[1] - a[1]);
+  if (top.length) {
+    log('UNMAPPED places (add the recurring ones in Ingest Console → Area aliases):');
+    top.forEach(([p, c]) => log('   ' + String(c).padStart(3) + '×  ' + p));
+  }
 }
 
 // ── Main ────────────────────────────────────────────────────────────
