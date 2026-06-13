@@ -25,6 +25,10 @@ const DELAY_MAX = parseInt(process.env.DELAY_MAX_MS || '60000', 10);
 const HEADFUL   = process.env.HEADFUL === '1';
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+// --disable-http2: OLX's CDN drops Playwright's HTTP/2 connection
+// (net::ERR_HTTP2_PROTOCOL_ERROR); HTTP/1.1 is accepted and works for the
+// others too. AutomationControlled off lowers the bot-detection footprint.
+const LAUNCH_OPTS = { headless: !HEADFUL, args: ['--disable-http2', '--disable-blink-features=AutomationControlled'] };
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const jitter = () => DELAY_MIN + Math.floor(Math.random() * Math.max(1, DELAY_MAX - DELAY_MIN));
@@ -181,7 +185,7 @@ async function recheckAll(ctx) {
 
   if (ARGS.has('--recheck-all')) {
     log('RECHECK-ALL one-off starting (all active listings)', { DELAY_MIN, DELAY_MAX, HEADFUL });
-    const browser = await chromium.launch({ headless: !HEADFUL });
+    const browser = await chromium.launch(LAUNCH_OPTS);
     const ctx = await newContext(browser);
     try {
       const summary = await recheckAll(ctx);
@@ -197,7 +201,7 @@ async function recheckAll(ctx) {
   const work = await api.pullWork(RECHECK_LIMIT);
   log('pulled', work.rechecks.length, 'rechecks,', work.discovery_sources.length, 'discovery sources');
 
-  const browser = await chromium.launch({ headless: !HEADFUL });
+  const browser = await chromium.launch(LAUNCH_OPTS);
   const ctx = await newContext(browser);
   try {
     let rc = { present: 0, gone: 0, failed: 0 }, dc = { imported: 0 };
