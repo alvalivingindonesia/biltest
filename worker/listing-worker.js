@@ -221,6 +221,8 @@ async function reextractLocations() {
       try {
         const ex = await extractLocationTags(row.title, row.description, GEO);
         if (!ex) { log('llm miss', row.id); continue; }
+        // Uncorroborated guess (thin text) → leave the listing alone, no review.
+        if (ex.area_key === 'unknown' && !ex.place) { log('skip (no confident location)', row.id); continue; }
         const res = await api.postLocation({
           listing_id: row.id,
           llm_area_key: ex.area_key,

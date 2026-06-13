@@ -86,6 +86,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['do'])) {
                 $flash = "Review #$rid {$action}d.";
             }
         }
+        elseif ($do === 'bulk_review') {
+            $ids = isset($_POST['ids']) && is_array($_POST['ids']) ? array_map('intval', $_POST['ids']) : array();
+            $res = ($_POST['resolution'] ?? 'dismiss') === 'apply' ? 'apply' : 'dismiss';
+            $n = 0;
+            foreach ($ids as $rid) {
+                if ($rid <= 0) continue;
+                if ($res === 'apply') {
+                    $row = $db->prepare("SELECT * FROM listing_review_queue WHERE id=?"); $row->execute(array($rid)); $item = $row->fetch();
+                    if ($item && $item['listing_id']) {
+                        $detail = json_decode($item['detail'], true) ?: array();
+                        if (in_array($item['kind'], array('area_flip','unmapped_area')) && !empty($detail['new_area_key'])) {
+                            if (!empty($detail['new_place_key'])) {
+                                $db->prepare("UPDATE listings SET area_key=?, place_key=?, updated_at=NOW() WHERE id=?")->execute(array($detail['new_area_key'], $detail['new_place_key'], $item['listing_id']));
+                            } else {
+                                $db->prepare("UPDATE listings SET area_key=?, updated_at=NOW() WHERE id=?")->execute(array($detail['new_area_key'], $item['listing_id']));
+                            }
+                        } elseif ($item['kind'] === 'price_surprise' && isset($detail['new_price_idr'])) {
+                            $db->prepare("UPDATE listings SET price_idr=?, price_review_flag=0, updated_at=NOW() WHERE id=?")->execute(array((int)$detail['new_price_idr'], $item['listing_id']));
+                        }
+                    }
+                }
+                $db->prepare("UPDATE listing_review_queue SET status=?, resolved_at=NOW() WHERE id=?")->execute(array($res === 'apply' ? 'resolved' : 'dismissed', $rid));
+                $n++;
+            }
+            $flash = "$n review(s) " . ($res === 'apply' ? 'applied' : 'dismissed') . ".";
+        }
         elseif ($do === 'alias_add') {
             $norm = lc_normalize_area_text($_POST['alias_text'] ?? '');
             $ak = trim($_POST['area_key'] ?? '');
@@ -177,29 +203,44 @@ $counts = array(
 
 <?php if ($tab === 'review'): ?>
  <h2>Open review items</h2>
- <?php $items = $db->query("SELECT * FROM listing_review_queue WHERE status='open' ORDER BY id DESC LIMIT 200")->fetchAll(); ?>
- <table><tr><th>#</th><th>Kind</th><th>Listing</th><th>Detail</th><th>Resolve</th></tr>
- <?php foreach ($items as $it): $d = json_decode($it['detail'], true) ?: array(); ?>
-  <tr>
+ <?php $items = $db->query(
+     "SELECT q.*, l.source_url, l.title AS listing_title, l.area_key AS cur_area
+        FROM listing_review_queue q LEFT JOIN listings l ON l.id = q.listing_id
+       WHERE q.status='open' ORDER BY q.id DESC LIMIT 500")->fetchAll(); ?>
+ <script>function selAll(m){document.querySelectorAll('.rchk').forEach(c=>c.checked=m.checked);}</script>
+ <!-- bulk form (buttons here; checkboxes below reference it via form=) -->
+ <form method="post" id="bulkform"><input type="hidden" name="do" value="bulk_review">
+   <div style="position:sticky;top:0;background:#fff;padding:8px 0;border-bottom:2px solid #1677ff;z-index:5;display:flex;gap:8px;align-items:center">
+     <label><input type="checkbox" onclick="selAll(this)"> select all</label>
+     <button name="resolution" value="apply" style="background:#1677ff;color:#fff">✓ Apply selected</button>
+     <button name="resolution" value="dismiss">✕ Dismiss selected</button>
+     <span class="muted"><?= count($items) ?> open</span>
+   </div>
+ </form>
+ <table><tr><th></th><th>#</th><th>Kind</th><th>Listing</th><th>Source</th><th>Detail</th><th>Resolve one</th></tr>
+ <?php foreach ($items as $it): $d = json_decode($it['detail'], true) ?: array();
+   $place = $d['new_place_key'] ?? ''; ?>
+  <tr<?= $place ? ' style="background:#f3fbf4"' : '' ?>>
+   <td><input type="checkbox" class="rchk" form="bulkform" name="ids[]" value="<?= $it['id'] ?>"></td>
    <td><?= $it['id'] ?></td>
-   <td><code><?= esc($it['kind']) ?></code></td>
-   <td><?= $it['listing_id'] ? '#'.$it['listing_id'] : '<span class="muted">new</span>' ?></td>
-   <td style="max-width:380px"><?= esc(json_encode($d, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)) ?></td>
-   <td>
-    <form method="post" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+   <td><code><?= esc($it['kind']) ?></code><?php if ($place): ?><br><span style="font-size:11px;color:#0c7c84">place ✓</span><?php endif; ?></td>
+   <td><?= $it['listing_id'] ? '#'.$it['listing_id'] : '<span class="muted">new</span>' ?>
+       <?php if (!empty($it['listing_title'])): ?><br><span style="font-size:11px;color:#666"><?= esc(mb_strimwidth($it['listing_title'],0,40,'…')) ?></span><?php endif; ?></td>
+   <td><?php if (!empty($it['source_url'])): ?><a href="<?= esc($it['source_url']) ?>" target="_blank" rel="noopener">↗ check</a><?php else: ?><span class="muted">—</span><?php endif; ?></td>
+   <td style="max-width:340px;font-size:11px"><?= esc(json_encode($d, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)) ?></td>
+   <td><form method="post" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0">
      <input type="hidden" name="do" value="review_resolve"><input type="hidden" name="review_id" value="<?= $it['id'] ?>">
      <?php if (in_array($it['kind'], array('unmapped_area','area_flip'))): ?>
        <select name="area_key"><?= area_options($areas, $d['new_area_key'] ?? '') ?></select>
-       <button name="resolution" value="apply">Apply area</button>
-     <?php elseif ($it['kind']==='price_surprise'): ?>
-       <button name="resolution" value="apply">Accept new price</button>
      <?php endif; ?>
-     <button name="resolution" value="dismiss">Dismiss</button>
-    </form>
-   </td>
+     <button name="resolution" value="apply">apply</button>
+     <button name="resolution" value="dismiss">dismiss</button>
+   </form></td>
   </tr>
- <?php endforeach; if (!$items) echo '<tr><td colspan="5" class="muted">Queue is empty. 🎉</td></tr>'; ?>
+ <?php endforeach; if (!$items) echo '<tr><td colspan="7" class="muted">Queue is empty. 🎉</td></tr>'; ?>
  </table>
+ <p class="muted" style="margin-top:8px">Rows tinted green resolved to a specific <strong>Place</strong> (high confidence). Bare area guesses (no place) on thin descriptions are the unreliable ones — spot-check via ↗, or dismiss and let the corrected re-extract redo them.</p>
+ <p class="muted" style="margin-top:8px">Rows tinted green resolved to a specific <strong>Place</strong> (high confidence). Bare area guesses (no place) on thin descriptions are the unreliable ones — spot-check via ↗, or dismiss and let the corrected re-extract redo them.</p>
 
 <?php elseif ($tab === 'aliases'): ?>
  <h2>Add area alias</h2>

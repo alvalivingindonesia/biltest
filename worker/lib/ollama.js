@@ -69,6 +69,35 @@ function cleanLocation(parsed, geo) {
   return { area_key: area || 'unknown', place, tags, certificate, confidence };
 }
 
+// Corroboration: an 8B model hallucinates an area (esp. "north_lombok") when the
+// text is thin. Only trust a location that actually appears in the listing text.
+function corroborate(loc, geo, hay) {
+  hay = ' ' + String(hay || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ') + ' ';
+  // place text actually appears in the listing?
+  let placeOk = false;
+  if (loc.place) {
+    const words = loc.place.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4);
+    placeOk = words.length > 0 && words.some((w) => hay.includes(' ' + w) || hay.includes(w + ' '));
+  }
+  if (!placeOk) loc.place = '';
+  // is that place one WE KNOW (resolves to a place_key)? Only a known place may
+  // vouch for the Area — an arbitrary village in the text must not.
+  const pl = (loc.place || '').toLowerCase();
+  const placeKnown = pl !== '' && (
+    (geo.places || []).some((p) => { const k = String(p.label || p.place_key || '').toLowerCase(); return k && (pl.includes(k) || k.includes(pl)); }) ||
+    (geo.aliases || []).some((a) => a.place_key && a.alias_text && pl.includes(a.alias_text.toLowerCase()))
+  );
+  // area name / alias appears in the text?
+  const names = [String(loc.area_key || '').replace(/_/g, ' ')];
+  (geo.aliases || []).forEach((a) => { if (a.area_key === loc.area_key && a.alias_text) names.push(a.alias_text); });
+  (geo.areas || []).forEach((a) => { if (a.key === loc.area_key && a.label) names.push(a.label); });
+  const areaOk = names.some((n) => n && n.length >= 3 && hay.includes(' ' + n.toLowerCase() + ' '));
+  // Trust the Area only if its name is in the text OR a KNOWN place vouches for it.
+  if (!areaOk && !placeKnown) loc.area_key = 'unknown';
+  loc.corroborated = areaOk || placeKnown;
+  return loc;
+}
+
 // ── Mode A: location + tags + certificate from stored description ──────
 export async function extractLocationTags(title, description, geo) {
   if (!ENABLED) return null;
@@ -95,7 +124,8 @@ TITLE: ${title}
 DESCRIPTION: ${text}`;
   const parsed = await chat(prompt);
   if (!parsed) return null;
-  return cleanLocation(parsed, geo || {});
+  const loc = cleanLocation(parsed, geo || {});
+  return corroborate(loc, geo || {}, (title || '') + ' ' + text);
 }
 
 // ── Mode B: full extraction from crawl-time signals (JSON-LD as hints) ──
@@ -137,7 +167,8 @@ TITLE: ${s.title || ''}
 PAGE TEXT: ${String(s.visible_text || s.description || '').slice(0, 4000)}`;
   const parsed = await chat(prompt);
   if (!parsed) return null;
-  const loc = cleanLocation(parsed, geo || {});
+  let loc = cleanLocation(parsed, geo || {});
+  loc = corroborate(loc, geo || {}, (s.title || '') + ' ' + String(s.visible_text || s.description || ''));
   const num = (v) => (v === null || v === undefined || v === '' ? null : parseInt(String(v).replace(/[^\d]/g, ''), 10) || null);
   const unit = ({ per_are: '/are', per_m2: '/m²', total: 'Total' })[parsed.price_unit] || 'Total';
   return {

@@ -207,22 +207,20 @@ function handle_post_location() {
     if (!$area && $llm_area !== '' && $llm_area !== 'unknown' && lc_area_exists($db, $llm_area)) $area = $llm_area;
     if ($place && !$area) $area = lc_place_area($db, $place);
 
+    // The Worker only posts CORROBORATED locations (the place/area actually
+    // appears in the listing text — ADR 0009), so we auto-apply them, even over
+    // an existing keyword-derived area. Admin-locked fields are never touched,
+    // and uncorroborated guesses never reach here (the Worker skips them), so
+    // the review queue is no longer flooded with routine area changes.
     $set = array(); $par = array(); $changed = array();
     if ($area && !lc_is_locked($locked, 'area_key')) {
-        if (empty($existing['area_key']) || $existing['area_key'] === $area) {
-            if ((string)$existing['area_key'] !== (string)$area) { lc_record_revision($db, $id, 'area_key', $existing['area_key'], $area, 'extractor'); $changed[] = 'area_key'; }
-            $set[] = "area_key = ?"; $par[] = $area;
-            if ($place && !lc_is_locked($locked, 'place_key')) {
-                if ((string)$existing['place_key'] !== (string)$place) { lc_record_revision($db, $id, 'place_key', $existing['place_key'], $place, 'extractor'); $changed[] = 'place_key'; }
-                $set[] = "place_key = ?"; $par[] = $place;
-            }
-            if ($llm_place !== '' && !lc_is_locked($locked, 'location_detail')) { $set[] = "location_detail = ?"; $par[] = $llm_place; }
-        } else {
-            // genuine conflict with a curated/different area → review, don't overwrite
-            lc_queue_review($db, $id, 'area_flip', array('old_area_key' => $existing['area_key'], 'new_area_key' => $area, 'new_place_key' => $place, 'evidence' => 'extractor', 'place' => $llm_place));
+        if ((string)$existing['area_key'] !== (string)$area) { lc_record_revision($db, $id, 'area_key', $existing['area_key'], $area, 'extractor'); $changed[] = 'area_key'; }
+        $set[] = "area_key = ?"; $par[] = $area;
+        if ($place && !lc_is_locked($locked, 'place_key')) {
+            if ((string)$existing['place_key'] !== (string)$place) { lc_record_revision($db, $id, 'place_key', $existing['place_key'], $place, 'extractor'); $changed[] = 'place_key'; }
+            $set[] = "place_key = ?"; $par[] = $place;
         }
-    } elseif (!$area) {
-        lc_queue_review($db, $id, 'unmapped_area', array('place' => $llm_place, 'title' => $existing['title']));
+        if ($llm_place !== '' && !lc_is_locked($locked, 'location_detail')) { $set[] = "location_detail = ?"; $par[] = $llm_place; }
     }
     // Certificate (e.g. the LLM found "SHM" in the text) — mapped + lock-guarded.
     if (!empty($d['certificate_text']) && !lc_is_locked($locked, 'certificate_type_key')) {
@@ -410,13 +408,15 @@ function handle_post_listing() {
         // Area/Place: auto-apply only if previously empty or unchanged; a flip
         // goes to review. A resolved Place is applied with its Area.
         if (!lc_is_locked($locked, 'area_key') && $resolved_area) {
-            if (empty($existing['area_key']) || $existing['area_key'] === $resolved_area) {
+            // Auto-apply when empty/unchanged OR when the LLM corroborated a place
+            // ($llm_place set) — only a keyword-only disagreement goes to review.
+            if (empty($existing['area_key']) || $existing['area_key'] === $resolved_area || $llm_place !== '') {
                 $apply('area_key', $resolved_area);
                 if ($resolved_place && $ext_cols) $apply('place_key', $resolved_place);
             } else {
                 lc_queue_review($db, $id, 'area_flip', array(
                     'old_area_key' => $existing['area_key'], 'new_area_key' => $resolved_area,
-                    'new_place_key' => $resolved_place, 'evidence' => 'extractor',
+                    'new_place_key' => $resolved_place, 'evidence' => 'keyword',
                     'place' => $llm_place, 'source_url' => $source_url,
                 ));
             }
