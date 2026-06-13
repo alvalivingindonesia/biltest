@@ -87,38 +87,38 @@ async function recheck(ctx, rechecks) {
           log('gone → expired', r.id, r.source_url);
         } else {
           const facts = await SITES[site].extractDetail(page, r.source_url);
-
-          // LLM full extraction from the PAGE text (ADR 0009): recover the real
-          // title + full description when the site selectors only got the generic
-          // breadcrumb / thin text, plus location/tags. Price/size stay
-          // deterministic (kept from the site extractor). Runs BEFORE the hash so
-          // better data triggers an update instead of being skipped.
-          if (ollamaEnabled() && GEO) {
-            const ex = await extractListing({ title: facts.title, description: facts.description, visible_text: pg.text }, GEO);
-            if (ex) {
-              if (ex.title && isGenericTitle(facts.title) && !isGenericTitle(ex.title)) facts.title = ex.title;
-              if (ex.description && ex.description.length > (facts.description || '').length) facts.description = ex.description;
-              facts.llm_area_key = ex.llm_area_key;
-              facts.llm_place = ex.llm_place;
-              if (ex.tags && ex.tags.length) facts.tags = ex.tags;
-              if (ex.certificate_text) facts.certificate_text = ex.certificate_text;
-              facts.extraction_method = 'llm';
-              facts.extraction_confidence = ex.extraction_confidence;
-            }
-          }
-
           if (!facts.title) {
             await api.postLiveness({ listing_id: r.id, state: 'failed' }); failed++;
             log('no title (skip)', r.id, r.source_url);
           } else {
-            // Content-hash gate: unchanged seller text since last extraction → liveness only.
-            const hash = sourceHash(facts.title, facts.description);
-            if (r.source_hash && r.source_hash === hash) {
+            const siteHash = sourceHash(facts.title, facts.description);
+            // Run the LLM only when there's something to fix or recover: a generic
+            // scraped title, a thin description, or content that changed since last
+            // time. Good, unchanged listings skip straight to liveness-only.
+            const needsLLM = isGenericTitle(facts.title) || (facts.description || '').length < 120
+              || !r.source_hash || r.source_hash !== siteHash;
+            if (!needsLLM) {
               await api.postLiveness({ listing_id: r.id, state: 'present' });
               present++;
               log('unchanged (liveness only)', r.id);
             } else {
-              facts.source_hash = hash;
+              // LLM full extraction from the PAGE text (ADR 0009): recover the real
+              // title + full description the site selectors missed, plus location/
+              // tags. Price/size stay deterministic (kept from the site extractor).
+              if (ollamaEnabled() && GEO) {
+                const ex = await extractListing({ title: facts.title, description: facts.description, visible_text: pg.text }, GEO);
+                if (ex) {
+                  if (ex.title && isGenericTitle(facts.title) && !isGenericTitle(ex.title)) facts.title = ex.title;
+                  if (ex.description && ex.description.length > (facts.description || '').length) facts.description = ex.description;
+                  facts.llm_area_key = ex.llm_area_key;
+                  facts.llm_place = ex.llm_place;
+                  if (ex.tags && ex.tags.length) facts.tags = ex.tags;
+                  if (ex.certificate_text) facts.certificate_text = ex.certificate_text;
+                  facts.extraction_method = 'llm';
+                  facts.extraction_confidence = ex.extraction_confidence;
+                }
+              }
+              facts.source_hash = sourceHash(facts.title, facts.description);
               facts.listing_id = r.id; // authoritative — server UPDATES this row
               facts.source_site = site;
               if (r.source_listing_id) facts.source_listing_id = r.source_listing_id;
