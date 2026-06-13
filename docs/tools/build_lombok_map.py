@@ -206,8 +206,10 @@ CLUSTERS = {
 # Frame a set of dots at the map's aspect ratio, coast near the BOTTOM and the
 # extra height filled with land to the NORTH (so little/no water shows below).
 ASPECT = W / H
-def aspect_box_north(xs, ys, padx, water_below, top_pad):
-    x0 = min(xs) - padx; x1 = max(xs) + padx; w = x1 - x0
+def aspect_box_north(xs, ys, padx, water_below, top_pad, pad_right=0):
+    # pad_right adds room east of the dots for the diagonal labels, which ascend
+    # up-right from each marker.
+    x0 = min(xs) - padx; x1 = max(xs) + padx + pad_right; w = x1 - x0
     ybot = max(ys) + water_below; ytop = min(ys) - top_pad
     h = max(w / ASPECT, ybot - ytop)
     w2 = h * ASPECT
@@ -225,7 +227,7 @@ for ck, cfg in CLUSTERS.items():
         if pv['a'] in cfg['members']:
             dotxs.append(pv['p'][0]); dotys.append(pv['p'][1])
     # Tight cluster zoom: just this cluster's dots, coast at the bottom.
-    zoom = aspect_box_north(dotxs, dotys, 16, 14, 30)
+    zoom = aspect_box_north(dotxs, dotys, 14, 12, 34, pad_right=34)
     # Label sits over the zone, with a small high/low/high stagger so the three
     # adjacent labels don't collide (they're too wide for one row).
     LABEL_DX = {'selong_belanak_bays': 14, 'kuta_mandalika': 0, 'south_east': -6}
