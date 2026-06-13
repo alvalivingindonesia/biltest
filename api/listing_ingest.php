@@ -177,6 +177,21 @@ function handle_serve_text() {
     json_out(array('ok' => true, 'rows' => $rows, 'next_after_id' => $next, 'count' => count($rows)));
 }
 
+// Record a place the Extractor named but that resolved to no Area/Place — into
+// the deduped unmapped_places tally (Ingest Console "Unmapped" tab), NOT the
+// review queue. No-op pre-migration.
+function ingest_record_unmapped($db, $place, $listing_id) {
+    $p = trim(mb_strtolower((string)$place, 'UTF-8'));
+    if ($p === '' || $p === '?') return;
+    $p = mb_substr($p, 0, 120);
+    try {
+        $db->prepare(
+            "INSERT INTO unmapped_places (place_text, sample_listing_id, cnt) VALUES (?, ?, 1)
+             ON DUPLICATE KEY UPDATE cnt = cnt + 1, sample_listing_id = COALESCE(VALUES(sample_listing_id), sample_listing_id)"
+        )->execute(array($p, $listing_id ?: null));
+    } catch (Exception $e) { /* table absent pre-migration */ }
+}
+
 // =====================================================================
 // POST LOCATION — Mode A sink: update only place/area (+ tags) for one
 // listing from a stored-text re-extraction. Never touches price/size/title.
@@ -221,6 +236,9 @@ function handle_post_location() {
             $set[] = "place_key = ?"; $par[] = $place;
         }
         if ($llm_place !== '' && !lc_is_locked($locked, 'location_detail')) { $set[] = "location_detail = ?"; $par[] = $llm_place; }
+    } elseif (!$area && $llm_place !== '') {
+        // Named place we can't resolve → tally for one-time admin mapping.
+        ingest_record_unmapped($db, $llm_place, $id);
     }
     // Certificate (e.g. the LLM found "SHM" in the text) — mapped + lock-guarded.
     if (!empty($d['certificate_text']) && !lc_is_locked($locked, 'certificate_type_key')) {
@@ -422,8 +440,8 @@ function handle_post_listing() {
             }
         } elseif ($resolved_place && $ext_cols && !lc_is_locked($locked, 'place_key') && $existing['area_key'] === $resolved_area) {
             $apply('place_key', $resolved_place); // same Area, just refine the Place
-        } elseif (!$resolved_area && empty($existing['area_key'])) {
-            lc_queue_review($db, $id, 'unmapped_area', array('place' => $llm_place, 'candidates' => $loc_candidates, 'source_url' => $source_url));
+        } elseif (!$resolved_area && $llm_place !== '') {
+            ingest_record_unmapped($db, $llm_place, $id);
         }
 
         // Title: take the scraped one, but never replace a real title with a
@@ -483,9 +501,9 @@ function handle_post_listing() {
     }
 
     // ── New listing ─────────────────────────────────────────────────
-    if (!$resolved_area) {
-        // ingest with NULL area but flag it so it never silently becomes praya
-        lc_queue_review($db, null, 'unmapped_area', array('candidates' => $loc_candidates, 'source_url' => $source_url, 'title' => $title));
+    if (!$resolved_area && $llm_place !== '') {
+        // ingest with NULL area but tally the unmapped place for one-time mapping
+        ingest_record_unmapped($db, $llm_place, null);
     }
     if ($price['flagged']) {
         lc_queue_review($db, null, 'per_are_no_size', array('unit_label' => $unit_label, 'raw_amount' => $idr_amount, 'title' => $title, 'source_url' => $source_url));

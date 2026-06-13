@@ -141,6 +141,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['do'])) {
             $db->prepare("DELETE FROM area_aliases WHERE id=?")->execute(array((int)$_POST['alias_id']));
             $flash = "Alias deleted.";
         }
+        elseif ($do === 'map_unmapped') {
+            // Map an unmapped place → area (and optional place), then drop the tally row.
+            $place = trim($_POST['place_text'] ?? '');
+            $ak = trim($_POST['area_key'] ?? '');
+            $pk = trim($_POST['place_key'] ?? '');
+            $norm = lc_normalize_area_text($place);
+            if ($norm !== '' && $ak !== '') {
+                $db->prepare("INSERT INTO area_aliases (alias_text, area_key, place_key) VALUES (?,?,?) ON DUPLICATE KEY UPDATE area_key=VALUES(area_key), place_key=VALUES(place_key)")
+                   ->execute(array($norm, $ak, $pk !== '' ? $pk : null));
+                $db->prepare("DELETE FROM unmapped_places WHERE place_text=?")->execute(array(mb_strtolower($place, 'UTF-8')));
+                $flash = "Mapped '$norm' → $ak" . ($pk !== '' ? " / $pk" : "") . ". Re-run reextract to apply to listings.";
+            } else { $flash = "Pick an area."; }
+            if ($ajax) $ic_json(array('ok' => $norm !== '' && $ak !== '', 'place' => $place));
+        }
+        elseif ($do === 'unmapped_dismiss') {
+            $db->prepare("DELETE FROM unmapped_places WHERE place_text=?")->execute(array(mb_strtolower(trim($_POST['place_text'] ?? ''), 'UTF-8')));
+            $flash = "Dismissed.";
+            if ($ajax) $ic_json(array('ok' => true, 'place' => trim($_POST['place_text'] ?? '')));
+        }
         elseif ($do === 'discovery_add') {
             $db->prepare("INSERT INTO discovery_sources (source_site, label, search_url, max_pages, is_active) VALUES (?,?,?,?,1) ON DUPLICATE KEY UPDATE label=VALUES(label), source_site=VALUES(source_site), max_pages=VALUES(max_pages)")
                ->execute(array(trim($_POST['source_site']), trim($_POST['label']), trim($_POST['search_url']), max(1,(int)$_POST['max_pages'])));
@@ -188,7 +207,9 @@ function area_options($areas, $sel='') {
 }
 $counts = array(
   'review' => (int)$db->query("SELECT COUNT(*) FROM listing_review_queue WHERE status='open'")->fetchColumn(),
+  'unmapped' => 0,
 );
+try { $counts['unmapped'] = (int)$db->query("SELECT COUNT(*) FROM unmapped_places")->fetchColumn(); } catch (Exception $e) {}
 ?>
 <!doctype html><meta charset="utf-8"><title>Ingest console</title>
 <style>
@@ -207,6 +228,7 @@ $counts = array(
 <header>
  <strong>Ingest console</strong>
  <a href="?tab=review" class="<?= $tab==='review'?'on':'' ?>">Review <span class="pill"><?= $counts['review'] ?></span></a>
+ <a href="?tab=unmapped" class="<?= $tab==='unmapped'?'on':'' ?>">Unmapped <span class="pill"><?= $counts['unmapped'] ?></span></a>
  <a href="?tab=aliases" class="<?= $tab==='aliases'?'on':'' ?>">Area aliases</a>
  <a href="?tab=discovery" class="<?= $tab==='discovery'?'on':'' ?>">Discovery</a>
  <a href="?tab=agents" class="<?= $tab==='agents'?'on':'' ?>">Agents</a>
@@ -294,6 +316,55 @@ $counts = array(
      document.body.appendChild(n); setTimeout(function(){n.remove();},1700); }
  })();
  </script>
+
+<?php elseif ($tab === 'unmapped'): ?>
+ <h2>Unmapped places — name each once, then re-run reextract</h2>
+ <?php
+   $ups = array(); $up_ok = true;
+   try { $ups = $db->query("SELECT u.*, l.source_url FROM unmapped_places u LEFT JOIN listings l ON l.id=u.sample_listing_id ORDER BY u.cnt DESC, u.updated_at DESC LIMIT 400")->fetchAll(); }
+   catch (Exception $e) { $up_ok = false; }
+   $places = array();
+   try { $places = $db->query("SELECT place_key, label, area_key FROM places WHERE is_active=1 ORDER BY area_key, label")->fetchAll(); } catch (Exception $e) {}
+ ?>
+ <?php if (!$up_ok): ?>
+   <p class="muted">Run <code>migrations/2026_06_13_unmapped_places.sql</code> in phpMyAdmin to enable this tab.</p>
+ <?php else: ?>
+ <p class="muted">Each row is a place the Extractor read but couldn't resolve, with how many listings hit it. Map the recurring ones to an Area (e.g. <code>tumpak → are_guling</code>); dismiss the one-offs. After mapping, re-run <code>npm run reextract</code> to apply it.</p>
+ <table><tr><th>count</th><th>place (as read)</th><th>example</th><th>map → area (+ optional place)</th><th></th></tr>
+ <?php foreach ($ups as $u): ?>
+  <tr>
+   <td><strong><?= (int)$u['cnt'] ?>×</strong></td>
+   <td><?= esc($u['place_text']) ?></td>
+   <td><?php if (!empty($u['source_url'])): ?><a href="<?= esc($u['source_url']) ?>" target="_blank" rel="noopener">↗ #<?= (int)$u['sample_listing_id'] ?></a><?php else: ?><span class="muted">—</span><?php endif; ?></td>
+   <td><form method="post" class="umap" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0">
+     <input type="hidden" name="do" value="map_unmapped"><input type="hidden" name="place_text" value="<?= esc($u['place_text']) ?>">
+     <select name="area_key" required><?= area_options($areas) ?></select>
+     <select name="place_key"><option value="">— place (optional) —</option><?php foreach ($places as $p): ?><option value="<?= esc($p['place_key']) ?>"><?= esc($p['label']) ?> (<?= esc($p['area_key']) ?>)</option><?php endforeach; ?></select>
+     <button>Map</button>
+   </form></td>
+   <td><form method="post" class="udismiss" style="margin:0"><input type="hidden" name="do" value="unmapped_dismiss"><input type="hidden" name="place_text" value="<?= esc($u['place_text']) ?>"><button>dismiss</button></form></td>
+  </tr>
+ <?php endforeach; if (empty($ups)) echo '<tr><td colspan="5" class="muted">No unmapped places. 🎉</td></tr>'; ?>
+ </table>
+ <script>
+ (function(){
+   document.addEventListener('submit', async function(e){
+     var f = e.target;
+     if (!f.classList.contains('umap') && !f.classList.contains('udismiss')) return;
+     e.preventDefault();
+     var fd = new FormData(f); fd.append('ajax','1');
+     if (e.submitter && e.submitter.name) fd.append(e.submitter.name, e.submitter.value);
+     try {
+       var res = await fetch('ingest_console.php?tab=unmapped', { method:'POST', body: fd });
+       var j = await res.json();
+       if (j.ok) { if (f.closest('tr')) f.closest('tr').remove(); t(f.classList.contains('umap')?'Mapped ✓':'Dismissed ✓'); }
+       else { t('Pick an area'); }
+     } catch(err){ t('Error'); }
+   });
+   function t(m){ var n=document.createElement('div'); n.textContent=m; n.style.cssText='position:fixed;right:18px;bottom:18px;background:#093;color:#fff;padding:8px 14px;border-radius:8px;font:13px system-ui;z-index:9'; document.body.appendChild(n); setTimeout(function(){n.remove();},1700); }
+ })();
+ </script>
+ <?php endif; ?>
 
 <?php elseif ($tab === 'aliases'): ?>
  <h2>Add area alias</h2>

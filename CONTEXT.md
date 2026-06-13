@@ -53,6 +53,18 @@ the site name a spot precisely without cluttering the map. Table: `places` (`pla
 `label`, parent `area_key`).
 _Avoid_: calling a Place an Area; storing a Place only as free-text `location_detail`.
 
+**Cluster**:
+A named geographic grouping of neighbouring Areas, used **only** by the interactive
+map to add an intermediate zoom step in dense regions (e.g. the South Lombok coast).
+The map flow is Region → Cluster → Area: tapping a Cluster zooms to its stretch of coast
+and reveals the member Area markers. A Cluster is a *presentation* concept — it has no
+table, no listing column, and never changes how an Area or Place is stored or filtered;
+a listing belongs to a Cluster only by virtue of its Area being a member. Cluster names
+are distinct from Area names (the "Kuta–Mandalika" Cluster is not the "Kuta" Area).
+Membership and zoom boxes are curated, not data-driven (the map is a hand-traced SVG, no
+coordinates exist in the DB).
+_Avoid_: sub-region, kabupaten; do not give a Cluster the same name as a member Area.
+
 **Display Currency**:
 The currency a visitor chooses to *view* listing and development prices in (IDR, USD,
 EUR, AUD). A presentation setting only — it never changes what a listing costs or how
