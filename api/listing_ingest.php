@@ -214,8 +214,13 @@ function handle_post_listing() {
         $locked = $existing['locked_fields'];
         $set = array(); $par = array();
 
-        $apply = function($col, $val) use (&$set, &$par, $locked) {
+        // Fields whose changes are NOT worth recording in the history panel.
+        $no_history = array('photo_urls', 'short_description', 'price_idr_per_sqm', 'price_label', 'land_size_are');
+        $apply = function($col, $val) use (&$set, &$par, $locked, $db, $id, $existing, $no_history) {
             if (lc_is_locked($locked, $col)) return;
+            if (!in_array($col, $no_history, true)) {
+                lc_record_revision($db, $id, $col, isset($existing[$col]) ? $existing[$col] : null, $val, 'worker');
+            }
             $set[] = "$col = ?"; $par[] = $val;
         };
 
@@ -229,6 +234,7 @@ function handle_post_listing() {
                 ));
                 // keep old price; still refresh per-sqm/label provenance
             } else {
+                lc_record_revision($db, $id, 'price_idr', $existing['price_idr'], $new_idr, 'worker');
                 $set[] = "price_idr = ?";          $par[] = $new_idr;
                 $set[] = "price_review_flag = ?";  $par[] = $price['flagged'];
                 if ($price['flagged']) {

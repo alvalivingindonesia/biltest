@@ -536,6 +536,36 @@ function lc_locked_set($csv) {
 function lc_is_locked($csv, $field) {
     return in_array($field, lc_locked_set($csv), true);
 }
+/** Add a field to a listing's locked_fields so the Worker stops overwriting it. */
+function lc_lock_field($db, $listing_id, $field) {
+    $st = $db->prepare("SELECT locked_fields FROM listings WHERE id = ?");
+    $st->execute(array($listing_id));
+    $set = lc_locked_set($st->fetchColumn());
+    if (!in_array($field, $set, true)) {
+        $set[] = $field;
+        $db->prepare("UPDATE listings SET locked_fields = ? WHERE id = ?")
+           ->execute(array(implode(',', $set), $listing_id));
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// CHANGE HISTORY (admin review/revert panel)
+// ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Record one field change (old→new) for a listing. No-op when nothing changed
+ * or the table is absent. Keep this to meaningful content fields, not liveness
+ * timestamps.
+ */
+function lc_record_revision($db, $listing_id, $field, $old, $new, $source = 'worker') {
+    $o = $old === null ? null : (string)$old;
+    $n = $new === null ? null : (string)$new;
+    if ($o === $n) return;
+    try {
+        $db->prepare("INSERT INTO listing_revisions (listing_id, field, old_value, new_value, source) VALUES (?, ?, ?, ?, ?)")
+           ->execute(array($listing_id, $field, $o, $n, $source));
+    } catch (Exception $e) { /* table not migrated yet — ignore */ }
+}
 
 // ─────────────────────────────────────────────────────────────────────
 // AGENT RESOLUTION (cross-portal identity — docs/adr/0008)
