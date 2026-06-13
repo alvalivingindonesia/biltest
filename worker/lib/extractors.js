@@ -19,6 +19,10 @@ const GONE_MARKERS = [
   // inactive/expired ad banners (Rumah123: "Iklan ini sudah tidak aktif",
   // "Iklan ini tidak aktif dan belum diperbarui oleh pemilik iklan")
   'tidak aktif', 'sudah tidak aktif', 'belum diperbarui', 'iklan ini sudah',
+  // OLX serves a not-found/search page (HTTP 200, same /item/ URL) for removed
+  // ads: "tidak menemukan apa pun yang cocok dengan pencarian ini … cek
+  // kesalahan ejaan".
+  'menemukan apa pun yang cocok', 'cek kesalahan ejaan',
 ];
 
 // Pull all JSON-LD blocks + a bit of context from any page.
