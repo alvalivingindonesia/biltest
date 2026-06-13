@@ -13,6 +13,7 @@
     "discover": "node listing-worker.js --discover-only",
     "reputation": "node listing-worker.js --reputation",
     "reextract": "node listing-worker.js --reextract",
+    "recrawl-thin": "node listing-worker.js --recrawl-thin --headful",
     "ping": "node listing-worker.js --ping",
     "postinstall": "playwright install chromium"
   },

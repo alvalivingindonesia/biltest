@@ -32,4 +32,5 @@ export const api = {
   geography:           ()       => call('geography', {}),
   serveText:           (after, limit) => call('serve_text', { after_id: after, limit }),
   postLocation:        (p)      => call('post_location', p),
+  pullRecrawl:         (after, limit) => call('pull_recrawl', { after_id: after, limit }),
 };

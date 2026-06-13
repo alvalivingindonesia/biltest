@@ -293,6 +293,31 @@ async function reextractLocations() {
     return;
   }
 
+  if (ARGS.has('--recrawl-thin')) {
+    // Targeted Mode B: re-crawl ONLY listings with thin/no-location stored data,
+    // so the LLM recovers the real title + full description from the live page.
+    log('RECRAWL-THIN starting (thin/no-location listings only)', { HEADFUL });
+    if (ollamaEnabled()) { try { GEO = await api.geography(); log('geography:', (GEO.areas || []).length, 'areas,', (GEO.places || []).length, 'places'); } catch (e) { log('geography fetch failed', e.message); } }
+    const browser = await chromium.launch(LAUNCH_OPTS);
+    const ctx = await newContext(browser);
+    try {
+      let after = 0, totals = { present: 0, gone: 0, failed: 0 }, n = 0;
+      while (true) {
+        const work = await api.pullRecrawl(after, 200);
+        if (!work.rows.length) break;
+        log('recrawl batch:', work.rows.length, 'listings (after id', after + ')');
+        const rc = await recheck(ctx, work.rows);
+        totals.present += rc.present; totals.gone += rc.gone; totals.failed += rc.failed; n += work.rows.length;
+        after = work.next_after_id;
+      }
+      log('RECRAWL-THIN COMPLETE', { pulled: n, ...totals });
+    } finally {
+      await ctx.close();
+      await browser.close();
+    }
+    return;
+  }
+
   // Fetch geography once for LLM location enrichment (Mode B).
   if (ollamaEnabled()) { try { GEO = await api.geography(); log('geography:', (GEO.areas || []).length, 'areas,', (GEO.places || []).length, 'places'); } catch (e) { log('geography fetch failed', e.message); } }
 

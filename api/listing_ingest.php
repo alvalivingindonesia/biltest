@@ -99,6 +99,7 @@ switch ($action) {
     case 'geography':     handle_geography(); break;       // areas + places + aliases for the Extractor prompt
     case 'serve_text':    handle_serve_text(); break;       // Mode A source: stored {id,title,description}
     case 'post_location': handle_post_location(); break;    // Mode A sink: location/place/tags only
+    case 'pull_recrawl':  handle_pull_recrawl(); break;     // targeted Mode B: only thin/no-location listings
     default:              json_error(400, 'Unknown action.');
 }
 
@@ -138,6 +139,30 @@ function handle_pull_work() {
     $rechecks = $sel->fetchAll();
 
     json_out(array('ok' => true, 'discovery_sources' => $disc, 'rechecks' => $rechecks, 'batch' => count($rechecks)));
+}
+
+// =====================================================================
+// PULL RECRAWL — targeted Mode B: only listings whose stored data is thin /
+// has no resolved location, so a full re-crawl (real title+description via the
+// LLM) is worthwhile. Cursor by id; self-clears as descriptions fill in.
+// =====================================================================
+function handle_pull_recrawl() {
+    $db = get_db();
+    $d = get_post_data();
+    $after = isset($d['after_id']) ? (int)$d['after_id'] : 0;
+    $limit = isset($d['limit']) ? max(1, min(500, (int)$d['limit'])) : 100;
+    $hash_col = lc_col_exists($db, 'listings', 'source_hash') ? 'source_hash' : "NULL AS source_hash";
+    $st = $db->prepare(
+        "SELECT id, source_site, source_listing_id, source_url, locked_fields, $hash_col
+           FROM listings
+          WHERE status = 'active' AND source_url IS NOT NULL AND source_url <> '' AND id > ?
+            AND (description IS NULL OR CHAR_LENGTH(description) < 150 OR area_key IS NULL OR area_key = '')
+          ORDER BY id ASC LIMIT $limit"
+    );
+    $st->execute(array($after));
+    $rows = $st->fetchAll();
+    $next = $rows ? (int)$rows[count($rows) - 1]['id'] : 0;
+    json_out(array('ok' => true, 'rows' => $rows, 'next_after_id' => $next, 'count' => count($rows)));
 }
 
 // =====================================================================
