@@ -194,8 +194,8 @@ function handle_post_card_images() {
         $sid = trim((string)($c['source_listing_id'] ?? ''));
         $url = trim((string)($c['url'] ?? ''));
         $row = false;
-        if ($sid !== '') { $byId->execute(array($site, $sid)); $row = $byId->fetch(); }
-        if (!$row && $url !== '') { $byUrl->execute(array($url)); $row = $byUrl->fetch(); }
+        if ($sid !== '') { $byId->execute(array($site, $sid)); $row = $byId->fetch(); $byId->closeCursor(); }
+        if (!$row && $url !== '') { $byUrl->execute(array($url)); $row = $byUrl->fetch(); $byUrl->closeCursor(); }
         if (!$row) continue;
         $matched++;
         $cur = trim((string)$row['photo_urls']);

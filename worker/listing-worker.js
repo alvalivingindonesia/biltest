@@ -315,8 +315,20 @@ async function reextractLocations() {
           const url = src.search_url + (src.search_url.includes('?') ? '&' : '?') + 'page=' + p;
           const page = await ctx.newPage();
           let cards = [];
-          try { const nav = await goto(page, url); if (!nav.failed) cards = await extractSearchCards(page, site); }
-          catch (e) { log('cards error', url, e.message); }
+          try {
+            const nav = await goto(page, url);
+            if (!nav.failed) {
+              // scroll to trigger lazy-loaded cards + images before reading
+              try {
+                await page.evaluate(async () => {
+                  for (let y = 0; y < document.body.scrollHeight; y += 700) { window.scrollTo(0, y); await new Promise((r) => setTimeout(r, 150)); }
+                  window.scrollTo(0, 0);
+                });
+                await page.waitForTimeout(1500);
+              } catch (_) {}
+              cards = await extractSearchCards(page, site);
+            }
+          } catch (e) { log('cards error', url, e.message); }
           finally { await page.close(); }
           if (!cards.length) { log('images', site, 'p' + p, 'no cards — end of source'); break; }
           const payload = cards.map((c) => ({ source_listing_id: SITES[site].idFromUrl(c.url), url: c.url, image: c.img }));
