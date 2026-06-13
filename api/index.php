@@ -1497,10 +1497,26 @@ function handle_listing_detail(string $slug): void {
     $item = $stmt->fetch();
     if (!$item) json_error(404, 'Listing not found');
 
-    // All images
+    // All images. Curated images live in listing_images; crawled listings keep
+    // them in photo_urls (sometimes as JSON-LD ImageObjects) — fall back to those.
     $i = $db->prepare("SELECT id, url, alt_text, is_primary, sort_order FROM listing_images WHERE listing_id = ? ORDER BY is_primary DESC, sort_order ASC");
     $i->execute([$item['id']]);
     $item['images'] = $i->fetchAll();
+    if (empty($item['images']) && !empty($item['photo_urls'])) {
+        $photos = json_decode($item['photo_urls'], true);
+        if (is_array($photos)) {
+            $sort = 0;
+            foreach ($photos as $p) {
+                $u = _photo_url_str($p);
+                if ($u === '') continue;
+                $item['images'][] = [
+                    'id' => null, 'url' => $u, 'alt_text' => $item['title'],
+                    'is_primary' => ($sort === 0 ? 1 : 0), 'sort_order' => $sort,
+                ];
+                $sort++;
+            }
+        }
+    }
 
     // Tags
     $t = $db->prepare("SELECT tag FROM listing_tags WHERE listing_id = ? ORDER BY tag");
@@ -1508,6 +1524,22 @@ function handle_listing_detail(string $slug): void {
     $item['tags'] = $t->fetchAll(PDO::FETCH_COLUMN);
 
     json_out(['data' => $item]);
+}
+
+/**
+ * Coerce one photo_urls entry to a plain URL string. Crawlers sometimes store
+ * schema.org JSON-LD ImageObjects ({"@type":"ImageObject","contentUrl":...})
+ * instead of bare URLs; pull the URL out of either shape so the frontend
+ * <img src> gets a string, not "[object Object]".
+ */
+function _photo_url_str($entry): string {
+    if (is_string($entry)) return trim($entry);
+    if (is_array($entry)) {
+        foreach (['contentUrl', 'url', '@id', 'image', 'src'] as $k) {
+            if (!empty($entry[$k]) && is_string($entry[$k])) return trim($entry[$k]);
+        }
+    }
+    return '';
 }
 
 /**
@@ -1535,9 +1567,13 @@ function attach_listing_primary_image(array &$items): void {
             $item['image'] = $map[$item['id']];
         } elseif (!empty($item['photo_urls'])) {
             $photos = json_decode($item['photo_urls'], true);
-            if (is_array($photos) && !empty($photos[0])) {
-                $item['image'] = ['url' => $photos[0], 'alt' => isset($item['title']) ? $item['title'] : ''];
+            $url = '';
+            if (is_array($photos)) {
+                foreach ($photos as $p) { $url = _photo_url_str($p); if ($url !== '') break; }
             }
+            $item['image'] = $url !== ''
+                ? ['url' => $url, 'alt' => isset($item['title']) ? $item['title'] : '']
+                : null;
         } else {
             $item['image'] = null;
         }

@@ -56,6 +56,20 @@ function findLd(ldArray, types) {
   return out;
 }
 
+// schema.org "image" can be a URL string, an array, or ImageObject(s)
+// ({"@type":"ImageObject","contentUrl":...}). Always emit plain URL strings so
+// photo_urls never stores objects the frontend can't render.
+function imageUrls(img) {
+  const arr = Array.isArray(img) ? img : [img];
+  return arr
+    .map((x) => {
+      if (!x) return '';
+      if (typeof x === 'string') return x.trim();
+      return String(x.contentUrl || x.url || x['@id'] || x.image || '').trim();
+    })
+    .filter(Boolean);
+}
+
 function phoneFromWa(href) {
   const m = (href || '').match(/(?:phone=|wa\.me\/)(\+?\d{6,})/);
   return m ? m[1] : '';
@@ -133,7 +147,7 @@ const lamudi = {
       desa: addr.addressRegion || '',
       district: [addr.addressLocality, addr.addressRegion].filter(Boolean).join(', '),
       listing_type: '',
-      photos: (Array.isArray(product.image) ? product.image : [product.image]).filter(Boolean).slice(0, 5).concat(pg.ogImages).slice(0, 5),
+      photos: imageUrls(product.image).concat(pg.ogImages).slice(0, 5),
       agent: {
         name: product.broker?.name || '',
         agency: product.broker?.name || '',
@@ -183,7 +197,7 @@ const rumah123 = {
       desa: addr.addressRegion || '',
       district: [addr.streetAddress, addr.addressLocality].filter(Boolean).join(', '),
       listing_type: '',
-      photos: (Array.isArray(product.image) ? product.image : [product.image]).filter(Boolean).slice(0, 5),
+      photos: imageUrls(product.image).slice(0, 5),
       agent: {
         name: product.broker?.name || product.seller?.name || '',
         agency: product.broker?.name || '',
@@ -233,7 +247,7 @@ const dotproperty = {
       desa: addr.addressRegion || '',
       district: [addr.addressLocality, addr.addressRegion].filter(Boolean).join(', '),
       listing_type: '',
-      photos: (Array.isArray(product.image) ? product.image : [product.image]).filter(Boolean).slice(0, 5),
+      photos: imageUrls(product.image).slice(0, 5),
       agent: {
         name: product.broker?.name || '',
         agency: product.broker?.name || '',
@@ -287,7 +301,7 @@ const olx = {
       desa: addr.addressRegion || '',
       district: [addr.addressLocality, addr.addressRegion].filter(Boolean).join(', '),
       listing_type: '',
-      photos: (Array.isArray(product.image) ? product.image : [product.image]).filter(Boolean).slice(0, 5).concat(pg.ogImages).slice(0, 5),
+      photos: imageUrls(product.image).concat(pg.ogImages).slice(0, 5),
       agent: {
         name: product.seller?.name || product.broker?.name || '',
         agency: '',
