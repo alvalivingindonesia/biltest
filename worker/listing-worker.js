@@ -17,7 +17,7 @@ import { createHash } from 'crypto';
 import { writeFileSync, mkdirSync } from 'fs';
 import { chromium } from 'playwright';
 import { api } from './lib/api.js';
-import { SITES, readPage, detectGone, extractSearchLinks } from './lib/extractors.js';
+import { SITES, readPage, detectGone, extractSearchLinks, isGenericTitle } from './lib/extractors.js';
 import { ollamaEnabled, extractLocationTags, extractListing } from './lib/ollama.js';
 
 const ARGS = new Set(process.argv.slice(2));
@@ -87,36 +87,39 @@ async function recheck(ctx, rechecks) {
           log('gone → expired', r.id, r.source_url);
         } else {
           const facts = await SITES[site].extractDetail(page, r.source_url);
+
+          // LLM full extraction from the PAGE text (ADR 0009): recover the real
+          // title + full description when the site selectors only got the generic
+          // breadcrumb / thin text, plus location/tags. Price/size stay
+          // deterministic (kept from the site extractor). Runs BEFORE the hash so
+          // better data triggers an update instead of being skipped.
+          if (ollamaEnabled() && GEO) {
+            const ex = await extractListing({ title: facts.title, description: facts.description, visible_text: pg.text }, GEO);
+            if (ex) {
+              if (ex.title && isGenericTitle(facts.title) && !isGenericTitle(ex.title)) facts.title = ex.title;
+              if (ex.description && ex.description.length > (facts.description || '').length) facts.description = ex.description;
+              facts.llm_area_key = ex.llm_area_key;
+              facts.llm_place = ex.llm_place;
+              if (ex.tags && ex.tags.length) facts.tags = ex.tags;
+              if (ex.certificate_text) facts.certificate_text = ex.certificate_text;
+              facts.extraction_method = 'llm';
+              facts.extraction_confidence = ex.extraction_confidence;
+            }
+          }
+
           if (!facts.title) {
-            // Loaded but no listing on the page (a not-found variant the gone
-            // markers didn't catch, or a transient parse miss) — skip + retry,
-            // never post an empty title.
             await api.postLiveness({ listing_id: r.id, state: 'failed' }); failed++;
             log('no title (skip)', r.id, r.source_url);
           } else {
-            // Content-hash gate (ADR 0009): if the seller's text is unchanged
-            // since last extraction, skip re-extraction/post — liveness only.
+            // Content-hash gate: unchanged seller text since last extraction → liveness only.
             const hash = sourceHash(facts.title, facts.description);
             if (r.source_hash && r.source_hash === hash) {
               await api.postLiveness({ listing_id: r.id, state: 'present' });
               present++;
               log('unchanged (liveness only)', r.id);
             } else {
-              // LLM location enrichment: ignores landmark refs, resolves place_key.
-              if (ollamaEnabled() && GEO) {
-                const ex = await extractLocationTags(facts.title, facts.description, GEO);
-                if (ex) {
-                  facts.llm_area_key = ex.area_key;
-                  facts.llm_place = ex.place;
-                  if (ex.tags && ex.tags.length) facts.tags = ex.tags;
-                  if (ex.certificate) facts.certificate_text = ex.certificate;
-                  facts.extraction_method = 'llm';
-                  facts.extraction_confidence = ex.confidence;
-                }
-              }
               facts.source_hash = hash;
-              // Authoritative identity so the server UPDATES this exact row.
-              facts.listing_id = r.id;
+              facts.listing_id = r.id; // authoritative — server UPDATES this row
               facts.source_site = site;
               if (r.source_listing_id) facts.source_listing_id = r.source_listing_id;
               const res = await api.postListing(facts);

@@ -73,6 +73,7 @@ function pickTitle(...cands) {
   const clean = cands.map((c) => (c == null ? '' : String(c)).trim()).filter(Boolean);
   return clean.find((c) => c.length > 6 && !GENERIC_TITLE.test(c)) || clean[0] || '';
 }
+function isGenericTitle(t) { t = String(t || '').trim(); return t.length <= 6 || GENERIC_TITLE.test(t); }
 // Best full description: JSON-LD, then an on-page description block, then body text.
 async function readDescription(page, productDescription, pageText) {
   let dom = '';
@@ -318,4 +319,4 @@ async function extractSearchLinks(page, site) {
   return [...found];
 }
 
-export { SITES, readPage, detectGone, extractSearchLinks };
+export { SITES, readPage, detectGone, extractSearchLinks, isGenericTitle };
