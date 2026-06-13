@@ -24,8 +24,9 @@ async function call(action, body) {
 }
 
 export const api = {
-  ping:         ()       => call('ping', {}),
-  pullWork:     (limit)  => call('pull_work', { limit }),
-  postListing:  (facts)  => call('post_listing', facts),
-  postLiveness: (p)      => call('post_liveness', p),
+  ping:                ()       => call('ping', {}),
+  pullWork:            (limit)  => call('pull_work', { limit }),
+  postListing:         (facts)  => call('post_listing', facts),
+  postLiveness:        (p)      => call('post_liveness', p),
+  recomputeReputation: ()       => call('recompute_reputation', {}),
 };

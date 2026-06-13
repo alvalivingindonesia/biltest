@@ -174,6 +174,10 @@ async function recheckAll(ctx) {
     const r = await api.ping(); log('ping', JSON.stringify(r)); return;
   }
 
+  if (ARGS.has('--reputation')) {
+    const r = await api.recomputeReputation(); log('reputation recomputed', JSON.stringify(r)); return;
+  }
+
   if (ARGS.has('--recheck-all')) {
     log('RECHECK-ALL one-off starting (all active listings)', { DELAY_MIN, DELAY_MAX, HEADFUL });
     const browser = await chromium.launch({ headless: !HEADFUL });
@@ -198,7 +202,10 @@ async function recheckAll(ctx) {
     let rc = { present: 0, gone: 0, failed: 0 }, dc = { imported: 0 };
     if (!ARGS.has('--discover-only')) rc = await recheck(ctx, work.rechecks);
     if (!ARGS.has('--recheck-only'))  dc = await discover(ctx, work.discovery_sources);
-    log('DONE', { recheck: rc, discovery: dc });
+    // Recompute agent reputation off the fresh listing counts (ADR 0008).
+    let rep = null;
+    try { rep = await api.recomputeReputation(); } catch (e) { log('reputation recompute failed', e.message); }
+    log('DONE', { recheck: rc, discovery: dc, reputation: rep });
   } finally {
     await ctx.close();
     await browser.close();

@@ -95,7 +95,20 @@ switch ($action) {
     case 'pull_work':     handle_pull_work(); break;
     case 'post_listing':  handle_post_listing(); break;
     case 'post_liveness': handle_post_liveness(); break;
+    case 'recompute_reputation': handle_recompute_reputation(); break;
     default:              json_error(400, 'Unknown action.');
+}
+
+// =====================================================================
+// RECOMPUTE REPUTATION — worker-triggered nightly (ADR 0008)
+// Lets the home Worker drive the reputation recompute with its own key, so no
+// separate cPanel cron / CRON_REPUTATION_TOKEN is required.
+// =====================================================================
+function handle_recompute_reputation() {
+    require_once(__DIR__ . '/reputation.php');
+    $db = get_db();
+    $n = bil_recompute_reputation($db);
+    json_out(array('ok' => true, 'agents' => $n));
 }
 
 // =====================================================================
