@@ -34,4 +34,6 @@ export const api = {
   postLocation:        (p)      => call('post_location', p),
   pullRecrawl:         (after, limit) => call('pull_recrawl', { after_id: after, limit }),
   postCardImages:      (site, cards, refresh) => call('post_card_images', { source_site: site, cards, refresh: !!refresh }),
+  postSweep:           (site, p)      => call('post_sweep', { source_site: site, ...(p || {}) }),
+  pullGoneCandidates:  (after, limit) => call('pull_gone_candidates', { after_id: after, limit }),
 };

@@ -101,6 +101,8 @@ switch ($action) {
     case 'post_location': handle_post_location(); break;    // Mode A sink: location/place/tags only
     case 'pull_recrawl':  handle_pull_recrawl(); break;     // targeted Mode B: only thin/no-location listings
     case 'post_card_images': handle_post_card_images(); break; // backfill thumbnails from search-page cards
+    case 'post_sweep':       handle_post_sweep(); break;        // search-sweep liveness: which active listings still appear
+    case 'pull_gone_candidates': handle_pull_gone_candidates(); break; // listings the sweep flagged absent, for targeted recheck
     default:              json_error(400, 'Unknown action.');
 }
 
@@ -211,6 +213,111 @@ function handle_post_card_images() {
         }
     }
     json_out(array('ok' => true, 'matched' => $matched, 'updated' => $updated));
+}
+
+// =====================================================================
+// SEARCH-SWEEP LIVENESS — the worker pages a portal's search grid (no detail
+// fetch) and posts the set of listing ids/urls still visible. We compare that
+// against OUR active listings for the site: seen ⇒ reset absent counter; absent
+// ⇒ increment it (only when the sweep was COMPLETE — reached end-of-results —
+// so partial coverage never wrongly flags a listing). Nothing is expired here;
+// absent listings just become cheap candidates for a real --recheck.
+// Body: { source_site, ids:[source_listing_id...], urls:[source_url...], complete:bool }
+// =====================================================================
+function handle_post_sweep() {
+    $db = get_db();
+    $d = get_post_data();
+    $site = trim((string)($d['source_site'] ?? ''));
+    if ($site === '' || !lc_col_exists($db, 'listings', 'sweep_absent_count')) {
+        json_out(array('ok' => true, 'skipped' => 'no sweep columns or site', 'seen' => 0, 'absent' => 0));
+    }
+    $complete = !empty($d['complete']);
+    $ids  = isset($d['ids'])  && is_array($d['ids'])  ? $d['ids']  : array();
+    $urls = isset($d['urls']) && is_array($d['urls']) ? $d['urls'] : array();
+    // Build fast lookup sets. ids are the canonical dedupe identity; urls are a
+    // fallback for rows with no source_listing_id.
+    $idSet = array();  foreach ($ids as $x)  { $x = trim((string)$x); if ($x !== '') $idSet[$x] = true; }
+    $urlSet = array(); foreach ($urls as $u) { $u = sweep_norm_url($u); if ($u !== '') $urlSet[$u] = true; }
+    if (!$idSet && !$urlSet) { json_out(array('ok' => true, 'skipped' => 'empty sweep', 'seen' => 0, 'absent' => 0)); }
+
+    // Every active listing for this portal.
+    $st = $db->prepare("SELECT id, source_listing_id, source_url FROM listings WHERE source_site = ? AND status = 'active'");
+    $st->execute(array($site));
+    $rows = $st->fetchAll();
+
+    $seenIds = array(); $absentIds = array();
+    foreach ($rows as $r) {
+        $sid = trim((string)$r['source_listing_id']);
+        $nurl = sweep_norm_url($r['source_url']);
+        $isSeen = ($sid !== '' && isset($idSet[$sid])) || ($nurl !== '' && isset($urlSet[$nurl]));
+        if ($isSeen) $seenIds[] = (int)$r['id'];
+        else $absentIds[] = (int)$r['id'];
+    }
+
+    // Seen ⇒ reset. Absent ⇒ increment only on a complete sweep.
+    $touchSeen = 0; $touchAbsent = 0;
+    foreach (array_chunk($seenIds, 500) as $chunk) {
+        if (!$chunk) continue;
+        $in = implode(',', array_fill(0, count($chunk), '?'));
+        $db->prepare("UPDATE listings SET sweep_absent_count = 0, sweep_seen_at = NOW(), sweep_checked_at = NOW() WHERE id IN ($in)")
+           ->execute($chunk);
+        $touchSeen += count($chunk);
+    }
+    if ($complete) {
+        foreach (array_chunk($absentIds, 500) as $chunk) {
+            if (!$chunk) continue;
+            $in = implode(',', array_fill(0, count($chunk), '?'));
+            $db->prepare("UPDATE listings SET sweep_absent_count = sweep_absent_count + 1, sweep_checked_at = NOW() WHERE id IN ($in)")
+               ->execute($chunk);
+            $touchAbsent += count($chunk);
+        }
+    }
+    // How many are now at/over the candidate threshold (>= 2 consecutive misses).
+    $flagged = 0;
+    try {
+        $fq = $db->prepare("SELECT COUNT(*) FROM listings WHERE source_site = ? AND status = 'active' AND sweep_absent_count >= 2");
+        $fq->execute(array($site));
+        $flagged = (int)$fq->fetchColumn();
+    } catch (Exception $e) {}
+    json_out(array('ok' => true, 'site' => $site, 'active' => count($rows),
+        'seen' => $touchSeen, 'absent_incremented' => $touchAbsent,
+        'complete' => $complete, 'gone_candidates' => $flagged));
+}
+
+// Normalise a listing URL for sweep comparison: drop scheme, query, fragment,
+// trailing slash; lowercase host. Detail URLs are unique by host+path so this
+// is a stable identity even when tracking params differ between card and stored.
+function sweep_norm_url($u) {
+    $u = trim((string)$u);
+    if ($u === '') return '';
+    $u = preg_replace('#^https?://#i', '', $u);   // scheme
+    $u = preg_replace('#[?\#].*$#', '', $u);        // query / fragment
+    $u = rtrim($u, '/');
+    return mb_strtolower($u, 'UTF-8');
+}
+
+// Listings the sweep marked absent for >= 2 complete sweeps — pulled by the
+// worker's --recheck-gone to confirm (one detail fetch each) before expiry.
+function handle_pull_gone_candidates() {
+    $db = get_db();
+    $d = get_post_data();
+    $after = isset($d['after_id']) ? (int)$d['after_id'] : 0;
+    $limit = isset($d['limit']) ? max(1, min(500, (int)$d['limit'])) : 200;
+    if (!lc_col_exists($db, 'listings', 'sweep_absent_count')) {
+        json_out(array('ok' => true, 'rows' => array(), 'next_after_id' => 0, 'count' => 0, 'skipped' => 'no sweep columns'));
+    }
+    $hash_col = lc_col_exists($db, 'listings', 'source_hash') ? 'source_hash' : "NULL AS source_hash";
+    $st = $db->prepare(
+        "SELECT id, source_site, source_listing_id, source_url, locked_fields, $hash_col
+           FROM listings
+          WHERE status = 'active' AND sweep_absent_count >= 2
+            AND source_url IS NOT NULL AND source_url <> '' AND id > ?
+          ORDER BY id ASC LIMIT $limit"
+    );
+    $st->execute(array($after));
+    $rows = $st->fetchAll();
+    $next = $rows ? (int)$rows[count($rows) - 1]['id'] : 0;
+    json_out(array('ok' => true, 'rows' => $rows, 'next_after_id' => $next, 'count' => count($rows)));
 }
 
 // =====================================================================
@@ -557,6 +664,7 @@ function handle_post_listing() {
         $set[] = "last_rechecked_at = NOW()";
         $set[] = "recheck_status = 'present'";
         $set[] = "recheck_fail_count = 0";
+        if (lc_col_exists($db, 'listings', 'sweep_absent_count')) { $set[] = "sweep_absent_count = 0"; $set[] = "sweep_seen_at = NOW()"; }
         $set[] = "updated_at = NOW()";
         if ($existing['status'] === 'expired') { $set[] = "status = 'active'"; }
 
@@ -667,8 +775,10 @@ function handle_post_liveness() {
         json_out(array('ok' => true, 'listing_id' => $id, 'action' => 'skipped'));
     }
 
-    // present (alive, no detail change)
-    $db->prepare("UPDATE listings SET recheck_status = 'present', recheck_fail_count = 0, last_seen_at = NOW(), last_rechecked_at = NOW() WHERE id = ?")
+    // present (alive, no detail change). Also clear any sweep-absent flag — a
+    // confirmed-live listing must stop showing up as a gone candidate.
+    $sweepReset = lc_col_exists($db, 'listings', 'sweep_absent_count') ? ', sweep_absent_count = 0, sweep_seen_at = NOW()' : '';
+    $db->prepare("UPDATE listings SET recheck_status = 'present', recheck_fail_count = 0, last_seen_at = NOW(), last_rechecked_at = NOW()$sweepReset WHERE id = ?")
        ->execute(array($id));
     json_out(array('ok' => true, 'listing_id' => $id, 'action' => 'present'));
 }

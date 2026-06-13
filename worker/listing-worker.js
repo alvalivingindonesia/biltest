@@ -366,6 +366,102 @@ async function reextractLocations() {
     return;
   }
 
+  if (ARGS.has('--sweep-liveness')) {
+    // Cheap expired-listing detection: page each portal's SEARCH grid (no detail
+    // fetch) and report which of our active listings still appear. The server
+    // increments an absent counter for the rest — but only when we reached the
+    // end of results (complete), so partial coverage never wrongly flags. Then
+    // `npm run recheck-gone` confirms candidates with a real detail check.
+    const SWEEP_PAGES = parseInt(process.env.SWEEP_PAGES || '40', 10);
+    const sweepDelay = () => 4000 + Math.floor(Math.random() * 5000);
+    const onlySite = (process.argv.find((a) => a.startsWith('--site=')) || '').split('=')[1] || process.env.SITE || '';
+    log('SWEEP-LIVENESS starting', { SWEEP_PAGES, HEADFUL, onlySite: onlySite || '(all)' });
+    const work = await api.pullWork(1); // just for the discovery_sources list
+    let sources = (work.discovery_sources || []);
+    log('active discovery sources:', sources.map((s) => s.source_site).join(', ') || '(none)');
+    if (onlySite) sources = sources.filter((s) => s.source_site === onlySite);
+    const bySite = {};
+    for (const s of sources) { if (!SITES[s.source_site]) continue; (bySite[s.source_site] = bySite[s.source_site] || []).push(s); }
+    const browser = await chromium.launch(LAUNCH_OPTS);
+    const ctx = await newContext(browser);
+    try {
+      for (const site of Object.keys(bySite)) {
+        const ids = new Set(), urls = new Set();
+        let complete = true; // false if any source can't be fully paged → don't flag absences this run
+        for (const src of bySite[site]) {
+          const seen = new Set();
+          let reachedEnd = false;
+          for (let p = 1; p <= SWEEP_PAGES; p++) {
+            const url = src.search_url + (src.search_url.includes('?') ? '&' : '?') + 'page=' + p;
+            const page = await ctx.newPage();
+            let cards = [], navFailed = false;
+            try {
+              const nav = await goto(page, url);
+              if (nav.failed) { navFailed = true; }
+              else {
+                try {
+                  await page.evaluate(async () => {
+                    for (let y = 0; y < document.body.scrollHeight; y += 700) { window.scrollTo(0, y); await new Promise((r) => setTimeout(r, 120)); }
+                    window.scrollTo(0, 0);
+                  });
+                  await page.waitForTimeout(1200);
+                } catch (_) {}
+                cards = await extractSearchCards(page, site);
+                if (!cards.length) {
+                  // some layouts yield links but no card images — links are enough for liveness
+                  try { const links = await extractSearchLinks(page, site); cards = links.map((u) => ({ url: u, img: '' })); } catch (_) {}
+                }
+              }
+            } catch (e) { navFailed = true; }
+            finally { await page.close(); }
+            if (navFailed) { complete = false; log('sweep', site, 'p' + p, 'nav failed — marking site coverage partial'); break; }
+            if (!cards.length) { reachedEnd = true; break; }
+            const fresh = cards.filter((c) => !seen.has(c.url));
+            if (!fresh.length) { reachedEnd = true; break; } // looped back / no new ⇒ end
+            fresh.forEach((c) => { seen.add(c.url); urls.add(c.url); const id = SITES[site].idFromUrl(c.url); if (id) ids.add(String(id)); });
+            await sleep(sweepDelay());
+          }
+          if (!reachedEnd) complete = false; // hit page cap without end ⇒ incomplete
+          log('sweep', site, src.label || '', '— collected', seen.size, reachedEnd ? '(end reached)' : '(page cap — partial)');
+        }
+        let res = {};
+        try { res = await api.postSweep(site, { ids: Array.from(ids), urls: Array.from(urls), complete }); }
+        catch (e) { log('post sweep failed', e.message); }
+        log('SWEEP', site, '— sent', ids.size, 'ids /', urls.size, 'urls; complete=' + complete,
+            '→ active', res.active, 'seen', res.seen, 'absent+', res.absent_incremented, 'gone-candidates', res.gone_candidates);
+      }
+    } finally {
+      await ctx.close();
+      await browser.close();
+    }
+    return;
+  }
+
+  if (ARGS.has('--recheck-gone')) {
+    // Confirm sweep-flagged candidates (sweep_absent_count >= 2) with a real
+    // detail check. A live one resets its counter; a genuinely gone one expires.
+    log('RECHECK-GONE starting (sweep-flagged candidates only)', { HEADFUL });
+    if (ollamaEnabled()) { try { GEO = await api.geography(); } catch (e) { log('geography fetch failed', e.message); } }
+    const browser = await chromium.launch(LAUNCH_OPTS);
+    const ctx = await newContext(browser);
+    try {
+      let after = 0, totals = { present: 0, gone: 0, failed: 0 }, n = 0;
+      while (true) {
+        const work = await api.pullGoneCandidates(after, 200);
+        if (!work.rows.length) break;
+        log('recheck-gone batch:', work.rows.length, '(after id', after + ')');
+        const rc = await recheck(ctx, work.rows);
+        totals.present += rc.present; totals.gone += rc.gone; totals.failed += rc.failed; n += work.rows.length;
+        after = work.next_after_id;
+      }
+      log('RECHECK-GONE COMPLETE', { pulled: n, ...totals });
+    } finally {
+      await ctx.close();
+      await browser.close();
+    }
+    return;
+  }
+
   if (ARGS.has('--recrawl-thin')) {
     // Targeted Mode B: re-crawl ONLY listings with thin/no-location stored data,
     // so the LLM recovers the real title + full description from the live page.

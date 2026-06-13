@@ -186,6 +186,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['do'])) {
             $db->prepare("UPDATE agents SET agent_kind=? WHERE id=?")->execute(array($kind, (int)$_POST['agent_id']));
             $flash = "Agent reclassified as $kind.";
         }
+        elseif ($do === 'listing_expire') {
+            // Manually confirm a listing is gone (never hard-delete; soft-expire only).
+            $lid = (int)$_POST['listing_id'];
+            $db->prepare("UPDATE listings SET status='expired', recheck_status='gone', updated_at=NOW() WHERE id=? AND status='active'")->execute(array($lid));
+            $flash = "Listing #$lid expired.";
+            if ($ajax) $ic_json(array('ok' => true, 'id' => $lid, 'action' => 'expired'));
+        }
+        elseif ($do === 'sweep_clear') {
+            // False positive — listing is fine; clear its sweep-absent flag.
+            $lid = (int)$_POST['listing_id'];
+            try { $db->prepare("UPDATE listings SET sweep_absent_count=0, sweep_seen_at=NOW() WHERE id=?")->execute(array($lid)); } catch (Exception $e) {}
+            $flash = "Cleared sweep flag for #$lid.";
+            if ($ajax) $ic_json(array('ok' => true, 'id' => $lid, 'action' => 'kept'));
+        }
         elseif ($do === 'listing_lock') {
             $lid = (int)$_POST['listing_id'];
             $fields = isset($_POST['lock']) && is_array($_POST['lock']) ? implode(',', array_map('trim', $_POST['lock'])) : '';
@@ -208,8 +222,10 @@ function area_options($areas, $sel='') {
 $counts = array(
   'review' => (int)$db->query("SELECT COUNT(*) FROM listing_review_queue WHERE status='open'")->fetchColumn(),
   'unmapped' => 0,
+  'gone' => 0,
 );
 try { $counts['unmapped'] = (int)$db->query("SELECT COUNT(*) FROM unmapped_places")->fetchColumn(); } catch (Exception $e) {}
+try { $counts['gone'] = (int)$db->query("SELECT COUNT(*) FROM listings WHERE status='active' AND sweep_absent_count >= 2")->fetchColumn(); } catch (Exception $e) {}
 ?>
 <!doctype html><meta charset="utf-8"><title>Ingest console</title>
 <style>
@@ -229,6 +245,7 @@ try { $counts['unmapped'] = (int)$db->query("SELECT COUNT(*) FROM unmapped_place
  <strong>Ingest console</strong>
  <a href="?tab=review" class="<?= $tab==='review'?'on':'' ?>">Review <span class="pill"><?= $counts['review'] ?></span></a>
  <a href="?tab=unmapped" class="<?= $tab==='unmapped'?'on':'' ?>">Unmapped <span class="pill"><?= $counts['unmapped'] ?></span></a>
+ <a href="?tab=gone" class="<?= $tab==='gone'?'on':'' ?>">Stale / Gone <span class="pill"><?= $counts['gone'] ?></span></a>
  <a href="?tab=aliases" class="<?= $tab==='aliases'?'on':'' ?>">Area aliases</a>
  <a href="?tab=discovery" class="<?= $tab==='discovery'?'on':'' ?>">Discovery</a>
  <a href="?tab=agents" class="<?= $tab==='agents'?'on':'' ?>">Agents</a>
@@ -365,6 +382,102 @@ try { $counts['unmapped'] = (int)$db->query("SELECT COUNT(*) FROM unmapped_place
  })();
  </script>
  <?php endif; ?>
+
+<?php elseif ($tab === 'gone'): ?>
+ <h2>Stale &amp; suspected-gone listings</h2>
+ <?php
+   $sweep_ok = true; $sweep = array();
+   try {
+     $sweep = $db->query(
+       "SELECT id, source_site, title, area_key, source_url, sweep_absent_count,
+               sweep_seen_at, last_rechecked_at
+          FROM listings
+         WHERE status='active' AND sweep_absent_count >= 2
+         ORDER BY sweep_absent_count DESC, id ASC LIMIT 500")->fetchAll();
+   } catch (Exception $e) { $sweep_ok = false; }
+   // Failing the real re-check repeatedly (blocked or genuinely gone).
+   $failing = $db->query(
+     "SELECT id, source_site, title, area_key, source_url, recheck_fail_count, last_rechecked_at
+        FROM listings
+       WHERE status='active' AND recheck_status='failed' AND recheck_fail_count >= 2
+       ORDER BY recheck_fail_count DESC, id ASC LIMIT 300")->fetchAll();
+   // Not verified in a long time (pure SQL; no crawl needed).
+   $stale = $db->query(
+     "SELECT id, source_site, title, area_key, source_url, last_rechecked_at,
+             DATEDIFF(NOW(), COALESCE(last_rechecked_at, first_seen_at)) AS days_stale
+        FROM listings
+       WHERE status='active'
+         AND (last_rechecked_at IS NULL OR last_rechecked_at < NOW() - INTERVAL 30 DAY)
+       ORDER BY days_stale DESC, id ASC LIMIT 300")->fetchAll();
+ ?>
+ <p class="muted">A <strong>sweep</strong> pages each portal's search grid (no detail fetch) and flags active listings that no longer appear. Run <code>npm run sweep-liveness</code> to refresh this, then <code>npm run recheck-gone</code> to confirm candidates with a real check (live ones clear themselves; gone ones auto-expire). Or expire by hand below — nothing is ever hard-deleted.</p>
+
+ <h3 style="margin-top:18px">Suspected gone — absent from recent sweeps <span class="pill"><?= $sweep_ok ? count($sweep) : 0 ?></span></h3>
+ <?php if (!$sweep_ok): ?>
+   <p class="muted">Run <code>migrations/2026_06_14_sweep_liveness.sql</code> in phpMyAdmin to enable sweep tracking.</p>
+ <?php else: ?>
+ <table><tr><th>#</th><th>site</th><th>title</th><th>area</th><th>missed</th><th>last seen</th><th>link</th><th>actions</th></tr>
+ <?php foreach ($sweep as $l): ?>
+  <tr>
+   <td><?= (int)$l['id'] ?></td><td><?= esc($l['source_site']) ?></td>
+   <td><?= esc(mb_substr($l['title'] ?? '', 0, 60)) ?></td>
+   <td><code><?= esc($l['area_key']) ?></code></td>
+   <td><strong><?= (int)$l['sweep_absent_count'] ?>×</strong></td>
+   <td class="muted"><?= esc($l['sweep_seen_at'] ?: '—') ?></td>
+   <td><?php if (!empty($l['source_url'])): ?><a href="<?= esc($l['source_url']) ?>" target="_blank" rel="noopener">↗ check</a><?php else: ?>—<?php endif; ?></td>
+   <td style="white-space:nowrap">
+     <form method="post" class="gact" style="display:inline;margin:0"><input type="hidden" name="do" value="listing_expire"><input type="hidden" name="listing_id" value="<?= (int)$l['id'] ?>"><button style="background:#c0392b;color:#fff">Expire</button></form>
+     <form method="post" class="gact" style="display:inline;margin:0"><input type="hidden" name="do" value="sweep_clear"><input type="hidden" name="listing_id" value="<?= (int)$l['id'] ?>"><button title="Not gone — clear the flag">Keep</button></form>
+   </td>
+  </tr>
+ <?php endforeach; if (empty($sweep)) echo '<tr><td colspan="8" class="muted">No sweep-flagged listings. Run a sweep to populate. 🎉</td></tr>'; ?>
+ </table>
+ <?php endif; ?>
+
+ <h3 style="margin-top:22px">Failing re-check (blocked or removed) <span class="pill"><?= count($failing) ?></span></h3>
+ <table><tr><th>#</th><th>site</th><th>title</th><th>area</th><th>fails</th><th>last tried</th><th>link</th><th>actions</th></tr>
+ <?php foreach ($failing as $l): ?>
+  <tr>
+   <td><?= (int)$l['id'] ?></td><td><?= esc($l['source_site']) ?></td>
+   <td><?= esc(mb_substr($l['title'] ?? '', 0, 60)) ?></td>
+   <td><code><?= esc($l['area_key']) ?></code></td>
+   <td><strong><?= (int)$l['recheck_fail_count'] ?></strong></td>
+   <td class="muted"><?= esc($l['last_rechecked_at'] ?: '—') ?></td>
+   <td><?php if (!empty($l['source_url'])): ?><a href="<?= esc($l['source_url']) ?>" target="_blank" rel="noopener">↗ check</a><?php else: ?>—<?php endif; ?></td>
+   <td><form method="post" class="gact" style="margin:0"><input type="hidden" name="do" value="listing_expire"><input type="hidden" name="listing_id" value="<?= (int)$l['id'] ?>"><button style="background:#c0392b;color:#fff">Expire</button></form></td>
+  </tr>
+ <?php endforeach; if (empty($failing)) echo '<tr><td colspan="8" class="muted">None failing. 🎉</td></tr>'; ?>
+ </table>
+
+ <h3 style="margin-top:22px">Stale — not verified in 30+ days <span class="pill"><?= count($stale) ?></span></h3>
+ <p class="muted">These aren't necessarily gone — they just haven't been re-checked recently. A normal worker run (or <code>npm run recheck-all</code>) clears them.</p>
+ <table><tr><th>#</th><th>site</th><th>title</th><th>area</th><th>days stale</th><th>link</th></tr>
+ <?php foreach ($stale as $l): ?>
+  <tr>
+   <td><?= (int)$l['id'] ?></td><td><?= esc($l['source_site']) ?></td>
+   <td><?= esc(mb_substr($l['title'] ?? '', 0, 60)) ?></td>
+   <td><code><?= esc($l['area_key']) ?></code></td>
+   <td><strong><?= $l['days_stale'] === null ? 'never' : (int)$l['days_stale'] ?></strong></td>
+   <td><?php if (!empty($l['source_url'])): ?><a href="<?= esc($l['source_url']) ?>" target="_blank" rel="noopener">↗</a><?php else: ?>—<?php endif; ?></td>
+  </tr>
+ <?php endforeach; if (empty($stale)) echo '<tr><td colspan="6" class="muted">Nothing stale. 🎉</td></tr>'; ?>
+ </table>
+ <script>
+ (function(){
+   document.addEventListener('submit', async function(e){
+     var f = e.target; if (!f.classList.contains('gact')) return;
+     e.preventDefault();
+     var fd = new FormData(f); fd.append('ajax','1');
+     try {
+       var res = await fetch('ingest_console.php?tab=gone', { method:'POST', body: fd });
+       var j = await res.json();
+       if (j.ok) { if (f.closest('tr')) f.closest('tr').remove(); t(j.action==='expired'?'Expired ✓':'Kept ✓'); }
+       else t('Failed');
+     } catch(err){ t('Error'); }
+   });
+   function t(m){ var n=document.createElement('div'); n.textContent=m; n.style.cssText='position:fixed;right:18px;bottom:18px;background:#093;color:#fff;padding:8px 14px;border-radius:8px;font:13px system-ui;z-index:9'; document.body.appendChild(n); setTimeout(function(){n.remove();},1700); }
+ })();
+ </script>
 
 <?php elseif ($tab === 'aliases'): ?>
  <h2>Add area alias</h2>
