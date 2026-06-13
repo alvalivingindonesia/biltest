@@ -117,6 +117,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['do'])) {
             $flash = "$n review(s) " . ($res === 'apply' ? 'applied' : 'dismissed') . ".";
             if ($ajax) $ic_json(array('ok' => true, 'ids' => $ids, 'action' => $res, 'n' => $n));
         }
+        elseif ($do === 'clear_all_reviews') {
+            // Clean slate: dismiss every open review (optionally only one kind).
+            $kind = trim($_POST['kind'] ?? '');
+            if ($kind !== '') {
+                $st = $db->prepare("UPDATE listing_review_queue SET status='dismissed', resolved_at=NOW() WHERE status='open' AND kind=?");
+                $st->execute(array($kind)); $n = $st->rowCount();
+            } else {
+                $n = $db->exec("UPDATE listing_review_queue SET status='dismissed', resolved_at=NOW() WHERE status='open'");
+            }
+            $flash = "Cleared $n open review(s)" . ($kind !== '' ? " of kind $kind" : "") . ".";
+            if ($ajax) $ic_json(array('ok' => true, 'cleared' => $n, 'all' => true));
+        }
         elseif ($do === 'alias_add') {
             $norm = lc_normalize_area_text($_POST['alias_text'] ?? '');
             $ak = trim($_POST['area_key'] ?? '');
@@ -214,14 +226,17 @@ $counts = array(
        WHERE q.status='open' ORDER BY q.id DESC LIMIT 500")->fetchAll(); ?>
  <script>function selAll(m){document.querySelectorAll('.rchk').forEach(c=>c.checked=m.checked);}</script>
  <!-- bulk form (buttons here; checkboxes below reference it via form=) -->
- <form method="post" id="bulkform"><input type="hidden" name="do" value="bulk_review">
-   <div style="position:sticky;top:0;background:#fff;padding:8px 0;border-bottom:2px solid #1677ff;z-index:5;display:flex;gap:8px;align-items:center">
-     <label><input type="checkbox" onclick="selAll(this)"> select all</label>
-     <button name="resolution" value="apply" style="background:#1677ff;color:#fff">✓ Apply selected</button>
-     <button name="resolution" value="dismiss">✕ Dismiss selected</button>
-     <span class="muted" id="openCount"><?= count($items) ?> open</span>
-   </div>
- </form>
+ <form method="post" id="bulkform"><input type="hidden" name="do" value="bulk_review"></form>
+ <form method="post" id="clearform"><input type="hidden" name="do" value="clear_all_reviews"></form>
+ <div style="position:sticky;top:0;background:#fff;padding:8px 0;border-bottom:2px solid #1677ff;z-index:5;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+   <label><input type="checkbox" onclick="selAll(this)"> select all</label>
+   <button form="bulkform" name="resolution" value="apply" style="background:#1677ff;color:#fff">✓ Apply selected</button>
+   <button form="bulkform" name="resolution" value="dismiss">✕ Dismiss selected</button>
+   <span style="width:14px"></span>
+   <button form="clearform" name="kind" value="area_flip" onclick="return confirm('Dismiss ALL open area-flip reviews? (keeps price/other kinds)')">✕ Clear all area-flips</button>
+   <button form="clearform" name="kind" value="" onclick="return confirm('Clean slate — dismiss ALL open reviews?')" style="color:#c00">✕ Clear ALL (clean slate)</button>
+   <span class="muted" id="openCount"><?= count($items) ?> open</span>
+ </div>
  <table><tr><th></th><th>#</th><th>Kind</th><th>Listing</th><th>Source</th><th>Detail</th><th>Resolve one</th></tr>
  <?php foreach ($items as $it): $d = json_decode($it['detail'], true) ?: array();
    $place = $d['new_place_key'] ?? ''; ?>
@@ -249,7 +264,7 @@ $counts = array(
  (function(){
    document.addEventListener('submit', async function(e){
      var f = e.target, d = f.querySelector('input[name="do"]');
-     if (!d || (d.value !== 'review_resolve' && d.value !== 'bulk_review')) return;
+     if (!d || (d.value !== 'review_resolve' && d.value !== 'bulk_review' && d.value !== 'clear_all_reviews')) return;
      e.preventDefault();
      var fd = new FormData(f); fd.append('ajax','1');
      if (e.submitter && e.submitter.name) fd.append(e.submitter.name, e.submitter.value);
@@ -258,11 +273,16 @@ $counts = array(
        var res = await fetch('ingest_console.php?tab=review', { method:'POST', body: fd });
        var j = await res.json();
        if (j.ok) {
-         (j.ids||[]).forEach(function(id){
-           var cb = document.querySelector('.rchk[value="'+id+'"]');
-           if (cb && cb.closest('tr')) cb.closest('tr').remove();
-         });
-         toast((j.action==='apply'?'Applied ':'Dismissed ') + ((j.ids||[]).length) + ' ✓');
+         if (j.all) {
+           document.querySelectorAll('.rchk').forEach(function(cb){ if (cb.closest('tr')) cb.closest('tr').remove(); });
+           toast('Cleared ' + (j.cleared||0) + ' ✓');
+         } else {
+           (j.ids||[]).forEach(function(id){
+             var cb = document.querySelector('.rchk[value="'+id+'"]');
+             if (cb && cb.closest('tr')) cb.closest('tr').remove();
+           });
+           toast((j.action==='apply'?'Applied ':'Dismissed ') + ((j.ids||[]).length) + ' ✓');
+         }
          var n = document.querySelectorAll('.rchk').length, el = document.getElementById('openCount');
          if (el) el.textContent = n + ' open';
        } else { toast('Nothing to do'); }
