@@ -117,7 +117,7 @@ out['regions']['gili_islands'] = {'circles': out['gili'],
 # Areas: (lon, lat, region, coastal). South coast areas snap to the coastline.
 AREAS = {
     'selong_belanak': (116.158, -8.872, 'south_lombok', True),
-    'mawi':           (116.192, -8.886, 'south_lombok', True),
+    'mawi':           (116.166, -8.880, 'south_lombok', True),
     'mawun':          (116.232, -8.888, 'south_lombok', True),
     'are_guling':     (116.257, -8.892, 'south_lombok', True),
     'kuta':           (116.279, -8.885, 'south_lombok', True),
@@ -146,15 +146,16 @@ for k, (lon, lat, r, coastal) in AREAS.items():
 
 # Places: (lon, lat, parent_area, coastal). Best-effort coordinates; coastal snap.
 PLACES = {
-    # selong_belanak (around / west of Selong Belanak) — spread for label room
-    'torok':       (116.152, -8.873, 'selong_belanak', True),
-    'tampah':      (116.135, -8.872, 'selong_belanak', True),
-    'serangan':    (116.114, -8.862, 'selong_belanak', True),
-    'lancing':     (116.095, -8.856, 'selong_belanak', True),
-    'mekarsari':   (116.173, -8.846, 'selong_belanak', False),
-    # mawi
-    'semeti':      (116.203, -8.889, 'mawi', True),
-    'rowok':       (116.210, -8.887, 'mawi', True),
+    # selong_belanak bays — positions per Jon's annotated map (west->east):
+    # Torok (W) , Serangan , [Selong Belanak] , Mekarsari (S headland) , Lancing , Tampah (E)
+    'torok':       (116.115, -8.870, 'selong_belanak', True),
+    'serangan':    (116.133, -8.864, 'selong_belanak', True),
+    'mekarsari':   (116.190, -8.900, 'selong_belanak', True),
+    'lancing':     (116.210, -8.892, 'selong_belanak', True),
+    'tampah':      (116.222, -8.888, 'selong_belanak', True),
+    # mawi (inlet, just E of Selong Belanak)
+    'semeti':      (116.178, -8.884, 'mawi', True),
+    'rowok':       (116.175, -8.882, 'mawi', True),
     # kuta (east of Kuta toward Gerupuk) — spread along the coast so labels fit
     'seger':       (116.295, -8.898, 'kuta', True),
     'tanjung_aan': (116.305, -8.902, 'kuta', True),
@@ -197,7 +198,7 @@ def clip_x(poly, keep_ge=None, keep_le=None):
         p = run(p, lambda q: q[0] <= xm, lambda a, b: (xm, a[1] + (xm - a[0]) / (b[0] - a[0]) * (b[1] - a[1])))
     return p
 
-SPLIT1, SPLIT2 = 391, 512   # bays|kuta , kuta|south_east
+SPLIT1, SPLIT2 = 405, 512   # bays|kuta , kuta|south_east  (405 < mawun x411 keeps mawun in kuta)
 CLUSTERS = {
     'selong_belanak_bays': dict(members=['selong_belanak', 'mawi'], keep_le=SPLIT1),
     'kuta_mandalika':      dict(members=['are_guling', 'mawun', 'kuta', 'gerupuk'], keep_ge=SPLIT1, keep_le=SPLIT2),
