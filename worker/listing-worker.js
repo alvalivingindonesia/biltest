@@ -229,8 +229,9 @@ async function reextractLocations() {
         const ex = await extractLocationTags(row.title, row.description, GEO);
         if (!ex || (ex.area_key === 'unknown' && !ex.place)) {
           // No confident location (Ollama miss, or thin/generic text) — leave the
-          // listing alone, but record it so it can be checked.
+          // listing alone, but MARK it so --recrawl-thin targets exactly these.
           noLocation.push({ id: row.id, title: row.title || '' });
+          try { await api.postLocation({ listing_id: row.id, no_location: 1 }); } catch (e) {}
           log('no confident location', row.id);
           continue;
         }

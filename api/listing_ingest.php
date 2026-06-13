@@ -152,11 +152,16 @@ function handle_pull_recrawl() {
     $after = isset($d['after_id']) ? (int)$d['after_id'] : 0;
     $limit = isset($d['limit']) ? max(1, min(500, (int)$d['limit'])) : 100;
     $hash_col = lc_col_exists($db, 'listings', 'source_hash') ? 'source_hash' : "NULL AS source_hash";
+    // Precise set: listings the re-extract flagged 'no-location'. Falls back to a
+    // thin-description heuristic only if the column isn't migrated yet.
+    $filter = lc_col_exists($db, 'listings', 'extraction_method')
+        ? "extraction_method = 'no-location'"
+        : "(description IS NULL OR CHAR_LENGTH(description) < 120)";
     $st = $db->prepare(
         "SELECT id, source_site, source_listing_id, source_url, locked_fields, $hash_col
            FROM listings
           WHERE status = 'active' AND source_url IS NOT NULL AND source_url <> '' AND id > ?
-            AND (description IS NULL OR CHAR_LENGTH(description) < 150 OR area_key IS NULL OR area_key = '')
+            AND $filter
           ORDER BY id ASC LIMIT $limit"
     );
     $st->execute(array($after));
@@ -232,6 +237,15 @@ function handle_post_location() {
     if (!$existing) json_error(404, 'Listing not found.');
 
     $locked   = $existing['locked_fields'];
+    // Worker couldn't confidently locate this from stored text → mark it so the
+    // targeted re-crawl (--recrawl-thin) picks up exactly these, not every short row.
+    if (!empty($d['no_location'])) {
+        if (lc_col_exists($db, 'listings', 'extraction_method')) {
+            $db->prepare("UPDATE listings SET extraction_method = 'no-location', updated_at = NOW() WHERE id = ?")->execute(array($id));
+        }
+        json_out(array('ok' => true, 'listing_id' => $id, 'marked' => 'no-location'));
+    }
+
     $llm_area = isset($d['llm_area_key']) ? trim((string)$d['llm_area_key']) : '';
     $llm_place= isset($d['llm_place']) ? trim((string)$d['llm_place']) : '';
     $conf     = isset($d['extraction_confidence']) && $d['extraction_confidence'] !== '' ? (float)$d['extraction_confidence'] : null;
