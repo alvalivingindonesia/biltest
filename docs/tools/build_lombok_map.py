@@ -101,8 +101,8 @@ def bbox(pts):
     return [round(min(xs)), round(min(ys)), round(max(xs) - min(xs)), round(max(ys) - min(ys))]
 
 out = {'viewBox': [0, 0, W, H], 'outline': path_d(P), 'regions': {}, 'areas': {}, 'places': {}, 'gili': []}
-label_anchor = {'north_lombok': pp(116.32, -8.345), 'west_lombok': pp(116.075, -8.60),
-    'central_lombok': pp(116.28, -8.645), 'east_lombok': pp(116.52, -8.555), 'south_lombok': pp(116.28, -8.875)}
+label_anchor = {'north_lombok': pp(116.32, -8.419), 'west_lombok': pp(116.075, -8.60),
+    'central_lombok': pp(116.28, -8.715), 'east_lombok': pp(116.52, -8.555), 'south_lombok': pp(116.28, -8.875)}
 for k, poly in regions.items():
     out['regions'][k] = {'d': path_d(poly), 'bbox': bbox(poly), 'label': list(label_anchor[k])}
 
@@ -240,13 +240,12 @@ sxs = [out['areas'][a]['p'][0] for a in ['selong_belanak','mawi','are_guling','m
 sys_ = [out['areas'][a]['p'][1] for a in ['selong_belanak','mawi','are_guling','mawun','kuta','gerupuk','awang','ekas']]
 out['_clusterBox'] = aspect_box_north(sxs, sys_, 30, 16, 26)
 
-# Whole-island starting view — tight to the coast (+ Gili), aspect-fitted.
+# Whole-island starting view — tight to the coast (+ Gili). No aspect padding:
+# the SVG meet-fits it, and a tight box keeps the island filling the frame.
 ixs = [p[0] for p in P] + [g[0] for g in out['gili']]
 iys = [p[1] for p in P] + [g[1] for g in out['gili']]
-ix0, iy0 = min(ixs) - 8, min(iys) - 8
-iw, ih = (max(ixs) + 8) - ix0, (max(iys) + 8) - iy0
-if iw / ih < ASPECT: nw = ih * ASPECT; ix0 -= (nw - iw) / 2; iw = nw
-else: nh = iw / ASPECT; iy0 -= (nh - ih) / 2; ih = nh
+ix0, iy0 = min(ixs) - 6, min(iys) - 6
+iw, ih = (max(ixs) + 6) - ix0, (max(iys) + 6) - iy0
 out['_island'] = [round(ix0, 1), round(iy0, 1), round(iw, 1), round(ih, 1)]
 
 json.dump(out, open(os.path.join(TEMP, 'lombok_map.json'), 'w'), indent=1)
