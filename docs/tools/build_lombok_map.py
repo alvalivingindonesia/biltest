@@ -118,10 +118,10 @@ out['regions']['gili_islands'] = {'circles': out['gili'],
 AREAS = {
     'selong_belanak': (116.158, -8.872, 'south_lombok', True),
     'mawi':           (116.192, -8.886, 'south_lombok', True),
-    'are_guling':     (116.218, -8.894, 'south_lombok', True),
-    'mawun':          (116.243, -8.888, 'south_lombok', True),
+    'mawun':          (116.232, -8.888, 'south_lombok', True),
+    'are_guling':     (116.257, -8.892, 'south_lombok', True),
     'kuta':           (116.279, -8.885, 'south_lombok', True),
-    'gerupuk':        (116.335, -8.900, 'south_lombok', True),
+    'gerupuk':        (116.352, -8.900, 'south_lombok', True),
     'awang':          (116.385, -8.890, 'south_lombok', True),
     'ekas':           (116.460, -8.870, 'south_lombok', True),
     'senggigi':       (116.042, -8.493, 'west_lombok', False),
@@ -146,21 +146,21 @@ for k, (lon, lat, r, coastal) in AREAS.items():
 
 # Places: (lon, lat, parent_area, coastal). Best-effort coordinates; coastal snap.
 PLACES = {
-    # selong_belanak (all west-of / around Selong Belanak)
-    'torok':       (116.148, -8.873, 'selong_belanak', True),
-    'tampah':      (116.138, -8.872, 'selong_belanak', True),
-    'serangan':    (116.118, -8.862, 'selong_belanak', True),
-    'lancing':     (116.103, -8.856, 'selong_belanak', True),
-    'mekarsari':   (116.168, -8.846, 'selong_belanak', False),
+    # selong_belanak (around / west of Selong Belanak) — spread for label room
+    'torok':       (116.152, -8.873, 'selong_belanak', True),
+    'tampah':      (116.135, -8.872, 'selong_belanak', True),
+    'serangan':    (116.114, -8.862, 'selong_belanak', True),
+    'lancing':     (116.095, -8.856, 'selong_belanak', True),
+    'mekarsari':   (116.173, -8.846, 'selong_belanak', False),
     # mawi
     'semeti':      (116.203, -8.889, 'mawi', True),
     'rowok':       (116.210, -8.887, 'mawi', True),
-    # kuta (east of Kuta toward Gerupuk)
-    'seger':       (116.293, -8.898, 'kuta', True),
+    # kuta (east of Kuta toward Gerupuk) — spread along the coast so labels fit
+    'seger':       (116.295, -8.898, 'kuta', True),
     'tanjung_aan': (116.305, -8.902, 'kuta', True),
-    'merese':      (116.313, -8.905, 'kuta', True),
-    'bumbang':     (116.322, -8.899, 'kuta', True),
-    'mertak':      (116.300, -8.872, 'kuta', False),
+    'merese':      (116.318, -8.905, 'kuta', True),
+    'mertak':      (116.315, -8.901, 'kuta', True),
+    'bumbang':     (116.334, -8.899, 'kuta', True),
     # awang
     'gunung_tunak':(116.420, -8.905, 'awang', True),
     # ekas (SE peninsula)
