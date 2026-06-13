@@ -9040,55 +9040,60 @@ body.cmd-palette-open { overflow: hidden; }
 .lmap-region--gili.sel circle { fill: var(--lmap-land-sel); }
 .lmap-region--gili.lmap-region--empty circle { fill: var(--lmap-sea); stroke-dasharray: 3 3; }
 
+/* --lmap-u = SVG user-units per screen px (set per-zoom in JS); calc(var * N)
+   keeps fonts/dots a constant N px on screen at any zoom level. */
+.lmap { --lmap-u: 0.5px; }
 .lmap-rlabel { pointer-events: none; transition: opacity 0.4s cubic-bezier(0.25, 1, 0.5, 1); }
 .lmap-rlabel-name {
   font-family: var(--font-body);
-  font-size: 13px;
+  font-size: calc(var(--lmap-u) * 12);
   font-weight: 600;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   fill: var(--lmap-text);
   paint-order: stroke;
   stroke: var(--lmap-sea);
-  stroke-width: 3px;
+  stroke-width: calc(var(--lmap-u) * 3);
   stroke-linejoin: round;
 }
 .lmap-rlabel-count {
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: calc(var(--lmap-u) * 13);
   font-style: italic;
   fill: var(--lmap-text);
   opacity: 0.9;
   paint-order: stroke;
   stroke: var(--lmap-sea);
-  stroke-width: 3px;
+  stroke-width: calc(var(--lmap-u) * 3);
   stroke-linejoin: round;
 }
+.lmap-rlabel-count { transform: translateY(calc(var(--lmap-u) * 2)); }
 .lmap-rlabel.empty { opacity: 0.55; }
 .lmap--zoomed .lmap-rlabel { opacity: 0; }
 
 .lmap-amark { opacity: 0; pointer-events: none; cursor: pointer; transition: opacity 0.45s cubic-bezier(0.25, 1, 0.5, 1); }
 .lmap-amark.visible { opacity: 1; pointer-events: auto; pointer-events: bounding-box; }
 .lmap-amark.visible.empty { opacity: 0.5; }
-.lmap-amark-hit { fill: transparent; stroke: none; }
+.lmap-amark-hit { fill: transparent; stroke: none; r: calc(var(--lmap-u) * 15); }
 .lmap-amark-dot {
   fill: var(--color-accent);
   stroke: var(--lmap-sea);
-  stroke-width: 1.5;
+  stroke-width: calc(var(--lmap-u) * 1.4);
+  r: calc(var(--lmap-u) * 4);
   transform-box: fill-box;
   transform-origin: center;
   transition: transform 0.25s cubic-bezier(0.25, 1, 0.5, 1), fill 0.25s;
 }
-.lmap-amark:hover .lmap-amark-dot { transform: scale(1.45); }
-.lmap-amark.active .lmap-amark-dot { transform: scale(1.6); }
+.lmap-amark:hover .lmap-amark-dot { transform: scale(1.4); }
+.lmap-amark.active .lmap-amark-dot { transform: scale(1.55); }
 .lmap-amark-label {
   font-family: var(--font-body);
-  font-size: 11.5px;
+  font-size: calc(var(--lmap-u) * 10.5);
   font-weight: 600;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.08em;
   fill: var(--lmap-text);
   paint-order: stroke;
   stroke: var(--lmap-sea);
-  stroke-width: 3.5px;
+  stroke-width: calc(var(--lmap-u) * 3);
   stroke-linejoin: round;
   transition: fill 0.25s;
 }
@@ -9099,7 +9104,7 @@ body.cmd-palette-open { overflow: hidden; }
 .lmap-czone {
   fill: var(--lmap-land-hover);
   stroke: var(--lmap-border);
-  stroke-width: 1.2;
+  stroke-width: calc(var(--lmap-u) * 1.2);
   stroke-linejoin: round;
   opacity: 0;
   pointer-events: none;
@@ -9111,49 +9116,51 @@ body.cmd-palette-open { overflow: hidden; }
 .lmap-czone.visible.lmap-czone--empty { opacity: 0.4; pointer-events: none; }
 .lmap-czlabel {
   font-family: var(--font-body);
-  font-size: 13px;
+  font-size: calc(var(--lmap-u) * 10.5);
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.06em;
   fill: var(--lmap-text);
   opacity: 0;
   pointer-events: none;
   paint-order: stroke;
   stroke: var(--lmap-sea);
-  stroke-width: 3.5px;
+  stroke-width: calc(var(--lmap-u) * 3.5);
   stroke-linejoin: round;
   transition: opacity 0.4s cubic-bezier(0.25, 1, 0.5, 1);
 }
 .lmap-czlabel.visible { opacity: 1; }
 
-/* ---- Place dots — secondary to Area markers, hidden when empty ---- */
+/* ---- Place dots — secondary to Area markers; labels on hover/active only ---- */
 .lmap-place { opacity: 0; pointer-events: none; cursor: pointer; transition: opacity 0.35s cubic-bezier(0.25, 1, 0.5, 1); }
-.lmap-place.visible { opacity: 1; pointer-events: auto; }
+.lmap-place.visible { opacity: 1; pointer-events: auto; pointer-events: bounding-box; }
 .lmap-place.empty { display: none; }
-.lmap-place-hit { fill: transparent; }
+.lmap-place-hit { fill: transparent; r: calc(var(--lmap-u) * 13); }
 .lmap-place-dot {
   fill: var(--lmap-sea);
   stroke: var(--color-accent);
-  stroke-width: 1.6;
+  stroke-width: calc(var(--lmap-u) * 1.5);
+  r: calc(var(--lmap-u) * 3);
   transform-box: fill-box;
   transform-origin: center;
   transition: transform 0.25s cubic-bezier(0.25, 1, 0.5, 1);
 }
-.lmap-place:hover .lmap-place-dot { transform: scale(1.4); }
-.lmap-place.active .lmap-place-dot { fill: var(--color-accent); transform: scale(1.5); }
+.lmap-place:hover .lmap-place-dot { transform: scale(1.45); }
+.lmap-place.active .lmap-place-dot { fill: var(--color-accent); transform: scale(1.6); }
 .lmap-place-label {
   font-family: var(--font-body);
-  font-size: 9.5px;
+  font-size: calc(var(--lmap-u) * 9.5);
   font-weight: 600;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   fill: var(--lmap-text);
   paint-order: stroke;
   stroke: var(--lmap-sea);
-  stroke-width: 3px;
+  stroke-width: calc(var(--lmap-u) * 3);
   stroke-linejoin: round;
-  transition: fill 0.25s;
+  opacity: 0;               /* names appear on hover/selection to avoid clutter */
+  transition: opacity 0.2s, fill 0.25s;
 }
-.lmap-place.active .lmap-place-label,
-.lmap-place:hover .lmap-place-label { fill: var(--color-accent); }
+.lmap-place:hover .lmap-place-label,
+.lmap-place.active .lmap-place-label { opacity: 1; fill: var(--color-accent); }
 
 .lmap-reset {
   position: absolute;

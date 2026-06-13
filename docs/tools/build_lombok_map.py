@@ -203,31 +203,51 @@ CLUSTERS = {
     'kuta_mandalika':      dict(members=['are_guling', 'mawun', 'kuta', 'gerupuk'], keep_ge=SPLIT1, keep_le=SPLIT2),
     'south_east':          dict(members=['awang', 'ekas'], keep_ge=SPLIT2),
 }
+# Frame a set of dots at the map's aspect ratio, coast near the BOTTOM and the
+# extra height filled with land to the NORTH (so little/no water shows below).
+ASPECT = W / H
+def aspect_box_north(xs, ys, padx, water_below, top_pad):
+    x0 = min(xs) - padx; x1 = max(xs) + padx; w = x1 - x0
+    ybot = max(ys) + water_below; ytop = min(ys) - top_pad
+    h = max(w / ASPECT, ybot - ytop)
+    w2 = h * ASPECT
+    x0 -= (w2 - w) / 2
+    y0 = ybot - h
+    return [round(x0, 1), round(y0, 1), round(w2, 1), round(h, 1)]
+
 cl_out = {}
 for ck, cfg in CLUSTERS.items():
     zone = clip_x(south_poly, cfg.get('keep_ge'), cfg.get('keep_le'))
-    # dots that belong to this cluster (member areas + their places, snapped)
-    dotxs = []; dotys = []
-    for a in cfg['members']:
-        dotxs.append(out['areas'][a]['p'][0]); dotys.append(out['areas'][a]['p'][1])
+    axs = [out['areas'][a]['p'][0] for a in cfg['members']]
+    ays = [out['areas'][a]['p'][1] for a in cfg['members']]
+    dotxs = list(axs); dotys = list(ays)
     for pk, pv in out['places'].items():
         if pv['a'] in cfg['members']:
             dotxs.append(pv['p'][0]); dotys.append(pv['p'][1])
-    zb = bbox(zone)
-    # zoom bbox = union of dot extent (padded) — frames the markers, not the whole zone
-    dx0, dx1 = min(dotxs) - 34, max(dotxs) + 34
-    dy0, dy1 = min(dotys) - 60, max(dotys) + 40
-    zoom = [round(dx0), round(dy0), round(dx1 - dx0), round(dy1 - dy0)]
-    # label anchor: near the cluster's coast centre, lifted above
-    lx = round(sum(dotxs) / len(dotxs), 1)
-    ly = round(min(dotys) - 30, 1)
-    cl_out[ck] = {'d': path_d(zone), 'zbbox': zb, 'zoom': zoom, 'label': [lx, ly], 'members': cfg['members']}
+    # Tight cluster zoom: just this cluster's dots, coast at the bottom.
+    zoom = aspect_box_north(dotxs, dotys, 16, 14, 30)
+    # Label sits over the zone, with a small high/low/high stagger so the three
+    # adjacent labels don't collide (they're too wide for one row).
+    LABEL_DX = {'selong_belanak_bays': 14, 'kuta_mandalika': 0, 'south_east': -6}
+    LABEL_DY = {'selong_belanak_bays': -22, 'kuta_mandalika': 8, 'south_east': -22}
+    lx = round(sum(axs) / len(axs) + LABEL_DX.get(ck, 0), 1)
+    ly = round(sum(ays) / len(ays) + LABEL_DY.get(ck, 0), 1)
+    cl_out[ck] = {'d': path_d(zone), 'zoom': zoom, 'label': [lx, ly], 'members': cfg['members']}
 
 out['_clusters'] = cl_out
-# clusterBox overview = frame all south dots
+# South overview frames the cluster ZONES (area markers), coast at the bottom.
 sxs = [out['areas'][a]['p'][0] for a in ['selong_belanak','mawi','are_guling','mawun','kuta','gerupuk','awang','ekas']]
 sys_ = [out['areas'][a]['p'][1] for a in ['selong_belanak','mawi','are_guling','mawun','kuta','gerupuk','awang','ekas']]
-out['_clusterBox'] = [round(min(sxs) - 55), round(min(sys_) - 70), round(max(sxs) - min(sxs) + 110), round(max(sys_) - min(sys_) + 150)]
+out['_clusterBox'] = aspect_box_north(sxs, sys_, 30, 16, 26)
+
+# Whole-island starting view — tight to the coast (+ Gili), aspect-fitted.
+ixs = [p[0] for p in P] + [g[0] for g in out['gili']]
+iys = [p[1] for p in P] + [g[1] for g in out['gili']]
+ix0, iy0 = min(ixs) - 8, min(iys) - 8
+iw, ih = (max(ixs) + 8) - ix0, (max(iys) + 8) - iy0
+if iw / ih < ASPECT: nw = ih * ASPECT; ix0 -= (nw - iw) / 2; iw = nw
+else: nh = iw / ASPECT; iy0 -= (nh - ih) / 2; ih = nh
+out['_island'] = [round(ix0, 1), round(iy0, 1), round(iw, 1), round(ih, 1)]
 
 json.dump(out, open(os.path.join(TEMP, 'lombok_map.json'), 'w'), indent=1)
 print('coast pts:', len(coast), 'outline chars:', len(out['outline']))
