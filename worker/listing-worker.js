@@ -14,6 +14,7 @@
 
 import 'dotenv/config';
 import { createHash } from 'crypto';
+import { writeFileSync, mkdirSync } from 'fs';
 import { chromium } from 'playwright';
 import { api } from './lib/api.js';
 import { SITES, readPage, detectGone, extractSearchLinks } from './lib/extractors.js';
@@ -214,16 +215,22 @@ async function reextractLocations() {
   GEO = await api.geography();
   log('geography:', (GEO.areas || []).length, 'areas,', (GEO.places || []).length, 'places');
   let after = 0, done = 0, changed = 0, unmapped = 0;
-  const unmappedTally = new Map(); // place name → count, for the alias to-do list
+  const unmappedTally = new Map();   // place name → count (alias / new-Area to-do list)
+  const unmappedIds = new Map();     // place name → [listing ids]
+  const noLocation = [];             // {id, title} — thin/generic text, left unchanged
   while (true) {
     const batch = await api.serveText(after, 100);
     if (!batch.rows.length) break;
     for (const row of batch.rows) {
       try {
         const ex = await extractLocationTags(row.title, row.description, GEO);
-        if (!ex) { log('llm miss', row.id); continue; }
-        // Uncorroborated guess (thin text) → leave the listing alone, no review.
-        if (ex.area_key === 'unknown' && !ex.place) { log('skip (no confident location)', row.id); continue; }
+        if (!ex || (ex.area_key === 'unknown' && !ex.place)) {
+          // No confident location (Ollama miss, or thin/generic text) — leave the
+          // listing alone, but record it so it can be checked.
+          noLocation.push({ id: row.id, title: row.title || '' });
+          log('no confident location', row.id);
+          continue;
+        }
         const res = await api.postLocation({
           listing_id: row.id,
           llm_area_key: ex.area_key,
@@ -238,19 +245,33 @@ async function reextractLocations() {
           unmapped++;
           const p = (ex.place || '?').trim().toLowerCase();
           unmappedTally.set(p, (unmappedTally.get(p) || 0) + 1);
+          const arr = unmappedIds.get(p) || []; arr.push(row.id); unmappedIds.set(p, arr);
         }
         log('reextract', row.id, '→', res.area_key || 'UNMAPPED', res.place_key ? '/' + res.place_key : '', '(' + (ex.place || '?') + ')');
       } catch (e) { log('reextract error', row.id, e.message); }
     }
     after = batch.next_after_id;
   }
-  log('REEXTRACT COMPLETE', { processed: done, changed, unmapped });
-  // Frequency list of unmapped places — add the recurring ones as aliases.
+  log('REEXTRACT COMPLETE', { processed: done, changed, unmapped, noLocation: noLocation.length });
+
+  try { mkdirSync('logs', { recursive: true }); } catch (_) {}
+
+  // ── Section 1: NO CONFIDENT LOCATION (check these) ──────────────────
+  log('───── NO CONFIDENT LOCATION (' + noLocation.length + ') — thin/generic text, left unchanged; check these ─────');
+  noLocation.slice(0, 40).forEach((r) => log('   #' + r.id + '  ' + r.title.slice(0, 60)));
+  if (noLocation.length > 40) log('   …+' + (noLocation.length - 40) + ' more (full list in logs/reextract-no-location.txt)');
+  writeFileSync('logs/reextract-no-location.txt',
+    'No confident location — ' + noLocation.length + ' listings\n\n' +
+    noLocation.map((r) => '#' + r.id + '\t' + r.title).join('\n') + '\n');
+
+  // ── Section 2: UNMAPPED PLACES (alias / new Area candidates) ────────
   const top = [...unmappedTally.entries()].filter(([p]) => p && p !== '?').sort((a, b) => b[1] - a[1]);
-  if (top.length) {
-    log('UNMAPPED places (add the recurring ones in Ingest Console → Area aliases):');
-    top.forEach(([p, c]) => log('   ' + String(c).padStart(3) + '×  ' + p));
-  }
+  log('───── UNMAPPED PLACES (' + top.length + ') — recurring names to alias or promote to an Area ─────');
+  top.slice(0, 40).forEach(([p, c]) => log('   ' + String(c).padStart(3) + '×  ' + p));
+  if (top.length > 40) log('   …+' + (top.length - 40) + ' more (full list in logs/reextract-unmapped.txt)');
+  writeFileSync('logs/reextract-unmapped.txt',
+    'Unmapped places (count, name, listing ids)\n\n' +
+    top.map(([p, c]) => String(c).padStart(3) + '×  ' + p + '   [' + (unmappedIds.get(p) || []).join(',') + ']').join('\n') + '\n');
 }
 
 // ── Main ────────────────────────────────────────────────────────────
