@@ -168,6 +168,8 @@ $counts = array(
  <a href="?tab=discovery" class="<?= $tab==='discovery'?'on':'' ?>">Discovery</a>
  <a href="?tab=agents" class="<?= $tab==='agents'?'on':'' ?>">Agents</a>
  <a href="?tab=locks" class="<?= $tab==='locks'?'on':'' ?>">Field locks</a>
+ <a href="modified_listings.php">Modified listings ↗</a>
+ <a href="recanonicalize_listings.php">Re-canonicalise ↗</a>
  <a href="?logout=1" style="margin-left:auto">log out</a>
 </header>
 <main>
