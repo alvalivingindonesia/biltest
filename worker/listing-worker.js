@@ -18,7 +18,7 @@ import { writeFileSync, mkdirSync } from 'fs';
 import { chromium } from 'playwright';
 import { api } from './lib/api.js';
 import { SITES, readPage, detectGone, extractSearchLinks, isGenericTitle } from './lib/extractors.js';
-import { ollamaEnabled, extractLocationTags, extractListing } from './lib/ollama.js';
+import { ollamaEnabled, ollamaUp, extractLocationTags, extractListing } from './lib/ollama.js';
 
 const ARGS = new Set(process.argv.slice(2));
 let GEO = null; // geography (areas/places/aliases) for the Extractor prompt
@@ -215,6 +215,7 @@ async function recheckAll(ctx) {
 // local LLM over descriptions we already stored. Cursor by id.
 async function reextractLocations() {
   if (!ollamaEnabled()) { log('OLLAMA_LOCATION not enabled in .env — nothing to do'); return; }
+  if (!(await ollamaUp())) { log('ABORT: Ollama is not reachable — start it (Ollama app / `ollama serve`) and retry. Nothing was changed.'); return; }
   GEO = await api.geography();
   log('geography:', (GEO.areas || []).length, 'areas,', (GEO.places || []).length, 'places');
   let after = 0, done = 0, changed = 0, unmapped = 0;
@@ -320,7 +321,10 @@ async function reextractLocations() {
   }
 
   // Fetch geography once for LLM location enrichment (Mode B).
-  if (ollamaEnabled()) { try { GEO = await api.geography(); log('geography:', (GEO.areas || []).length, 'areas,', (GEO.places || []).length, 'places'); } catch (e) { log('geography fetch failed', e.message); } }
+  if (ollamaEnabled()) {
+    if (!(await ollamaUp())) log('WARN: Ollama unreachable — crawl will run (liveness + site extraction) but skip LLM location/title enrichment.');
+    try { GEO = await api.geography(); log('geography:', (GEO.areas || []).length, 'areas,', (GEO.places || []).length, 'places'); } catch (e) { log('geography fetch failed', e.message); }
+  }
 
   if (ARGS.has('--recheck-all')) {
     log('RECHECK-ALL one-off starting (all active listings)', { DELAY_MIN, DELAY_MAX, HEADFUL });

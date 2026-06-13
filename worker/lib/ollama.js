@@ -19,6 +19,18 @@ const TAG_KEYS = ['beachfront', 'ocean_view', 'mountain_view', 'rice_field_view'
 
 export function ollamaEnabled() { return ENABLED; }
 
+// Is the Ollama server reachable? Used to abort a run rather than mis-flag every
+// listing as "no location" when Ollama is simply down (e.g. after a reboot).
+export async function ollamaUp() {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 5000);
+    const res = await fetch(`${OLLAMA_URL}/api/version`, { signal: ctrl.signal });
+    clearTimeout(t);
+    return res.ok;
+  } catch (_) { return false; }
+}
+
 // Build the geography context block injected into every prompt.
 function geoBlock(geo) {
   geo = geo || {};
