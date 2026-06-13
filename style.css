@@ -9095,29 +9095,65 @@ body.cmd-palette-open { overflow: hidden; }
 .lmap-amark.active .lmap-amark-label,
 .lmap-amark:hover .lmap-amark-label { fill: var(--color-accent); }
 
-/* ---- Cluster hotspot pills (docs/adr/0011) ---- */
-.lmap-cluster { opacity: 0; pointer-events: none; cursor: pointer; transition: opacity 0.4s cubic-bezier(0.25, 1, 0.5, 1); }
-.lmap-cluster.visible { opacity: 1; pointer-events: auto; }
-.lmap-cluster.visible.lmap-cluster--empty { opacity: 0.4; pointer-events: none; }
-.lmap-cluster-bg {
-  fill: rgba(248, 243, 234, 0.92);
+/* ---- Cluster zones (docs/adr/0011) — clipped coast strips, hover like regions ---- */
+.lmap-czone {
+  fill: var(--lmap-land-hover);
   stroke: var(--lmap-border);
-  stroke-width: 1;
-  transition: fill 0.25s, stroke 0.25s;
-  filter: drop-shadow(0 1px 2px rgba(90, 70, 40, 0.18));
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition: fill 0.3s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s cubic-bezier(0.25, 1, 0.5, 1);
 }
-.lmap-cluster:hover .lmap-cluster-bg { fill: #fff; stroke: var(--lmap-text); }
-.lmap-cluster-name {
+.lmap-czone.visible { opacity: 1; pointer-events: auto; }
+.lmap-czone.visible:hover { fill: var(--lmap-land-sel); }
+.lmap-czone.visible.lmap-czone--empty { opacity: 0.4; pointer-events: none; }
+.lmap-czlabel {
   font-family: var(--font-body);
   font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.12em;
   fill: var(--lmap-text);
+  opacity: 0;
   pointer-events: none;
+  paint-order: stroke;
+  stroke: var(--lmap-sea);
+  stroke-width: 3.5px;
+  stroke-linejoin: round;
+  transition: opacity 0.4s cubic-bezier(0.25, 1, 0.5, 1);
 }
-.lmap-cluster:hover .lmap-cluster-name { fill: var(--color-accent); }
-[data-theme="dark"] .lmap-cluster-bg { fill: rgba(40, 36, 28, 0.92); }
-[data-theme="dark"] .lmap-cluster:hover .lmap-cluster-bg { fill: #2f2a20; }
+.lmap-czlabel.visible { opacity: 1; }
+
+/* ---- Place dots — secondary to Area markers, hidden when empty ---- */
+.lmap-place { opacity: 0; pointer-events: none; cursor: pointer; transition: opacity 0.35s cubic-bezier(0.25, 1, 0.5, 1); }
+.lmap-place.visible { opacity: 1; pointer-events: auto; }
+.lmap-place.empty { display: none; }
+.lmap-place-hit { fill: transparent; }
+.lmap-place-dot {
+  fill: var(--lmap-sea);
+  stroke: var(--color-accent);
+  stroke-width: 1.6;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 0.25s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.lmap-place:hover .lmap-place-dot { transform: scale(1.4); }
+.lmap-place.active .lmap-place-dot { fill: var(--color-accent); transform: scale(1.5); }
+.lmap-place-label {
+  font-family: var(--font-body);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  fill: var(--lmap-text);
+  paint-order: stroke;
+  stroke: var(--lmap-sea);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  transition: fill 0.25s;
+}
+.lmap-place.active .lmap-place-label,
+.lmap-place:hover .lmap-place-label { fill: var(--color-accent); }
 
 .lmap-reset {
   position: absolute;

@@ -4,8 +4,7 @@ d = json.load(open(os.path.join(TEMP, 'lombok_nominatim.json'), encoding='utf-8'
 ring = None
 for r in d:
     g = r.get('geojson', {})
-    if g.get('type') == 'Polygon':
-        ring = g['coordinates'][0]; break
+    if g.get('type') == 'Polygon': ring = g['coordinates'][0]; break
 
 def dp(points, eps):
     if len(points) < 3: return points
@@ -18,35 +17,50 @@ def dp(points, eps):
     for i in range(1, len(points) - 1):
         di = perp(points[i], points[0], points[-1])
         if di > dmax: dmax, idx = di, i
-    if dmax > eps:
-        return dp(points[:idx + 1], eps)[:-1] + dp(points[idx:], eps)
+    if dmax > eps: return dp(points[:idx + 1], eps)[:-1] + dp(points[idx:], eps)
     return [points[0], points[-1]]
 
 if ring[0] == ring[-1]: ring = ring[:-1]
-coast = dp(ring + [ring[0]], 0.0008)   # finer detail than before (was 0.0035)
+coast = dp(ring + [ring[0]], 0.0008)
 if coast[0] == coast[-1]: coast = coast[:-1]
-print('coast pts:', len(coast))
 
 lons = [p[0] for p in coast]; lats = [p[1] for p in coast]
 GILI = {'trawangan': (116.039, -8.350, 11), 'meno': (116.059, -8.352, 8), 'air': (116.083, -8.358, 8)}
-minlon = min(min(lons), 116.02) - 0.03
-maxlon = max(lons) + 0.02
-minlat = min(lats) - 0.03
-maxlat = max(lats) + 0.03
+minlon = min(min(lons), 116.02) - 0.03; maxlon = max(lons) + 0.02
+minlat = min(lats) - 0.03; maxlat = max(lats) + 0.03
 W, H = 880, 640
 coslat = math.cos(math.radians((minlat + maxlat) / 2))
 s = min(W / ((maxlon - minlon) * coslat), H / ((maxlat - minlat)))
-ox = (W - (maxlon - minlon) * coslat * s) / 2
-oy = (H - (maxlat - minlat) * s) / 2
+ox = (W - (maxlon - minlon) * coslat * s) / 2; oy = (H - (maxlat - minlat) * s) / 2
 def proj(lon, lat): return (round(ox + (lon - minlon) * coslat * s, 1), round(oy + (maxlat - lat) * s, 1))
 pp = proj
 P = [proj(lon, lat) for lon, lat in coast]
 
 def path_d(pts, close=True):
-    parts = ['M' + str(pts[0][0]) + ',' + str(pts[0][1])]
-    for x, y in pts[1:]: parts.append('L' + str(x) + ',' + str(y))
+    parts = ['M' + str(round(pts[0][0],1)) + ',' + str(round(pts[0][1],1))]
+    for x, y in pts[1:]: parts.append('L' + str(round(x,1)) + ',' + str(round(y,1)))
     if close: parts.append('Z')
     return ' '.join(parts)
+
+# all coastline-y crossings at column x
+def coast_ys_at(x):
+    ys = []
+    n = len(P)
+    for i in range(n):
+        ax, ay = P[i]; bx, by = P[(i + 1) % n]
+        if ax == bx: continue
+        if (ax - x) * (bx - x) <= 0:
+            t = (x - ax) / (bx - ax)
+            ys.append(ay + t * (by - ay))
+    return ys
+# Trace straight DOWN from the marker to the first coastline below it (the local
+# coast directly south), then sit just inside the land — like the user described.
+def snap(x, y):
+    ys = coast_ys_at(x)
+    if not ys: return (round(x, 1), round(y, 1))
+    below = [c for c in ys if c > y - 4]
+    cy = min(below) if below else max(ys)
+    return (round(x, 1), round(cy - 3, 1))
 
 def nearest_idx(lon, lat):
     best, bi = 1e9, 0
@@ -56,7 +70,6 @@ def nearest_idx(lon, lat):
     return bi
 J1 = nearest_idx(116.04, -8.43); J2 = nearest_idx(116.58, -8.36)
 J3 = nearest_idx(116.53, -8.73); J4 = nearest_idx(116.09, -8.86)
-
 def coast_arc(i, j, mc):
     n = len(coast); fwd = []; k = i
     while True:
@@ -87,7 +100,7 @@ def bbox(pts):
     xs = [p[0] for p in pts]; ys = [p[1] for p in pts]
     return [round(min(xs)), round(min(ys)), round(max(xs) - min(xs)), round(max(ys) - min(ys))]
 
-out = {'viewBox': [0, 0, W, H], 'outline': path_d(P), 'regions': {}, 'areas': {}, 'gili': [], 'rinjani': None}
+out = {'viewBox': [0, 0, W, H], 'outline': path_d(P), 'regions': {}, 'areas': {}, 'places': {}, 'gili': []}
 label_anchor = {'north_lombok': pp(116.32, -8.345), 'west_lombok': pp(116.075, -8.60),
     'central_lombok': pp(116.28, -8.645), 'east_lombok': pp(116.52, -8.555), 'south_lombok': pp(116.28, -8.875)}
 for k, poly in regions.items():
@@ -101,68 +114,128 @@ out['regions']['gili_islands'] = {'circles': out['gili'],
     'bbox': [round(min(gx)) - 30, round(min(gy)) - 36, round(max(gx) - min(gx)) + 60, round(max(gy) - min(gy)) + 70],
     'label': [round(sum(gx) / 3), round(min(gy)) - 22]}
 
-# CORRECTED coordinates (real west->east; Are Guling is WEST of Kuta). lp alternates.
+# Areas: (lon, lat, region, coastal). South coast areas snap to the coastline.
 AREAS = {
-    'selong_belanak': (116.158, -8.872, 'south_lombok', 'top'),
-    'mawi':           (116.192, -8.886, 'south_lombok', 'bottom'),
-    'are_guling':     (116.218, -8.894, 'south_lombok', 'top'),
-    'mawun':          (116.243, -8.888, 'south_lombok', 'bottom'),
-    'kuta':           (116.279, -8.882, 'south_lombok', 'top'),
-    'gerupuk':        (116.335, -8.896, 'south_lombok', 'bottom'),
-    'awang':          (116.385, -8.880, 'south_lombok', 'top'),
-    'ekas':           (116.460, -8.858, 'south_lombok', 'bottom'),
-    'senggigi':       (116.042, -8.493, 'west_lombok', 'right'),
-    'mataram':        (116.107, -8.583, 'west_lombok', 'right'),
-    'gerung':         (116.118, -8.685, 'west_lombok', 'right'),
-    'lembar':         (116.073, -8.725, 'west_lombok', 'bottom'),
-    'sekotong':       (115.975, -8.768, 'west_lombok', 'bottom'),
-    'praya':          (116.270, -8.705, 'central_lombok', 'right'),
-    'jonggat':        (116.220, -8.660, 'central_lombok', 'top'),
-    'batukliang':     (116.310, -8.610, 'central_lombok', 'right'),
-    'selong':         (116.531, -8.647, 'east_lombok', 'left'),
-    'labuhan_lombok': (116.658, -8.448, 'east_lombok', 'left'),
-    'bangsal':        (116.102, -8.404, 'north_lombok', 'top'),
-    'tanjung':        (116.157, -8.355, 'north_lombok', 'top'),
-    'senaru':         (116.404, -8.305, 'north_lombok', 'bottom'),
-    'gili_islands':   (116.059, -8.352, 'gili_islands', 'bottom'),
+    'selong_belanak': (116.158, -8.872, 'south_lombok', True),
+    'mawi':           (116.192, -8.886, 'south_lombok', True),
+    'are_guling':     (116.218, -8.894, 'south_lombok', True),
+    'mawun':          (116.243, -8.888, 'south_lombok', True),
+    'kuta':           (116.279, -8.885, 'south_lombok', True),
+    'gerupuk':        (116.335, -8.900, 'south_lombok', True),
+    'awang':          (116.385, -8.890, 'south_lombok', True),
+    'ekas':           (116.460, -8.870, 'south_lombok', True),
+    'senggigi':       (116.042, -8.493, 'west_lombok', False),
+    'mataram':        (116.107, -8.583, 'west_lombok', False),
+    'gerung':         (116.118, -8.685, 'west_lombok', False),
+    'lembar':         (116.073, -8.725, 'west_lombok', False),
+    'sekotong':       (115.975, -8.768, 'west_lombok', False),
+    'praya':          (116.270, -8.705, 'central_lombok', False),
+    'jonggat':        (116.220, -8.660, 'central_lombok', False),
+    'batukliang':     (116.310, -8.610, 'central_lombok', False),
+    'selong':         (116.531, -8.647, 'east_lombok', False),
+    'labuhan_lombok': (116.658, -8.448, 'east_lombok', False),
+    'bangsal':        (116.102, -8.404, 'north_lombok', False),
+    'tanjung':        (116.157, -8.355, 'north_lombok', False),
+    'senaru':         (116.404, -8.305, 'north_lombok', False),
+    'gili_islands':   (116.059, -8.352, 'gili_islands', False),
 }
-for k, (lon, lat, r, lp) in AREAS.items():
+for k, (lon, lat, r, coastal) in AREAS.items():
     x, y = proj(lon, lat)
-    out['areas'][k] = {'p': [x, y], 'r': r, 'lp': lp}
-out['rinjani'] = list(pp(116.457, -8.411))
+    if coastal: x, y = snap(x, y)
+    out['areas'][k] = {'p': [x, y], 'r': r}
 
-# ---- Cluster geometry (South Lombok), computed from marker pixels ----
-clusters = {
-    'selong_belanak_bays': ['selong_belanak', 'mawi'],
-    'kuta_mandalika': ['are_guling', 'mawun', 'kuta', 'gerupuk'],
-    'south_east': ['awang', 'ekas'],
+# Places: (lon, lat, parent_area, coastal). Best-effort coordinates; coastal snap.
+PLACES = {
+    # selong_belanak (all west-of / around Selong Belanak)
+    'torok':       (116.148, -8.873, 'selong_belanak', True),
+    'tampah':      (116.138, -8.872, 'selong_belanak', True),
+    'serangan':    (116.118, -8.862, 'selong_belanak', True),
+    'lancing':     (116.103, -8.856, 'selong_belanak', True),
+    'mekarsari':   (116.168, -8.846, 'selong_belanak', False),
+    # mawi
+    'semeti':      (116.203, -8.889, 'mawi', True),
+    'rowok':       (116.210, -8.887, 'mawi', True),
+    # kuta (east of Kuta toward Gerupuk)
+    'seger':       (116.293, -8.898, 'kuta', True),
+    'tanjung_aan': (116.305, -8.902, 'kuta', True),
+    'merese':      (116.313, -8.905, 'kuta', True),
+    'bumbang':     (116.322, -8.899, 'kuta', True),
+    'mertak':      (116.300, -8.872, 'kuta', False),
+    # awang
+    'gunung_tunak':(116.420, -8.905, 'awang', True),
+    # ekas (SE peninsula)
+    'pantai_surga':   (116.478, -8.878, 'ekas', True),
+    'kaliantan':      (116.505, -8.918, 'ekas', True),
+    'tanjung_ringgit':(116.548, -8.905, 'ekas', True),
+    'pink_beach':     (116.535, -8.902, 'ekas', True),
+    'jerowaru':       (116.492, -8.800, 'ekas', False),
+}
+for k, (lon, lat, ak, coastal) in PLACES.items():
+    x, y = proj(lon, lat)
+    if coastal: x, y = snap(x, y)
+    out['places'][k] = {'p': [x, y], 'a': ak}
+
+# ---- Cluster zones: clip the south coastal polygon into 3 longitudinal strips ----
+def clip_x(poly, keep_ge=None, keep_le=None):
+    def run(poly, inside, interp):
+        o = []; n = len(poly)
+        for i in range(n):
+            cur = poly[i]; prv = poly[i - 1]
+            ci = inside(cur); pi = inside(prv)
+            if ci:
+                if not pi: o.append(interp(prv, cur))
+                o.append(cur)
+            elif pi:
+                o.append(interp(prv, cur))
+        return o
+    p = poly
+    if keep_ge is not None:
+        xm = keep_ge
+        p = run(p, lambda q: q[0] >= xm, lambda a, b: (xm, a[1] + (xm - a[0]) / (b[0] - a[0]) * (b[1] - a[1])))
+    if keep_le is not None:
+        xm = keep_le
+        p = run(p, lambda q: q[0] <= xm, lambda a, b: (xm, a[1] + (xm - a[0]) / (b[0] - a[0]) * (b[1] - a[1])))
+    return p
+
+SPLIT1, SPLIT2 = 391, 512   # bays|kuta , kuta|south_east
+CLUSTERS = {
+    'selong_belanak_bays': dict(members=['selong_belanak', 'mawi'], keep_le=SPLIT1),
+    'kuta_mandalika':      dict(members=['are_guling', 'mawun', 'kuta', 'gerupuk'], keep_ge=SPLIT1, keep_le=SPLIT2),
+    'south_east':          dict(members=['awang', 'ekas'], keep_ge=SPLIT2),
 }
 cl_out = {}
-allx = []; ally = []
-for ck, mem in clusters.items():
-    xs = [out['areas'][m]['p'][0] for m in mem]; ys = [out['areas'][m]['p'][1] for m in mem]
-    allx += xs; ally += ys
-    px, py = 46, 40
-    bb = [round(min(xs) - px), round(min(ys) - py), round((max(xs) - min(xs)) + px * 2), round((max(ys) - min(ys)) + py * 2)]
-    cl_out[ck] = {'members': mem, 'bbox': bb, 'cx': round(sum(xs) / len(xs), 1), 'miny': round(min(ys), 1), 'maxy': round(max(ys), 1)}
-# clusterBox = framing of all south markers
-clusterBox = [round(min(allx) - 40), round(min(ally) - 45), round((max(allx) - min(allx)) + 80), round((max(ally) - min(ally)) + 95)]
-# Pills: triangle stagger (left high, middle low, right high)
-pills = {
-    'selong_belanak_bays': [cl_out['selong_belanak_bays']['cx'], round(cl_out['selong_belanak_bays']['miny'] - 42, 1)],
-    'kuta_mandalika':      [cl_out['kuta_mandalika']['cx'],      round(cl_out['kuta_mandalika']['maxy'] + 24, 1)],
-    'south_east':          [cl_out['south_east']['cx'],          round(cl_out['south_east']['miny'] - 42, 1)],
-}
+for ck, cfg in CLUSTERS.items():
+    zone = clip_x(south_poly, cfg.get('keep_ge'), cfg.get('keep_le'))
+    # dots that belong to this cluster (member areas + their places, snapped)
+    dotxs = []; dotys = []
+    for a in cfg['members']:
+        dotxs.append(out['areas'][a]['p'][0]); dotys.append(out['areas'][a]['p'][1])
+    for pk, pv in out['places'].items():
+        if pv['a'] in cfg['members']:
+            dotxs.append(pv['p'][0]); dotys.append(pv['p'][1])
+    zb = bbox(zone)
+    # zoom bbox = union of dot extent (padded) — frames the markers, not the whole zone
+    dx0, dx1 = min(dotxs) - 34, max(dotxs) + 34
+    dy0, dy1 = min(dotys) - 60, max(dotys) + 40
+    zoom = [round(dx0), round(dy0), round(dx1 - dx0), round(dy1 - dy0)]
+    # label anchor: near the cluster's coast centre, lifted above
+    lx = round(sum(dotxs) / len(dotxs), 1)
+    ly = round(min(dotys) - 30, 1)
+    cl_out[ck] = {'d': path_d(zone), 'zbbox': zb, 'zoom': zoom, 'label': [lx, ly], 'members': cfg['members']}
+
 out['_clusters'] = cl_out
-out['_clusterBox'] = clusterBox
-out['_pills'] = pills
+# clusterBox overview = frame all south dots
+sxs = [out['areas'][a]['p'][0] for a in ['selong_belanak','mawi','are_guling','mawun','kuta','gerupuk','awang','ekas']]
+sys_ = [out['areas'][a]['p'][1] for a in ['selong_belanak','mawi','are_guling','mawun','kuta','gerupuk','awang','ekas']]
+out['_clusterBox'] = [round(min(sxs) - 55), round(min(sys_) - 70), round(max(sxs) - min(sxs) + 110), round(max(sys_) - min(sys_) + 150)]
 
 json.dump(out, open(os.path.join(TEMP, 'lombok_map.json'), 'w'), indent=1)
-print('outline chars:', len(out['outline']))
-print('south markers:')
+print('coast pts:', len(coast), 'outline chars:', len(out['outline']))
+print('south areas:')
 for k in ['selong_belanak','mawi','are_guling','mawun','kuta','gerupuk','awang','ekas']:
-    print(' ', k, out['areas'][k])
-print('clusterBox:', clusterBox)
-for ck in clusters:
-    print(' ', ck, 'bbox', cl_out[ck]['bbox'], 'pill', pills[ck], 'members', clusters[ck])
+    print('  ', k, out['areas'][k]['p'])
+print('places:')
+for k,v in out['places'].items(): print('  ', k, v['p'], '<-', v['a'])
+print('clusterBox', out['_clusterBox'])
+for ck,c in cl_out.items(): print('  ', ck, 'zoom', c['zoom'], 'label', c['label'])
 print('done')

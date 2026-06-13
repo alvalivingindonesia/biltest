@@ -1960,17 +1960,17 @@ const LOMBOK_MAP = {
           d: 'M391,572.7 L386.3,573.8 L384.9,576.1 L384.7,579.7 L385.9,581.0 L382.6,583.9 L382.5,585.6 L381.5,583.5 L382.0,582.4 L379.8,581.3 L379.4,581.8 L379.2,580.7 L378.5,582.3 L378.0,581.0 L377.1,581.8 L376.3,580.8 L376.1,582.3 L374.5,583.2 L371.6,580.6 L365.3,582.8 L364.2,579.9 L361.2,579.6 L362.1,577.9 L360.6,575.8 L359.3,577.1 L358.5,576.5 L357.8,578.3 L356.5,578.0 L355.9,576.8 L357.1,576.5 L356.7,575.3 L357.8,575.3 L358.6,572.0 L357.4,570.5 L356.5,571.2 L356.9,568.6 L355.4,568.5 L355.0,569.4 L354.8,567.8 L352.3,567.0 L352.6,564.8 L354.2,564.6 L354.3,562.4 L355.3,562.3 L355.8,560.5 L352.9,555.6 L353.1,553.5 L355.5,552.5 L356.3,550.5 L353.2,545.1 L351.1,543.5 L350.5,544.0 L350.8,543.0 L346.3,542.6 L344.9,544.8 L338.7,547.7 L333.4,547.8 L327.8,545.8 L320.9,545.4 L319.1,545.9 L316.8,549.2 L315.1,550.1 L313.8,549.8 L313.5,547.4 L312.3,547.1 L295.1,550.5 L292.2,553.9 L291.2,557.3 L291.8,558.3 L289.9,559.9 L290.6,568.0 L287.7,566.2 L285.9,559.7 L274.2,558.1 L270.2,560.4 L268.1,560.4 L266.1,555.1 L266.6,552.6 L265.0,550.9 L264.4,547.8 L268.2,545.5 L269.3,546.0 L271.0,543.8 L275.8,542.5 L276.5,543.4 L275.3,543.6 L276.3,544.2 L277.1,544.1 L276.6,543.5 L284.1,544.7 L290.3,543.9 L289.9,541.2 L290.4,540.3 L291.8,540.6 L370.7,524.1 L391,524.1 Z',
           areas: ['selong_belanak', 'mawi'],
           markers: ['selong_belanak', 'mawi'],
-          zoom: [276, 469, 152, 150], label: [354.9, 498.9] },
+          zoom: [276, 469, 152, 150], labelPos: [354.9, 498.9] },
         kuta_mandalika: { label: 'Kuta–Mandalika', label_id: 'Kuta–Mandalika',
           d: 'M512,579.9 L512.0,579.9 L510.7,575.5 L508.2,574.5 L507.3,576.0 L505.2,575.8 L505.8,572.1 L502.2,570.9 L501.6,569.7 L497.7,571.3 L495.5,573.4 L495.1,574.8 L500.3,580.1 L501.7,583.8 L503.5,584.4 L501.9,588.5 L502.5,590.5 L503.9,590.5 L505.1,593.0 L501.6,596.1 L497.2,592.6 L498.5,589.4 L494.2,585.0 L491.1,584.0 L489.2,587.5 L488.0,586.4 L488.1,584.9 L489.7,584.3 L489.9,581.4 L488.5,579.9 L487.4,580.6 L486.7,578.5 L483.4,578.3 L480.4,581.1 L481.4,584.3 L483.8,585.3 L480.3,588.0 L480.6,586.2 L476.6,578.6 L467.7,577.4 L466.1,577.8 L465.0,580.2 L462.7,579.2 L462.6,576.8 L465.0,576.6 L466.6,573.1 L464.0,570.0 L462.9,571.1 L463.2,572.3 L464.5,572.5 L464.9,574.3 L463.7,575.2 L463.6,576.8 L462.2,574.8 L461.0,574.9 L460.7,573.1 L457.8,571.3 L458.5,570.2 L457.5,569.2 L448.9,566.5 L446.4,566.9 L445.0,568.5 L446.2,571.3 L444.8,574.2 L445.0,576.5 L445.8,579.7 L447.4,580.9 L446.2,581.1 L446.2,582.1 L442.7,579.2 L440.1,580.0 L439.6,578.9 L437.0,578.5 L436.8,577.3 L435.2,578.1 L434.1,576.5 L433.1,577.5 L430.0,576.6 L427.3,574.0 L425.1,573.8 L420.2,576.4 L420.0,578.2 L421.6,581.5 L419.3,584.7 L417.1,585.5 L416.9,584.5 L415.2,584.9 L413.0,583.7 L413.4,579.5 L412.2,576.8 L413.0,574.9 L409.1,571.9 L406.6,574.4 L408.1,576.0 L408.1,577.5 L405.8,579.1 L404.3,579.1 L403.8,578.1 L403.0,579.0 L401.3,578.5 L399.5,576.3 L399.0,573.6 L397.3,572.8 L391.7,572.5 L391,572.7 L391,524.1 L488.6,524.1 L512,517.7 Z',
           areas: ['are_guling', 'mawun', 'kuta', 'gerupuk', 'tanjung_aan'],
           markers: ['are_guling', 'mawun', 'kuta', 'gerupuk'],
-          zoom: [367, 490, 160, 132], label: [457, 519.5] },
+          zoom: [367, 490, 160, 132], labelPos: [457, 519.5] },
         south_east: { label: 'South East', label_id: 'Tenggara',
           d: 'M662.6,439.1 L664.1,441.1 L663.6,444.7 L658.0,453.6 L658.2,454.7 L653.2,459.0 L651.9,461.2 L646.9,460.0 L651.3,461.3 L651.2,462.0 L641.5,469.0 L637.4,474.8 L635.7,475.2 L633.2,473.7 L630.0,476.6 L629.6,475.9 L633.3,472.7 L636.3,472.0 L634.5,471.2 L633.4,471.9 L634.1,470.9 L629.5,474.5 L626.6,480.3 L629.0,478.2 L626.7,483.5 L627.1,486.2 L626.6,486.8 L626.2,484.9 L623.1,483.4 L626.0,485.4 L626.6,488.2 L625.7,491.1 L623.7,492.4 L624.4,493.4 L623.6,492.8 L622.7,493.9 L622.8,496.9 L620.9,498.7 L618.0,500.6 L616.4,500.2 L615.6,497.9 L614.3,498.5 L610.4,496.4 L605.7,499.3 L603.9,497.4 L602.0,497.2 L605.3,499.4 L606.8,499.3 L606.5,500.5 L609.7,504.9 L609.2,506.8 L607.9,507.2 L609.5,508.1 L608.0,509.5 L609.7,508.3 L610.1,509.6 L610.4,509.0 L608.9,507.5 L610.1,503.9 L610.9,504.7 L614.8,503.4 L618.3,503.9 L620.0,501.5 L622.9,501.1 L621.4,502.9 L622.4,503.6 L621.7,506.9 L622.4,507.8 L621.1,508.1 L622.7,509.3 L621.3,510.3 L622.0,511.6 L619.5,513.4 L621.8,516.1 L620.6,517.0 L619.0,516.3 L618.7,517.7 L619.9,519.2 L617.5,522.0 L620.6,525.8 L619.3,525.3 L619.8,526.1 L616.4,530.7 L617.7,534.4 L620.0,534.9 L620.4,536.3 L625.0,539.1 L626.8,539.3 L627.3,538.2 L626.5,537.2 L628.0,538.1 L629.6,537.5 L630.9,538.8 L629.9,538.0 L630.1,533.7 L626.0,532.3 L626.7,531.3 L625.7,530.8 L625.5,528.5 L624.5,528.3 L625.8,525.1 L630.1,524.6 L633.0,527.8 L634.0,527.7 L634.0,526.7 L635.2,527.9 L637.5,527.6 L636.0,524.9 L635.1,525.7 L634.6,524.5 L633.5,525.0 L634.1,523.0 L633.4,521.8 L632.6,522.5 L631.7,520.7 L634.8,520.9 L634.7,519.7 L633.3,518.8 L633.5,517.6 L635.7,520.3 L636.5,519.6 L637.3,520.5 L636.0,521.1 L635.6,523.1 L637.7,522.6 L640.1,524.4 L640.3,523.0 L639.1,521.6 L641.5,522.6 L642.3,522.0 L642.3,523.4 L644.7,525.4 L646.8,524.4 L644.4,523.0 L648.1,522.8 L647.4,520.3 L646.1,521.4 L643.7,521.4 L643.6,520.3 L642.0,520.2 L640.1,518.4 L638.9,518.7 L637.7,517.3 L642.1,517.8 L644.8,519.2 L646.3,518.4 L645.3,517.1 L643.4,517.0 L642.9,515.8 L640.1,516.1 L639.7,512.7 L641.3,512.6 L645.0,516.0 L649.7,514.8 L650.9,517.1 L654.7,518.4 L653.8,519.1 L654.3,521.2 L653.5,523.3 L651.5,524.8 L654.0,526.7 L655.2,524.9 L658.3,527.5 L657.6,529.3 L656.3,530.1 L654.5,528.1 L653.1,529.0 L653.9,529.8 L653.2,531.0 L649.8,529.5 L647.0,530.1 L647.3,531.7 L649.6,531.3 L648.6,532.4 L649.2,533.3 L651.0,531.9 L655.1,533.5 L655.3,534.7 L652.3,534.5 L653.3,536.5 L650.6,535.7 L651.4,537.0 L650.4,539.7 L648.7,539.6 L649.3,541.3 L650.7,541.7 L652.2,539.4 L652.6,541.4 L653.4,541.0 L655.3,542.3 L655.2,543.4 L653.1,544.8 L655.2,545.2 L654.6,546.5 L655.9,547.2 L657.0,546.3 L656.3,544.5 L657.1,543.4 L659.5,544.8 L660.6,543.9 L660.4,542.9 L655.2,540.3 L656.0,539.8 L655.1,538.3 L657.5,536.3 L657.9,538.9 L658.8,537.3 L660.3,536.9 L662.4,539.9 L662.4,536.7 L665.8,538.1 L666.5,537.4 L667.6,539.3 L668.2,538.1 L670.4,538.2 L669.5,536.7 L672.0,535.4 L672.3,534.1 L673.8,534.7 L672.0,538.4 L672.7,540.6 L670.1,543.2 L671.6,544.5 L672.5,542.8 L673.9,542.6 L673.5,543.9 L675.1,544.4 L674.4,546.4 L678.1,545.1 L676.5,544.3 L676.9,542.0 L682.1,540.3 L681.9,538.4 L684.4,539.7 L686.2,539.0 L685.6,537.9 L687.5,538.0 L689.4,539.6 L691.3,537.3 L694.7,539.0 L696.4,541.2 L694.2,544.5 L692.9,542.5 L690.2,542.6 L688.4,544.2 L689.4,548.6 L689.1,547.9 L685.1,549.0 L684.9,547.9 L683.8,547.8 L682.4,549.5 L681.0,549.7 L681.1,553.0 L680.0,553.0 L679.5,554.3 L677.9,554.0 L677.4,556.5 L678.7,556.5 L677.8,556.8 L677.8,561.5 L677.0,562.9 L677.7,565.3 L674.7,565.1 L670.0,568.7 L669.0,567.6 L667.0,567.6 L665.0,569.7 L665.4,570.7 L662.3,569.5 L660.5,572.0 L660.4,570.3 L658.8,570.3 L657.4,571.9 L655.0,570.8 L654.0,574.5 L651.7,573.7 L650.4,574.3 L649.9,576.2 L647.5,575.3 L646.3,576.6 L644.4,575.9 L644.5,577.0 L642.3,578.8 L638.4,579.3 L632.3,584.2 L629.8,583.8 L628.6,582.1 L629.4,580.9 L632.1,581.3 L636.2,577.3 L639.0,578.4 L637.6,575.1 L644.2,570.9 L641.8,570.7 L639.3,572.0 L638.4,571.7 L638.5,570.6 L636.5,571.3 L635.8,569.6 L634.7,569.6 L636.0,567.3 L638.1,567.3 L636.5,565.4 L640.1,562.7 L640.4,561.1 L638.4,561.7 L637.6,557.9 L635.0,556.1 L632.3,555.7 L631.4,552.5 L632.3,550.1 L631.0,546.8 L629.2,548.9 L630.6,555.2 L629.2,553.8 L627.9,554.6 L630.2,558.2 L629.5,561.0 L628.1,557.1 L627.5,557.8 L625.9,556.7 L626.3,558.5 L625.2,559.2 L626.0,560.7 L625.0,561.3 L623.4,557.8 L620.9,555.7 L620.4,556.2 L621.3,558.6 L620.6,559.4 L621.7,560.6 L621.0,561.6 L622.8,562.1 L624.5,565.4 L622.3,568.3 L620.4,568.0 L620.5,565.0 L619.5,564.8 L618.8,566.1 L617.5,562.3 L614.4,559.5 L615.3,560.4 L615.5,563.4 L614.6,564.1 L616.7,567.8 L616.5,570.1 L617.4,569.9 L617.2,569.2 L619.3,569.6 L621.2,571.5 L622.3,570.2 L621.7,569.4 L625.5,566.0 L625.2,562.2 L626.1,561.4 L627.3,561.9 L628.7,560.3 L627.5,562.5 L628.0,565.3 L627.1,567.4 L622.3,573.7 L621.5,578.5 L618.9,581.2 L611.4,583.0 L602.6,586.8 L600.6,588.7 L594.8,588.4 L590.7,587.0 L588.1,587.3 L587.9,588.6 L584.0,589.0 L575.1,586.8 L571.6,587.4 L570.2,585.4 L568.0,584.7 L568.0,582.3 L572.5,581.1 L573.2,578.3 L575.9,576.6 L576.4,573.7 L579.3,573.3 L581.4,571.6 L582.8,562.4 L583.8,561.7 L586.6,549.5 L588.8,549.3 L587.6,550.6 L589.1,550.4 L590.7,552.5 L590.6,550.5 L589.3,549.5 L591.2,542.6 L588.9,537.3 L590.9,537.7 L591.3,536.7 L595.4,536.0 L595.4,535.2 L591.1,534.2 L590.0,532.9 L591.9,531.6 L594.5,531.6 L595.1,529.3 L596.9,530.1 L598.4,529.4 L601.6,523.6 L601.0,520.0 L597.7,520.1 L597.3,517.9 L597.7,516.8 L601.6,516.8 L603.2,513.3 L601.9,513.4 L597.8,509.2 L595.8,509.9 L595.3,505.7 L592.7,507.0 L593.5,509.6 L591.4,509.6 L590.8,514.6 L585.3,517.8 L581.0,516.1 L582.1,511.4 L581.5,508.5 L581.3,513.1 L579.4,515.2 L574.6,510.9 L577.4,515.0 L575.1,515.0 L575.5,517.1 L573.2,512.9 L571.8,512.5 L571.0,510.9 L569.1,511.0 L576.2,520.6 L574.3,520.0 L573.9,520.7 L573.9,522.2 L576.6,523.2 L575.5,525.7 L574.3,523.9 L572.8,524.8 L571.3,522.5 L571.0,518.7 L568.5,518.3 L564.6,511.8 L562.7,514.8 L561.3,514.2 L559.3,516.2 L556.5,515.7 L555.2,519.5 L556.8,521.0 L556.2,522.4 L554.2,522.5 L553.9,525.1 L551.1,526.4 L550.3,533.1 L546.1,541.4 L546.9,544.2 L544.6,543.6 L546.1,540.5 L544.5,536.9 L539.1,536.6 L536.1,538.3 L534.2,541.0 L533.3,539.9 L534.2,541.5 L533.4,544.1 L531.6,544.9 L532.3,544.7 L535.6,549.3 L538.2,550.1 L539.8,551.9 L539.7,557.3 L542.2,557.9 L542.6,559.2 L539.8,560.1 L542.6,560.9 L542.0,564.5 L543.2,566.7 L545.1,567.0 L547.4,571.5 L542.7,576.5 L541.7,583.5 L539.6,586.6 L538.7,590.3 L538.4,592.5 L540.4,599.6 L541.8,600.8 L540.7,600.4 L540.3,603.2 L541.2,602.9 L541.8,604.5 L540.2,604.2 L540.6,606.5 L538.9,607.5 L540.9,609.2 L539.9,610.4 L539.6,609.5 L538.4,610.4 L538.6,613.5 L536.1,609.4 L533.8,609.7 L533.0,611.7 L530.3,611.3 L529.9,614.4 L528.9,613.8 L527.7,616.2 L524.5,615.8 L523.3,612.3 L521.7,611.8 L519.4,612.8 L519.2,614.6 L518.3,614.3 L518.6,612.1 L522.4,607.9 L518.9,601.6 L519.5,598.4 L517.7,595.9 L517.3,591.6 L520.3,589.7 L521.8,586.9 L524.4,585.1 L528.8,579.6 L528.4,577.7 L526.2,575.2 L521.3,574.8 L521.2,574.1 L522.5,573.6 L522.2,572.6 L520.4,574.5 L519.3,573.6 L520.9,575.5 L518.0,578.5 L514.5,579.7 L512.2,579.1 L512.0,579.9 L512,579.9 L512,517.7 L575.0,500.3 Z',
           areas: ['awang', 'ekas'],
           markers: ['awang', 'ekas'],
-          zoom: [498, 432, 196, 216], label: [604.8, 462.3] },
+          zoom: [498, 432, 196, 216], labelPos: [604.8, 462.3] },
       } },
     gili_islands: { circles: [[260, 134.8, 11], [275.7, 136.4, 8], [294.5, 141.2, 8]],
       bbox: [230, 99, 94, 76], label: [277, 113] },
@@ -2026,7 +2026,7 @@ function createLombokMap(wrapEl, opts) {
   opts = opts || {};
   var VB = LOMBOK_MAP.viewBox;
   var counts = { regions: {}, areas: {}, places: {} };
-  var selRegion = '', selCluster = '', selArea = '';
+  var selRegion = '', selCluster = '', selArea = '', selPlace = '';
   var animFrame = null;
 
   function regionHasClusters(rk) { var r = LOMBOK_MAP.regions[rk]; return !!(r && r.clusters); }
@@ -2049,6 +2049,15 @@ function createLombokMap(wrapEl, opts) {
     var cl = LOMBOK_MAP.regions[rk].clusters[ck];
     var lbl = (CURRENT_LANG === 'id' && cl.label_id) ? cl.label_id : cl.label;
     return lbl.toUpperCase();
+  }
+  function clusterMarkers(rk, ck) {
+    var c = LOMBOK_MAP.regions[rk];
+    return (c && c.clusters && c.clusters[ck]) ? c.clusters[ck].markers : [];
+  }
+  function placeLabel(key) {
+    var row = (FilterData.places || []).find(function(p) { return p.place_key === key; });
+    var lbl = row ? lookupLabel(row) : key.replace(/_/g, ' ');
+    return lbl.split(' / ')[0].toUpperCase();
   }
 
   // ---- build SVG ----
@@ -2114,8 +2123,8 @@ function createLombokMap(wrapEl, opts) {
       var cl = rg.clusters[ck];
       zonesHtml += '<path class="lmap-czone" data-cluster="' + ck + '" data-region="' + rk + '" d="' + cl.d + '"/>';
       zlabelsHtml += '<text class="lmap-czlabel" data-cluster="' + ck + '" data-region="' + rk + '"'
-        + ' x="' + cl.label[0] + '" y="' + cl.label[1] + '" text-anchor="start"'
-        + ' transform="rotate(-32 ' + cl.label[0] + ' ' + cl.label[1] + ')"></text>';
+        + ' x="' + cl.labelPos[0] + '" y="' + cl.labelPos[1] + '" text-anchor="start"'
+        + ' transform="rotate(-32 ' + cl.labelPos[0] + ' ' + cl.labelPos[1] + ')"></text>';
     });
   });
 
@@ -2165,30 +2174,10 @@ function createLombokMap(wrapEl, opts) {
     animFrame = requestAnimationFrame(tick);
   }
 
-  // Size a pill's background rect to its label text (SVG user units). getBBox
-  // returns 0 before the SVG is laid out (initial render / collapsed panel) —
-  // retry once on the next frame so the pill isn't left at its default width.
-  function sizePill(n, _retry) {
-    var txt = n.querySelector('.lmap-cluster-name');
-    var bg = n.querySelector('.lmap-cluster-bg');
-    if (!txt || !bg) return;
-    var b;
-    try { b = txt.getBBox(); } catch (e) { return; }
-    if (!b.width) {
-      if (!_retry) requestAnimationFrame(function() { sizePill(n, true); });
-      return;
-    }
-    var px = 14, py = 8;
-    bg.setAttribute('x', (b.x - px).toFixed(1));
-    bg.setAttribute('y', (b.y - py).toFixed(1));
-    bg.setAttribute('width', (b.width + px * 2).toFixed(1));
-    bg.setAttribute('height', (b.height + py * 2).toFixed(1));
-    bg.setAttribute('rx', ((b.height + py * 2) / 2).toFixed(1));
-  }
-
   // ---- state rendering ----
   function applySelection() {
     var clustered = regionHasClusters(selRegion);
+    var atCluster = clustered && !!selCluster;
     svg.classList.toggle('lmap--zoomed', !!selRegion);
     svg.querySelectorAll('.lmap-region').forEach(function(n) {
       n.classList.toggle('sel', n.getAttribute('data-region') === selRegion);
@@ -2196,35 +2185,34 @@ function createLombokMap(wrapEl, opts) {
     svg.querySelectorAll('.lmap-rlabel').forEach(function(n) {
       n.classList.toggle('sel', n.getAttribute('data-region') === selRegion);
     });
-    // Cluster pills: shown when their region is selected but no cluster picked yet
-    svg.querySelectorAll('.lmap-cluster').forEach(function(n) {
-      var show = clustered && !selCluster && n.getAttribute('data-region') === selRegion;
-      n.classList.toggle('visible', !!show);
+    // Cluster zones + their labels: shown when the region is selected but no
+    // cluster picked yet (the cluster-overview level).
+    var showZones = clustered && !selCluster;
+    svg.querySelectorAll('.lmap-czone, .lmap-czlabel').forEach(function(n) {
+      n.classList.toggle('visible', showZones && n.getAttribute('data-region') === selRegion);
     });
-    // Area markers: shown for the selected cluster, or for a non-clustered region
+    // Area markers: the selected cluster's members, or all of a non-clustered region.
+    var members = atCluster ? clusterMarkers(selRegion, selCluster) : null;
     svg.querySelectorAll('.lmap-amark').forEach(function(n) {
       var ak = n.getAttribute('data-area'), ark = n.getAttribute('data-region'), show = false;
-      if (selCluster && clustered) {
-        var cl = LOMBOK_MAP.regions[selRegion].clusters[selCluster];
-        show = !!(cl && cl.areas.indexOf(ak) >= 0);
-      } else if (selRegion && !clustered) {
-        show = ark === selRegion;
-      }
+      if (atCluster) show = members.indexOf(ak) >= 0;
+      else if (selRegion && !clustered) show = ark === selRegion;
       n.classList.toggle('visible', show);
-      n.classList.toggle('active', ak === selArea);
+      n.classList.toggle('active', ak === selArea && !selPlace);
     });
-    // Zoom target: cluster box → cluster-overview box (frames the pills) →
-    // region box → whole island.
+    // Place dots: the selected cluster's member areas' places (empty ones hidden
+    // in applyCounts).
+    svg.querySelectorAll('.lmap-place').forEach(function(n) {
+      var show = atCluster && members.indexOf(n.getAttribute('data-area')) >= 0;
+      n.classList.toggle('visible', show);
+      n.classList.toggle('active', n.getAttribute('data-place') === selPlace);
+    });
+    // Zoom: cluster box → cluster-overview box → region box → whole island.
     var target, rg = LOMBOK_MAP.regions[selRegion];
-    if (selCluster && clustered && rg.clusters[selCluster]) {
-      target = fitBBox(rg.clusters[selCluster].bbox);
-    } else if (selRegion && clustered && rg.clusterBox) {
-      target = fitBBox(rg.clusterBox);
-    } else if (selRegion && rg) {
-      target = fitBBox(rg.bbox);
-    } else {
-      target = VB.slice();
-    }
+    if (atCluster && rg.clusters[selCluster]) target = fitBBox(rg.clusters[selCluster].zoom);
+    else if (selRegion && clustered && rg.clusterBox) target = fitBBox(rg.clusterBox);
+    else if (selRegion && rg) target = fitBBox(rg.bbox);
+    else target = VB.slice();
     animateTo(target);
   }
 
@@ -2249,25 +2237,30 @@ function createLombokMap(wrapEl, opts) {
       var n = counts.areas[ak] || 0;
       mark.classList.toggle('empty', n === 0);
       var txt = mark.querySelector('.lmap-amark-label');
-      var base = areaLabel(ak);
-      txt.textContent = n > 0 ? base + ' · ' + n : base;
+      txt.textContent = n > 0 ? areaLabel(ak) + ' · ' + n : areaLabel(ak);
     });
-    // Cluster counts = sum of member Area counts (client-side, docs/adr/0011)
-    svg.querySelectorAll('.lmap-cluster').forEach(function(n) {
+    // Place dots: label + count; hide places with no active listings.
+    Object.keys(LOMBOK_MAP.places || {}).forEach(function(pk) {
+      var mark = svg.querySelector('.lmap-place[data-place="' + pk + '"]');
+      if (!mark) return;
+      var n = counts.places[pk] || 0;
+      mark.classList.toggle('empty', n === 0);
+      mark.querySelector('.lmap-place-label').textContent = n > 0 ? placeLabel(pk) + ' · ' + n : placeLabel(pk);
+    });
+    // Cluster zone label = name · (sum of member Area counts) (docs/adr/0011)
+    svg.querySelectorAll('.lmap-czlabel').forEach(function(n) {
       var rk = n.getAttribute('data-region'), ck = n.getAttribute('data-cluster');
-      var cl = LOMBOK_MAP.regions[rk].clusters[ck];
-      var sum = cl.areas.reduce(function(s, ak) { return s + (counts.areas[ak] || 0); }, 0);
-      var empty = sum === 0;
-      n.classList.toggle('lmap-cluster--empty', empty);
-      n.querySelector('.lmap-cluster-name').textContent = empty
-        ? clusterLabel(rk, ck)
-        : clusterLabel(rk, ck) + '  ·  ' + sum;
-      sizePill(n);
+      var sum = clusterMarkers(rk, ck).reduce(function(s, ak) { return s + (counts.areas[ak] || 0); }, 0);
+      n.textContent = sum > 0 ? clusterLabel(rk, ck) + ' · ' + sum : clusterLabel(rk, ck);
+    });
+    svg.querySelectorAll('.lmap-czone').forEach(function(n) {
+      var rk = n.getAttribute('data-region'), ck = n.getAttribute('data-cluster');
+      var sum = clusterMarkers(rk, ck).reduce(function(s, ak) { return s + (counts.areas[ak] || 0); }, 0);
+      n.classList.toggle('lmap-czone--empty', sum === 0);
     });
   }
 
   // ---- events ----
-  // Click in SVG user coordinates (independent of zoom/pan).
   function clickToSvg(e) {
     var m = svg.getScreenCTM();
     if (!m) return null;
@@ -2276,44 +2269,49 @@ function createLombokMap(wrapEl, opts) {
     var p = pt.matrixTransform(m.inverse());
     return { x: p.x, y: p.y };
   }
-  // Pick the visible Area marker nearest the click — robust when dense south-
-  // coast markers overlap (label/hit-area collisions picked the wrong one).
-  function nearestMarker(sp) {
+  // Nearest visible dot (Area or Place) to the click — robust against
+  // overlapping dots/labels on the dense south coast.
+  function nearestDot(sp) {
     if (!sp) return null;
     var vb = svg.getAttribute('viewBox').split(/[ ,]+/).map(Number);
-    var thresh = vb[2] * 0.085; // ~constant tap radius in screen px across zooms
-    var best = null, bestD = thresh * thresh;
+    var thresh = vb[2] * 0.075;
+    var best = null, bestD = thresh * thresh, type = null;
     svg.querySelectorAll('.lmap-amark.visible').forEach(function(mk) {
-      var a = LOMBOK_MAP.areas[mk.getAttribute('data-area')];
-      if (!a) return;
+      var a = LOMBOK_MAP.areas[mk.getAttribute('data-area')]; if (!a) return;
       var dx = a.p[0] - sp.x, dy = a.p[1] - sp.y, d = dx * dx + dy * dy;
-      if (d < bestD) { bestD = d; best = mk; }
+      if (d < bestD) { bestD = d; best = mk; type = 'area'; }
     });
-    return best;
+    svg.querySelectorAll('.lmap-place.visible:not(.empty)').forEach(function(mk) {
+      var pl = LOMBOK_MAP.places[mk.getAttribute('data-place')]; if (!pl) return;
+      var dx = pl.p[0] - sp.x, dy = pl.p[1] - sp.y, d = dx * dx + dy * dy;
+      if (d < bestD) { bestD = d; best = mk; type = 'place'; }
+    });
+    return best ? { el: best, type: type } : null;
   }
 
   svg.addEventListener('click', function(e) {
-    var pill = e.target.closest('.lmap-cluster');
-    if (pill && pill.classList.contains('visible') && !pill.classList.contains('lmap-cluster--empty')) {
-      if (opts.onSelect) opts.onSelect({ region: pill.getAttribute('data-region'), cluster: pill.getAttribute('data-cluster'), area: '' });
+    var zone = e.target.closest('.lmap-czone');
+    if (zone && zone.classList.contains('visible') && !zone.classList.contains('lmap-czone--empty')) {
+      if (opts.onSelect) opts.onSelect({ region: zone.getAttribute('data-region'), cluster: zone.getAttribute('data-cluster'), area: '', place: '' });
       return;
     }
-    // Nearest-marker wins over raw hit-testing so overlapping dots/labels still
-    // select the intended Area.
-    var amark = nearestMarker(clickToSvg(e)) || (function() {
-      var hit = e.target.closest('.lmap-amark');
-      return hit && hit.classList.contains('visible') ? hit : null;
-    })();
-    if (amark) {
-      var ak = amark.getAttribute('data-area'), ark = amark.getAttribute('data-region');
-      if (opts.onSelect) opts.onSelect({ region: ark, cluster: clusterOfArea(ark, ak), area: ak === selArea ? '' : ak });
+    var dot = nearestDot(clickToSvg(e));
+    if (dot && dot.type === 'area') {
+      var ak = dot.el.getAttribute('data-area'), ark = dot.el.getAttribute('data-region');
+      if (opts.onSelect) opts.onSelect({ region: ark, cluster: clusterOfArea(ark, ak), area: ak === selArea && !selPlace ? '' : ak, place: '' });
+      return;
+    }
+    if (dot && dot.type === 'place') {
+      var pk = dot.el.getAttribute('data-place'), pa = dot.el.getAttribute('data-area');
+      var prk = (LOMBOK_MAP.areas[pa] || {}).r || selRegion;
+      if (opts.onSelect) opts.onSelect({ region: prk, cluster: clusterOfArea(prk, pa), area: pa, place: pk === selPlace ? '' : pk });
       return;
     }
     var region = e.target.closest('.lmap-region');
     if (region && !region.classList.contains('lmap-region--empty')) {
       var rk = region.getAttribute('data-region');
       var deselect = rk === selRegion && !selCluster && !selArea;
-      if (opts.onSelect) opts.onSelect(deselect ? { region: '', cluster: '', area: '' } : { region: rk, cluster: '', area: '' });
+      if (opts.onSelect) opts.onSelect(deselect ? { region: '', cluster: '', area: '', place: '' } : { region: rk, cluster: '', area: '', place: '' });
     }
   });
 
@@ -2327,10 +2325,11 @@ function createLombokMap(wrapEl, opts) {
       applyCounts();
     },
     relayout: function() { applyCounts(); },
-    setSelection: function(region, cluster, area) {
+    setSelection: function(region, cluster, area, place) {
       selRegion = region || '';
       selCluster = cluster || '';
       selArea = area || '';
+      selPlace = place || '';
       applySelection();
     }
   };
@@ -2781,16 +2780,16 @@ async function renderListings(el, params = {}) {
   // ---- map ----
   map = createLombokMap(el.querySelector('#lmap-svg-wrap'), {
     onSelect: function(sel) {
-      // A map pick replaces the whole location selection (and any Place).
+      // A map pick replaces the whole location selection.
       state.region = sel.region || '';
       state.cluster = sel.cluster || '';
       state.area = sel.area || '';
-      state.place = '';
+      state.place = sel.place || '';
       state.page = 1;
       syncAreaDropdown();
-      // Picking a final Area on mobile: keep the map open, just scroll down to
-      // the results so it's obvious the filter applied (don't collapse it).
-      refresh(sel.area && isMobile());
+      // Picking a final Area/Place on mobile: keep the map open, just scroll
+      // down to the results so it's obvious the filter applied.
+      refresh((sel.area || sel.place) && isMobile());
     }
   });
 
@@ -2830,7 +2829,7 @@ async function renderListings(el, params = {}) {
   }
 
   function mapSelection() {
-    map.setSelection(state.region, state.cluster, state.area);
+    map.setSelection(state.region, state.cluster, state.area, state.place);
     if (nodes.resetBtn) {
       var bt = backTarget();
       nodes.resetBtn.hidden = !bt;
