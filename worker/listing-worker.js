@@ -301,9 +301,12 @@ async function reextractLocations() {
     // listings that currently have no image.
     const IMG_PAGES = parseInt(process.env.IMAGE_PAGES || '20', 10);
     const imgDelay = () => 4000 + Math.floor(Math.random() * 5000); // search pages: gentler than detail crawl
-    log('BACKFILL-IMAGES starting', { IMG_PAGES, HEADFUL });
+    const onlySite = (process.argv.find((a) => a.startsWith('--site=')) || '').split('=')[1] || process.env.SITE || '';
+    log('BACKFILL-IMAGES starting', { IMG_PAGES, HEADFUL, onlySite: onlySite || '(all)' });
     const work = await api.pullWork(1); // just for the discovery_sources list
-    const sources = work.discovery_sources || [];
+    let sources = (work.discovery_sources || []);
+    log('active discovery sources:', sources.map((s) => s.source_site).join(', ') || '(none)');
+    if (onlySite) sources = sources.filter((s) => s.source_site === onlySite);
     const browser = await chromium.launch(LAUNCH_OPTS);
     const ctx = await newContext(browser);
     try {
