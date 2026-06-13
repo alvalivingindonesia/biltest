@@ -163,12 +163,12 @@ if ($q !== '') {
         $s->execute(array('%' . $q . '%'));
         $ids = array_map('intval', $s->fetchAll(PDO::FETCH_COLUMN));
     }
-} else {
-    $where = "last_rechecked_at IS NOT NULL";
-    if ($has_revisions) $where .= " OR id IN (SELECT listing_id FROM listing_revisions)";
-    $s = $db->query("SELECT id FROM listings WHERE $where ORDER BY COALESCE(last_rechecked_at, updated_at) DESC LIMIT 200");
+} elseif ($has_revisions) {
+    // Only listings with a RECORDED change — i.e. genuinely modified, newest first.
+    $s = $db->query("SELECT listing_id FROM listing_revisions GROUP BY listing_id ORDER BY MAX(changed_at) DESC LIMIT 300");
     $ids = array_map('intval', $s->fetchAll(PDO::FETCH_COLUMN));
 }
+// (no $has_revisions → nothing is tracked yet → empty list + the banner below)
 
 $listings = array();
 if ($ids) {
@@ -230,7 +230,10 @@ $short = function($s,$n=60){ $s=(string)$s; return mb_strlen($s)>$n ? mb_substr(
 <?php if (!$has_revisions): ?>
   <div class="banner warn"><strong>Change history not active yet.</strong> Run
   <code>migrations/2026_06_13_listing_revisions.sql</code> to start recording old→new changes
-  (needed for per-change <em>revert</em>). Until then this lists Worker-touched listings and you can still edit them.</div>
+  (needed for per-change <em>revert</em>). Until then use the search box to pull up and edit any listing.</div>
+<?php elseif ($q === ''): ?>
+  <p style="color:#666;font-size:12px;margin:6px 0">Showing listings with a <strong>recorded change</strong> (Worker re-check or admin edit), newest first.
+  The initial one-off backfill ran before change-tracking, so its edits aren't listed individually — use the search box to open any listing.</p>
 <?php endif; ?>
 
 <form method="get" style="margin:12px 0">
