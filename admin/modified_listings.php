@@ -86,9 +86,13 @@ function rederive(PDO $db, $id) {
        ->execute(array($are, $psqm, $id));
 }
 
-// ─── POST actions (edit / revert) — PRG ──────────────────────────────
+function json_resp($a) { header('Content-Type: application/json; charset=utf-8'); echo json_encode($a, JSON_UNESCAPED_UNICODE); exit; }
+
+// ─── POST actions (edit / revert) — AJAX (JSON) or PRG fallback ───────
 if (($_POST['do'] ?? '') === 'edit') {
     $id = (int)($_POST['listing_id'] ?? 0);
+    $ajax = !empty($_POST['ajax']);
+    $changed = array();
     if ($id > 0) {
         $cur = $db->prepare("SELECT * FROM listings WHERE id = ?"); $cur->execute(array($id)); $row = $cur->fetch();
         if ($row) {
@@ -100,9 +104,16 @@ if (($_POST['do'] ?? '') === 'edit') {
                 $db->prepare("UPDATE listings SET `$f` = ?, updated_at = NOW() WHERE id = ?")->execute(array($new, $id));
                 lc_record_revision($db, $id, $f, $old, $new, 'admin');
                 lc_lock_field($db, $id, $f); // admin's value wins over future Worker runs
+                $changed[] = $f;
             }
             rederive($db, $id);
         }
+    }
+    if ($ajax) {
+        $l = $db->prepare("SELECT id, locked_fields, price_idr, area_key, land_size_sqm, updated_at FROM listings WHERE id = ?");
+        $l->execute(array($id)); $lrow = $l->fetch();
+        json_resp(array('ok' => true, 'id' => $id, 'changed' => $changed,
+            'locked_fields' => $lrow['locked_fields'] ?? '', 'updated_at' => $lrow['updated_at'] ?? ''));
     }
     header('Location: modified_listings.php?ok=edited&id=' . $id . '#l' . $id);
     exit;
@@ -110,6 +121,7 @@ if (($_POST['do'] ?? '') === 'edit') {
 
 if (($_POST['do'] ?? '') === 'revert') {
     $rid = (int)($_POST['revision_id'] ?? 0);
+    $ajax = !empty($_POST['ajax']);
     $allow = array_keys($EDITABLE);
     $allow[] = 'price_label'; $allow[] = 'certificate_type_key';
     $rev = $db->prepare("SELECT * FROM listing_revisions WHERE id = ?"); $rev->execute(array($rid)); $r = $rev->fetch();
@@ -121,9 +133,11 @@ if (($_POST['do'] ?? '') === 'revert') {
         lc_record_revision($db, $lid, $f, $now, $r['old_value'], 'revert');
         lc_lock_field($db, $lid, $f);
         rederive($db, $lid);
+        if ($ajax) json_resp(array('ok' => true, 'reverted' => true, 'revision_id' => $rid, 'listing_id' => $lid, 'field' => $f, 'value' => $r['old_value']));
         header('Location: modified_listings.php?ok=reverted&id=' . $lid . '#l' . $lid);
         exit;
     }
+    if ($ajax) json_resp(array('ok' => false, 'msg' => 'nothing to revert'));
     header('Location: modified_listings.php?ok=noop');
     exit;
 }
@@ -138,7 +152,9 @@ if (!$types) foreach (array('land','villa','house','apartment','commercial','war
 $has_revisions = true;
 try { $db->query("SELECT 1 FROM listing_revisions LIMIT 1"); } catch (Exception $e) { $has_revisions = false; }
 
-// Listing ids to show: search result, else the most-recently-changed listings.
+// Listing ids to show: a search result, else EVERY listing the pipeline has
+// touched (Worker-rechecked OR has change history), most-recently-active first.
+// Not gated on revisions existing — that's what made the list collapse to one.
 $ids = array();
 if ($q !== '') {
     if (ctype_digit($q)) { $ids[] = (int)$q; }
@@ -147,14 +163,10 @@ if ($q !== '') {
         $s->execute(array('%' . $q . '%'));
         $ids = array_map('intval', $s->fetchAll(PDO::FETCH_COLUMN));
     }
-} elseif ($has_revisions) {
-    $s = $db->query("SELECT listing_id FROM listing_revisions GROUP BY listing_id ORDER BY MAX(changed_at) DESC LIMIT 100");
-    $ids = array_map('intval', $s->fetchAll(PDO::FETCH_COLUMN));
-}
-// Fallback: if no revision history yet, show what the Worker recently touched.
-$fallback = (!$has_revisions || (empty($ids) && $q === ''));
-if ($fallback) {
-    $s = $db->query("SELECT id FROM listings WHERE last_rechecked_at IS NOT NULL ORDER BY last_rechecked_at DESC LIMIT 100");
+} else {
+    $where = "last_rechecked_at IS NOT NULL";
+    if ($has_revisions) $where .= " OR id IN (SELECT listing_id FROM listing_revisions)";
+    $s = $db->query("SELECT id FROM listings WHERE $where ORDER BY COALESCE(last_rechecked_at, updated_at) DESC LIMIT 200");
     $ids = array_map('intval', $s->fetchAll(PDO::FETCH_COLUMN));
 }
 
@@ -219,9 +231,6 @@ $short = function($s,$n=60){ $s=(string)$s; return mb_strlen($s)>$n ? mb_substr(
   <div class="banner warn"><strong>Change history not active yet.</strong> Run
   <code>migrations/2026_06_13_listing_revisions.sql</code> to start recording old→new changes
   (needed for per-change <em>revert</em>). Until then this lists Worker-touched listings and you can still edit them.</div>
-<?php elseif ($fallback): ?>
-  <div class="banner warn">No tracked changes yet — showing the most recently Worker-checked listings. New automated
-  changes from now on will appear here with revert buttons.</div>
 <?php endif; ?>
 
 <form method="get" style="margin:12px 0">
@@ -259,7 +268,7 @@ $short = function($s,$n=60){ $s=(string)$s; return mb_strlen($s)>$n ? mb_substr(
          <td class="src"><?= $esc($rv['source']) ?></td>
          <td class="src"><?= $esc($rv['changed_at']) ?></td>
          <td><?php if (!$isRev && $rv['source'] !== 'revert'): ?>
-           <form method="post" style="margin:0" onsubmit="return confirm('Revert <?= $esc($rv['field']) ?> to the old value?')">
+           <form method="post" class="revert" style="margin:0" data-field="<?= $esc($rv['field']) ?>">
              <input type="hidden" name="do" value="revert"><input type="hidden" name="revision_id" value="<?= (int)$rv['id'] ?>">
              <button class="btn-rev" title="set back to the old value">↶ revert</button>
            </form>
@@ -297,3 +306,63 @@ $short = function($s,$n=60){ $s=(string)$s; return mb_strlen($s)>$n ? mb_substr(
    </form>
  </div>
 <?php endforeach; ?>
+
+<script>
+// Save / Revert without reloading the page — keeps the rest of the list intact.
+document.addEventListener('submit', async function (e) {
+  const f = e.target;
+  const isEdit = f.classList.contains('edit');
+  const isRevert = f.classList.contains('revert');
+  if (!isEdit && !isRevert) return;
+  e.preventDefault();
+
+  if (isRevert && !confirm('Revert ' + (f.dataset.field || 'this field') + ' to the old value?')) return;
+
+  const btn = f.querySelector('button');
+  const original = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = isRevert ? '…' : 'Saving…'; }
+
+  const fd = new FormData(f);
+  fd.append('ajax', '1');
+  try {
+    const res = await fetch('modified_listings.php', { method: 'POST', body: fd, headers: { 'X-Requested-With': 'fetch' } });
+    const j = await res.json();
+    if (!j.ok) throw new Error(j.msg || 'failed');
+
+    const card = f.closest('.card');
+    if (isRevert) {
+      const row = f.closest('tr');
+      if (row) row.classList.add('reverted');
+      f.remove(); // can't revert twice
+      // reflect the reverted value back into the edit form below
+      if (card && j.field) {
+        const fld = card.querySelector('.edit [name="' + j.field + '"]');
+        if (fld) fld.value = j.value == null ? '' : j.value;
+      }
+      flash(card, 'Reverted ' + j.field + ' ✓');
+    } else {
+      if (btn) { btn.innerHTML = 'Saved ✓'; btn.style.background = '#093'; }
+      // refresh the "locked" line in the card meta
+      if (card && j.locked_fields) {
+        let meta = card.querySelector('.meta');
+        let lockSpan = card.querySelector('.lockmeta');
+        if (!lockSpan && meta) { lockSpan = document.createElement('span'); lockSpan.className = 'lockmeta'; meta.appendChild(lockSpan); }
+        if (lockSpan) lockSpan.textContent = ' · 🔒 locked: ' + j.locked_fields;
+      }
+      flash(card, (j.changed && j.changed.length ? j.changed.join(', ') + ' saved' : 'No changes') + ' ✓');
+      setTimeout(function () { if (btn) { btn.innerHTML = original; btn.style.background = ''; btn.disabled = false; } }, 1800);
+    }
+  } catch (err) {
+    if (btn) { btn.innerHTML = '⚠ ' + (err.message || 'error'); btn.disabled = false; }
+  }
+});
+
+function flash(card, msg) {
+  if (!card) return;
+  let n = document.createElement('div');
+  n.textContent = msg;
+  n.style.cssText = 'position:fixed;right:18px;bottom:18px;background:#093;color:#fff;padding:8px 14px;border-radius:8px;font:13px system-ui;z-index:9;box-shadow:0 2px 8px rgba(0,0,0,.2)';
+  document.body.appendChild(n);
+  setTimeout(function () { n.remove(); }, 2200);
+}
+</script>
