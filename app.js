@@ -1954,7 +1954,22 @@ const LOMBOK_MAP = {
     west_lombok: { d: 'M290.8,536.7 L282.1,533.0 L280.3,536.5 L267.0,535.1 L258.4,543.6 L252.7,537.6 L239.8,542.2 L237.4,550.9 L246.4,552.8 L251.4,558.9 L241.8,567.8 L247.9,574.1 L243.0,570.9 L236.4,574.9 L226.6,569.1 L226.9,561.9 L221.3,563.7 L214.4,553.4 L207.6,554.9 L208.1,547.5 L199.3,546.5 L200.9,540.7 L187.3,533.1 L188.4,527.3 L177.2,518.7 L161.1,528.1 L152.8,516.4 L145.3,517.9 L140.3,512.5 L135.9,515.9 L127.0,506.6 L108.8,512.5 L110.4,502.5 L97.0,504.3 L98.6,492.5 L93.5,492.9 L96.1,488.5 L92.9,488.3 L98.4,477.0 L89.1,454.4 L101.4,445.7 L106.2,432.9 L113.8,429.0 L119.1,433.8 L124.2,429.5 L126.7,436.2 L123.3,446.7 L135.6,454.7 L137.6,464.1 L141.8,463.2 L149.0,449.1 L150.8,453.5 L145.4,463.0 L161.6,472.6 L168.6,467.1 L174.7,467.6 L174.7,471.8 L188.9,449.4 L203.3,441.5 L202.7,436.4 L214.2,441.4 L221.8,437.5 L237.7,454.0 L253.2,444.5 L252.0,435.4 L256.3,428.4 L257.0,432.7 L266.5,434.1 L262.1,443.4 L265.8,449.1 L258.3,452.8 L260.3,462.9 L264.2,465.2 L267.2,459.8 L267.6,466.6 L268.8,460.5 L280.8,470.8 L282.7,467.2 L275.7,455.6 L282.2,447.9 L277.7,445.1 L295.3,435.8 L276.5,435.9 L280.9,425.9 L278.6,419.1 L278.9,431.9 L273.2,443.0 L286.0,390.0 L282.9,381.3 L288.1,343.7 L281.4,275.0 L272.7,259.0 L264.3,256.3 L255.8,241.8 L258.9,229.7 L254.8,211.5 L260.3,206.2 L257.6,202.8 L265.7,200.1 L355.2,293.7 L370.9,397.0 L331.7,476.4 Z',
       bbox: [89, 200, 282, 375], label: [288.5, 333.4] },
     south_lombok: { d: 'M664.0,433.6 L658.4,454.7 L652.1,461.2 L647.1,460.0 L651.4,462.0 L637.6,474.8 L630.2,476.6 L634.3,470.9 L629.7,474.5 L627.3,486.2 L623.3,483.4 L626.8,488.2 L621.1,498.7 L602.2,497.2 L609.9,504.9 L608.2,509.5 L610.3,503.9 L623.1,501.1 L617.7,522.0 L620.8,525.8 L616.6,530.7 L625.1,539.1 L631.1,538.8 L626.0,525.1 L637.7,527.6 L631.9,520.7 L633.7,517.6 L635.8,523.1 L648.3,522.8 L637.9,517.3 L646.4,518.4 L640.3,516.1 L641.5,512.6 L654.9,518.4 L651.7,524.8 L657.8,529.3 L647.2,530.1 L655.3,533.5 L648.9,539.6 L655.5,542.3 L656.1,547.2 L660.8,543.9 L655.4,540.3 L657.7,536.3 L662.6,539.9 L662.6,536.7 L667.8,539.3 L674.0,534.7 L670.3,543.2 L674.5,546.4 L682.1,538.4 L694.9,539.0 L694.4,544.5 L690.3,542.6 L689.6,548.6 L684.0,547.8 L678.1,554.0 L677.9,565.3 L655.2,570.8 L654.2,574.5 L630.0,583.8 L644.4,570.9 L634.9,569.6 L640.6,561.1 L632.5,555.7 L631.2,546.8 L629.7,561.0 L628.3,557.1 L625.2,561.3 L620.6,556.2 L622.5,568.3 L614.5,559.5 L616.7,570.1 L621.4,571.5 L628.9,560.3 L619.1,581.2 L600.8,588.7 L571.8,587.4 L568.2,582.3 L581.6,571.6 L586.8,549.5 L590.9,552.5 L589.1,537.3 L595.6,535.2 L590.2,532.9 L601.8,523.6 L597.5,517.9 L603.4,513.3 L595.5,505.7 L585.5,517.8 L581.2,516.1 L581.7,508.5 L579.6,515.2 L574.8,510.9 L575.7,517.1 L569.3,511.0 L575.7,525.7 L564.8,511.8 L556.7,515.7 L547.1,544.2 L544.7,536.9 L533.5,539.9 L531.8,544.9 L540.0,551.9 L542.8,559.2 L540.0,560.1 L547.6,571.5 L538.9,590.3 L541.1,609.2 L538.8,613.5 L536.3,609.4 L530.5,611.3 L527.9,616.2 L521.9,611.8 L518.5,614.3 L522.6,607.9 L517.5,591.6 L529.0,579.6 L522.4,572.6 L512.2,579.9 L501.8,569.7 L495.7,573.4 L503.7,584.4 L505.3,593.0 L501.8,596.1 L494.4,585.0 L488.2,586.4 L486.9,578.5 L480.6,581.1 L483.9,585.3 L480.5,588.0 L476.8,578.6 L462.9,579.2 L466.8,573.1 L464.2,570.0 L463.8,576.8 L449.1,566.5 L445.2,568.5 L446.4,582.1 L425.2,573.8 L417.3,585.5 L409.3,571.9 L406.0,579.1 L397.5,572.8 L386.5,573.8 L382.6,585.6 L379.4,580.7 L365.5,582.8 L360.8,575.8 L356.7,578.0 L358.8,572.0 L352.4,567.0 L356.5,550.5 L351.0,543.0 L338.9,547.7 L321.1,545.4 L315.3,550.1 L312.5,547.1 L295.3,550.5 L290.8,568.0 L286.1,559.7 L268.3,560.4 L264.6,547.8 L275.9,542.5 L290.5,543.9 L290.8,536.7 L370.9,524.1 L488.8,524.1 L575.2,500.3 Z',
-      bbox: [265, 434, 430, 183], label: [449.5, 551.9] },
+      bbox: [265, 434, 430, 183], label: [449.5, 551.9],
+      // Cluster tier (docs/adr/0011) — map-only intermediate zoom for the dense
+      // south coast. `clusterBox` frames the pills (the region bbox is too wide/
+      // thin to magnify them). `pill` positions stagger into a triangle so the
+      // labels don't collide. `areas` is the filter IN-list (includes legacy
+      // tanjung_aan so today's listings still match); markers shown = members
+      // with a coordinate.
+      clusterBox: [292, 452, 356, 168],
+      clusters: {
+        selong_belanak_bays: { label: 'Selong Belanak', label_id: 'Selong Belanak',
+          areas: ['selong_belanak', 'mawi'], bbox: [300, 476, 149, 152], pill: [372, 498] },
+        kuta_mandalika: { label: 'Kuta–Mandalika', label_id: 'Kuta–Mandalika',
+          areas: ['mawun', 'kuta', 'are_guling', 'gerupuk', 'tanjung_aan'], bbox: [365, 491, 191, 152], pill: [458, 560] },
+        south_east: { label: 'South East', label_id: 'Tenggara',
+          areas: ['awang', 'ekas'], bbox: [477, 463, 161, 163], pill: [562, 500] },
+      } },
     gili_islands: { circles: [[260.2, 134.8, 11], [275.9, 136.4, 8], [294.7, 141.2, 8]],
       bbox: [230, 99, 94, 76], label: [277, 113] },
   },
@@ -1965,8 +1980,8 @@ const LOMBOK_MAP = {
     mawun: { p: [420.4, 560.7], r: 'south_lombok', lp: 'diag2' },
     kuta: { p: [452.6, 563], r: 'south_lombok', lp: 'diag' },
     are_guling: { p: [479.4, 568.6], r: 'south_lombok', lp: 'diag2' },
-    tanjung_aan: { p: [469.1, 574.2], r: 'south_lombok', lp: 'bottom' },
     gerupuk: { p: [500.6, 572.6], r: 'south_lombok', lp: 'diag' },
+    awang: { p: [532, 555.9], r: 'south_lombok', lp: 'top' },
     ekas: { p: [583, 532.8], r: 'south_lombok', lp: 'bottom' },
     senggigi: { p: [262.5, 248.4], r: 'west_lombok', lp: 'right' },
     mataram: { p: [313.6, 319.9], r: 'west_lombok', lp: 'right' },
@@ -1989,10 +2004,17 @@ const LOMBOK_MAP = {
 function createLombokMap(wrapEl, opts) {
   opts = opts || {};
   var VB = LOMBOK_MAP.viewBox;
-  var counts = { regions: {}, areas: {} };
-  var selRegion = '', selArea = '';
+  var counts = { regions: {}, areas: {}, places: {} };
+  var selRegion = '', selCluster = '', selArea = '';
   var animFrame = null;
 
+  function regionHasClusters(rk) { var r = LOMBOK_MAP.regions[rk]; return !!(r && r.clusters); }
+  function clusterOfArea(rk, ak) {
+    var r = LOMBOK_MAP.regions[rk];
+    if (!r || !r.clusters) return '';
+    for (var ck in r.clusters) { if (r.clusters[ck].areas.indexOf(ak) >= 0) return ck; }
+    return '';
+  }
   function regionLabel(key) {
     var row = (FilterData.regions || []).find(function(r) { return r.region_key === key; });
     return (row ? lookupLabel(row) : key.replace(/_/g, ' ')).toUpperCase();
@@ -2001,6 +2023,11 @@ function createLombokMap(wrapEl, opts) {
     var row = (FilterData.areas || []).find(function(a) { return a.key === key; });
     var lbl = row ? lookupLabel(row) : key.replace(/_/g, ' ');
     return lbl.split(' / ')[0].toUpperCase(); // 'Kuta / Mandalika' → 'KUTA'
+  }
+  function clusterLabel(rk, ck) {
+    var cl = LOMBOK_MAP.regions[rk].clusters[ck];
+    var lbl = (CURRENT_LANG === 'id' && cl.label_id) ? cl.label_id : cl.label;
+    return lbl.toUpperCase();
   }
 
   // ---- build SVG ----
@@ -2040,6 +2067,21 @@ function createLombokMap(wrapEl, opts) {
       + '</g>';
   });
 
+  // Cluster hotspot pills (docs/adr/0011) — the bg rect is auto-sized to the
+  // label in sizePill() once rendered.
+  var clustersHtml = '';
+  Object.keys(LOMBOK_MAP.regions).forEach(function(rk) {
+    var rg = LOMBOK_MAP.regions[rk];
+    if (!rg.clusters) return;
+    Object.keys(rg.clusters).forEach(function(ck) {
+      var cl = rg.clusters[ck];
+      clustersHtml += '<g class="lmap-cluster" data-cluster="' + ck + '" data-region="' + rk + '" transform="translate(' + cl.pill[0] + ',' + cl.pill[1] + ')">'
+        + '<rect class="lmap-cluster-bg" x="-95" y="-14" width="190" height="28" rx="14"/>'
+        + '<text class="lmap-cluster-name" text-anchor="middle" dy="0.32em"></text>'
+        + '</g>';
+    });
+  });
+
   wrapEl.innerHTML =
     '<svg class="lmap" viewBox="' + VB.join(' ') + '" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="' + t('map.aria', 'Lombok region map filter') + '">'
     // AI-painted terrain relief, aligned to the real OSM coastline geometry
@@ -2048,6 +2090,7 @@ function createLombokMap(wrapEl, opts) {
     + '<g class="lmap-regions">' + regionsHtml + '</g>'
     + '<g class="lmap-labels">' + labelsHtml + '</g>'
     + '<g class="lmap-areas">' + areasHtml + '</g>'
+    + '<g class="lmap-clusters">' + clustersHtml + '</g>'
     + '</svg>';
 
   var svg = wrapEl.querySelector('svg.lmap');
@@ -2083,8 +2126,30 @@ function createLombokMap(wrapEl, opts) {
     animFrame = requestAnimationFrame(tick);
   }
 
+  // Size a pill's background rect to its label text (SVG user units). getBBox
+  // returns 0 before the SVG is laid out (initial render / collapsed panel) —
+  // retry once on the next frame so the pill isn't left at its default width.
+  function sizePill(n, _retry) {
+    var txt = n.querySelector('.lmap-cluster-name');
+    var bg = n.querySelector('.lmap-cluster-bg');
+    if (!txt || !bg) return;
+    var b;
+    try { b = txt.getBBox(); } catch (e) { return; }
+    if (!b.width) {
+      if (!_retry) requestAnimationFrame(function() { sizePill(n, true); });
+      return;
+    }
+    var px = 14, py = 8;
+    bg.setAttribute('x', (b.x - px).toFixed(1));
+    bg.setAttribute('y', (b.y - py).toFixed(1));
+    bg.setAttribute('width', (b.width + px * 2).toFixed(1));
+    bg.setAttribute('height', (b.height + py * 2).toFixed(1));
+    bg.setAttribute('rx', ((b.height + py * 2) / 2).toFixed(1));
+  }
+
   // ---- state rendering ----
   function applySelection() {
+    var clustered = regionHasClusters(selRegion);
     svg.classList.toggle('lmap--zoomed', !!selRegion);
     svg.querySelectorAll('.lmap-region').forEach(function(n) {
       n.classList.toggle('sel', n.getAttribute('data-region') === selRegion);
@@ -2092,12 +2157,36 @@ function createLombokMap(wrapEl, opts) {
     svg.querySelectorAll('.lmap-rlabel').forEach(function(n) {
       n.classList.toggle('sel', n.getAttribute('data-region') === selRegion);
     });
-    svg.querySelectorAll('.lmap-amark').forEach(function(n) {
-      var on = selRegion && n.getAttribute('data-region') === selRegion;
-      n.classList.toggle('visible', !!on);
-      n.classList.toggle('active', n.getAttribute('data-area') === selArea);
+    // Cluster pills: shown when their region is selected but no cluster picked yet
+    svg.querySelectorAll('.lmap-cluster').forEach(function(n) {
+      var show = clustered && !selCluster && n.getAttribute('data-region') === selRegion;
+      n.classList.toggle('visible', !!show);
     });
-    animateTo(selRegion && LOMBOK_MAP.regions[selRegion] ? fitBBox(LOMBOK_MAP.regions[selRegion].bbox) : VB.slice());
+    // Area markers: shown for the selected cluster, or for a non-clustered region
+    svg.querySelectorAll('.lmap-amark').forEach(function(n) {
+      var ak = n.getAttribute('data-area'), ark = n.getAttribute('data-region'), show = false;
+      if (selCluster && clustered) {
+        var cl = LOMBOK_MAP.regions[selRegion].clusters[selCluster];
+        show = !!(cl && cl.areas.indexOf(ak) >= 0);
+      } else if (selRegion && !clustered) {
+        show = ark === selRegion;
+      }
+      n.classList.toggle('visible', show);
+      n.classList.toggle('active', ak === selArea);
+    });
+    // Zoom target: cluster box → cluster-overview box (frames the pills) →
+    // region box → whole island.
+    var target, rg = LOMBOK_MAP.regions[selRegion];
+    if (selCluster && clustered && rg.clusters[selCluster]) {
+      target = fitBBox(rg.clusters[selCluster].bbox);
+    } else if (selRegion && clustered && rg.clusterBox) {
+      target = fitBBox(rg.clusterBox);
+    } else if (selRegion && rg) {
+      target = fitBBox(rg.bbox);
+    } else {
+      target = VB.slice();
+    }
+    animateTo(target);
   }
 
   function applyCounts() {
@@ -2124,20 +2213,38 @@ function createLombokMap(wrapEl, opts) {
       var base = areaLabel(ak);
       txt.textContent = n > 0 ? base + ' · ' + n : base;
     });
+    // Cluster counts = sum of member Area counts (client-side, docs/adr/0011)
+    svg.querySelectorAll('.lmap-cluster').forEach(function(n) {
+      var rk = n.getAttribute('data-region'), ck = n.getAttribute('data-cluster');
+      var cl = LOMBOK_MAP.regions[rk].clusters[ck];
+      var sum = cl.areas.reduce(function(s, ak) { return s + (counts.areas[ak] || 0); }, 0);
+      var empty = sum === 0;
+      n.classList.toggle('lmap-cluster--empty', empty);
+      n.querySelector('.lmap-cluster-name').textContent = empty
+        ? clusterLabel(rk, ck)
+        : clusterLabel(rk, ck) + '  ·  ' + sum;
+      sizePill(n);
+    });
   }
 
   // ---- events ----
   svg.addEventListener('click', function(e) {
+    var pill = e.target.closest('.lmap-cluster');
+    if (pill && pill.classList.contains('visible') && !pill.classList.contains('lmap-cluster--empty')) {
+      if (opts.onSelect) opts.onSelect({ region: pill.getAttribute('data-region'), cluster: pill.getAttribute('data-cluster'), area: '' });
+      return;
+    }
     var amark = e.target.closest('.lmap-amark');
     if (amark && amark.classList.contains('visible')) {
-      var ak = amark.getAttribute('data-area');
-      if (opts.onSelect) opts.onSelect(amark.getAttribute('data-region'), ak === selArea ? null : ak);
+      var ak = amark.getAttribute('data-area'), ark = amark.getAttribute('data-region');
+      if (opts.onSelect) opts.onSelect({ region: ark, cluster: clusterOfArea(ark, ak), area: ak === selArea ? '' : ak });
       return;
     }
     var region = e.target.closest('.lmap-region');
     if (region && !region.classList.contains('lmap-region--empty')) {
       var rk = region.getAttribute('data-region');
-      if (opts.onSelect) opts.onSelect(rk === selRegion && !selArea ? null : rk, null);
+      var deselect = rk === selRegion && !selCluster && !selArea;
+      if (opts.onSelect) opts.onSelect(deselect ? { region: '', cluster: '', area: '' } : { region: rk, cluster: '', area: '' });
     }
   });
 
@@ -2147,10 +2254,13 @@ function createLombokMap(wrapEl, opts) {
     setCounts: function(c) {
       counts.regions = (c && c.regions) || {};
       counts.areas = (c && c.areas) || {};
+      counts.places = (c && c.places) || {};
       applyCounts();
     },
-    setSelection: function(region, area) {
+    relayout: function() { applyCounts(); },
+    setSelection: function(region, cluster, area) {
       selRegion = region || '';
+      selCluster = cluster || '';
       selArea = area || '';
       applySelection();
     }
@@ -2202,9 +2312,11 @@ async function renderListings(el, params = {}) {
   await FilterData.load();
 
   // ---- state (parsed from URL params, incl. legacy param names) ----
+  // Location is a Region → Cluster → Area → Place drill-down (docs/adr/0011);
+  // Cluster is map-only, Area/Place are real filters.
   var state = {
     type: params.listing_type || '',
-    area: '', region: '',
+    region: '', cluster: '', area: '', place: params.place || '',
     price: params.price || '',          // "CUR:min-max" in display currency
     size: params.size || '',
     bsize: params.bsize || '',
@@ -2218,9 +2330,16 @@ async function renderListings(el, params = {}) {
     page: parseInt(params.page, 10) || 1
   };
   var areaParam = params.area || '';
-  if (areaParam.indexOf('region:') === 0) state.region = areaParam.slice(7);
-  else if (params.region) state.region = params.region;
-  else state.area = areaParam;
+  if (areaParam.indexOf('cluster:') === 0) {
+    var cparts = areaParam.slice(8).split(':');
+    state.region = cparts[0] || ''; state.cluster = cparts[1] || '';
+  } else if (areaParam.indexOf('region:') === 0) {
+    state.region = areaParam.slice(7);
+  } else if (params.region) {
+    state.region = params.region;
+  } else {
+    state.area = areaParam;
+  }
   // Legacy deep links (pre-dynamic-engine URLs)
   if (!state.price && (params.min_price_idr || params.max_price_idr)) {
     state.price = 'IDR:' + (params.min_price_idr || 0) + '-' + (params.max_price_idr || 0);
@@ -2231,12 +2350,60 @@ async function renderListings(el, params = {}) {
 
   var lastItems = [];
   var lastMeta = { total: 0, page: 1, per_page: 20, total_pages: 1 };
+  var lastCounts = { regions: {}, areas: {}, places: {} };
   var map = null;
   var isMobile = function() { return window.matchMedia('(max-width: 1023px)').matches; };
 
   function areaRegionOf(areaKey) {
+    var la = LOMBOK_MAP.areas[areaKey];
+    if (la) return la.r;
     var row = (FilterData.areas || []).find(function(a) { return a.key === areaKey; });
     return row ? (row.region_key || '') : '';
+  }
+  function clusterOfArea(rk, ak) {
+    var r = LOMBOK_MAP.regions[rk];
+    if (!r || !r.clusters) return '';
+    for (var ck in r.clusters) { if (r.clusters[ck].areas.indexOf(ak) >= 0) return ck; }
+    return '';
+  }
+  function placeAreaOf(pk) {
+    var row = (FilterData.places || []).find(function(p) { return p.place_key === pk; });
+    return row ? row.area_key : '';
+  }
+  function placesForArea(ak) {
+    return (FilterData.places || []).filter(function(p) { return p.area_key === ak; });
+  }
+  // Fill region/cluster from the deepest known location so the map zooms right.
+  function normalizeLocation() {
+    if (state.place && !state.area) state.area = placeAreaOf(state.place);
+    if (state.area) {
+      state.region = areaRegionOf(state.area) || state.region;
+      state.cluster = clusterOfArea(state.region, state.area);
+    }
+  }
+  normalizeLocation();
+
+  function clusterMembers(rk, ck) {
+    var r = LOMBOK_MAP.regions[rk];
+    return (r && r.clusters && r.clusters[ck]) ? r.clusters[ck].areas : [];
+  }
+  function clusterDisplayLabel(rk, ck) {
+    var r = LOMBOK_MAP.regions[rk];
+    if (!r || !r.clusters || !r.clusters[ck]) return ck;
+    var cl = r.clusters[ck];
+    return (CURRENT_LANG === 'id' && cl.label_id) ? cl.label_id : cl.label;
+  }
+  function regionDisplayLabel(rk) {
+    var row = (FilterData.regions || []).find(function(r) { return r.region_key === rk; });
+    return row ? lookupLabel(row) : rk.replace(/_/g, ' ');
+  }
+  function areaDisplayLabel(ak) {
+    var row = (FilterData.areas || []).find(function(a) { return a.key === ak; });
+    return row ? lookupLabel(row) : ak.replace(/_/g, ' ');
+  }
+  function placeDisplayLabel(pk) {
+    var row = (FilterData.places || []).find(function(p) { return p.place_key === pk; });
+    return row ? lookupLabel(row) : pk.replace(/_/g, ' ');
   }
 
   // ---- option builders ----
@@ -2305,14 +2472,10 @@ async function renderListings(el, params = {}) {
     }).join('');
   }
   function selectionSummary() {
-    if (state.area) {
-      var aRow = (FilterData.areas || []).find(function(a) { return a.key === state.area; });
-      return aRow ? lookupLabel(aRow) : state.area;
-    }
-    if (state.region) {
-      var rRow = (FilterData.regions || []).find(function(r) { return r.region_key === state.region; });
-      return rRow ? lookupLabel(rRow) : state.region;
-    }
+    if (state.place) return placeDisplayLabel(state.place);
+    if (state.area) return areaDisplayLabel(state.area);
+    if (state.cluster) return clusterDisplayLabel(state.region, state.cluster);
+    if (state.region) return regionDisplayLabel(state.region);
     return t('map.all_lombok', 'All Lombok');
   }
 
@@ -2320,7 +2483,10 @@ async function renderListings(el, params = {}) {
   function urlParams() {
     var p = {};
     if (state.type) p.listing_type = state.type;
-    if (state.area) p.area = state.area;
+    // Location encodes the deepest level; place keeps area so the map re-zooms.
+    if (state.place) { p.area = state.area; p.place = state.place; }
+    else if (state.area) p.area = state.area;
+    else if (state.cluster) p.area = 'cluster:' + state.region + ':' + state.cluster;
     else if (state.region) p.area = 'region:' + state.region;
     if (state.price) p.price = state.price;
     if (state.size) p.size = state.size;
@@ -2339,7 +2505,11 @@ async function renderListings(el, params = {}) {
     var p = {};
     if (state.type) p.listing_type = state.type;
     if (!skipLocation) {
-      if (state.area) p.area = state.area;
+      // Place narrows exactly; Area = single; Cluster = comma IN-list of member
+      // Areas (docs/adr/0011); Region = whole region.
+      if (state.place) p.place = state.place;
+      else if (state.area) p.area = state.area;
+      else if (state.cluster) p.area = clusterMembers(state.region, state.cluster).join(',');
       else if (state.region) p.region = state.region;
     }
     var pr = parsePriceToken(state.price);
@@ -2497,6 +2667,7 @@ async function renderListings(el, params = {}) {
           </div>
         </div>
 
+        <div class="place-chips lst-places" id="place-chips" hidden></div>
         <div class="split-view-list card-grid listings-grid lst-grid" id="listings-grid"></div>
         <div class="listings-pagination lst-pagination" id="lst-pagination"></div>
         </div>
@@ -2534,31 +2705,88 @@ async function renderListings(el, params = {}) {
     moreLbl: el.querySelector('#moreFiltersLabel'),
     resetBtn: el.querySelector('#lmap-reset'),
     toggleSub: el.querySelector('#lmap-toggle-sub'),
-    toggleClear: el.querySelector('#lmap-toggle-clear')
+    toggleClear: el.querySelector('#lmap-toggle-clear'),
+    placeChips: el.querySelector('#place-chips')
   };
 
   // ---- map ----
   map = createLombokMap(el.querySelector('#lmap-svg-wrap'), {
-    onSelect: function(region, area) {
-      state.region = area ? '' : (region || '');
-      state.area = area || '';
+    onSelect: function(sel) {
+      // A map pick replaces the whole location selection (and any Place).
+      state.region = sel.region || '';
+      state.cluster = sel.cluster || '';
+      state.area = sel.area || '';
+      state.place = '';
       state.page = 1;
-      if (nodes.areaSel) nodes.areaSel.value = state.area || (state.region ? 'region:' + state.region : '');
-      if (area && isMobile()) setMapOpen(false);
+      syncAreaDropdown();
+      // Drilling all the way to an Area collapses the mobile panel to show results
+      if (sel.area && isMobile()) setMapOpen(false);
       refresh();
     }
   });
 
+  // The Area <select> can't express a Cluster — map it to the parent Region.
+  function syncAreaDropdown() {
+    if (!nodes.areaSel) return;
+    nodes.areaSel.value = state.area ? state.area
+      : (state.region ? 'region:' + state.region : '');
+  }
+
+  function hasLocation() {
+    return !!(state.region || state.cluster || state.area || state.place);
+  }
+
+  // Context-aware back: one level up, broadening the filter (docs/adr/0011).
+  function backTarget() {
+    if (state.place) return { label: areaDisplayLabel(state.area) };
+    if (state.area) return { label: state.cluster ? clusterDisplayLabel(state.region, state.cluster) : regionDisplayLabel(state.region) };
+    if (state.cluster) return { label: regionDisplayLabel(state.region) };
+    if (state.region) return { label: t('map.all_lombok', 'All Lombok') };
+    return null;
+  }
+  function goBack() {
+    if (state.place) state.place = '';
+    else if (state.area) state.area = '';
+    else if (state.cluster) state.cluster = '';
+    else if (state.region) state.region = '';
+    state.page = 1;
+    syncAreaDropdown();
+    refresh();
+  }
+  function clearLocation() {
+    state.region = ''; state.cluster = ''; state.area = ''; state.place = '';
+    state.page = 1;
+    syncAreaDropdown();
+    refresh();
+  }
+
   function mapSelection() {
-    if (state.area) {
-      var rk = LOMBOK_MAP.areas[state.area] ? LOMBOK_MAP.areas[state.area].r : areaRegionOf(state.area);
-      map.setSelection(rk, state.area);
-    } else {
-      map.setSelection(state.region, null);
+    map.setSelection(state.region, state.cluster, state.area);
+    if (nodes.resetBtn) {
+      var bt = backTarget();
+      nodes.resetBtn.hidden = !bt;
+      if (bt) nodes.resetBtn.innerHTML = '&larr; ' + escHtml(bt.label);
     }
-    if (nodes.resetBtn) nodes.resetBtn.hidden = !(state.region || state.area);
     if (nodes.toggleSub) nodes.toggleSub.textContent = selectionSummary();
-    if (nodes.toggleClear) nodes.toggleClear.hidden = !(state.region || state.area);
+    if (nodes.toggleClear) nodes.toggleClear.hidden = !hasLocation();
+  }
+
+  // ---- Place filter chips (shown when an Area with Places is selected) ----
+  function renderPlaceChips() {
+    var wrap = nodes.placeChips;
+    if (!wrap) return;
+    if (!state.area) { wrap.innerHTML = ''; wrap.hidden = true; return; }
+    var places = placesForArea(state.area);
+    var chips = places.map(function(p) {
+      var n = lastCounts.places[p.place_key] || 0;
+      if (n === 0 && state.place !== p.place_key) return null; // hide dead chips
+      var on = state.place === p.place_key;
+      return '<button type="button" class="place-chip' + (on ? ' active' : '') + '" data-place="' + p.place_key + '">'
+        + escHtml(lookupLabel(p)) + (n > 0 ? ' <span class="place-chip-n">' + n + '</span>' : '') + '</button>';
+    }).filter(Boolean);
+    if (!chips.length) { wrap.innerHTML = ''; wrap.hidden = true; return; }
+    wrap.hidden = false;
+    wrap.innerHTML = '<span class="place-chips-label">' + t('filter.places_in', 'Places in') + ' ' + escHtml(areaDisplayLabel(state.area)) + '</span>' + chips.join('');
   }
 
   // Mobile collapsible panel
@@ -2569,21 +2797,14 @@ async function renderListings(el, params = {}) {
     body.classList.toggle('open', open);
     tog.setAttribute('aria-expanded', open ? 'true' : 'false');
     tog.classList.toggle('open', open);
+    // Pills size via getBBox — re-measure once the panel is actually laid out.
+    if (open && map) requestAnimationFrame(function() { map.relayout(); });
   }
   el.querySelector('#lmap-toggle').addEventListener('click', function(e) {
-    if (e.target.closest('#lmap-toggle-clear')) {
-      state.region = ''; state.area = ''; state.page = 1;
-      if (nodes.areaSel) nodes.areaSel.value = '';
-      refresh();
-      return;
-    }
+    if (e.target.closest('#lmap-toggle-clear')) { clearLocation(); return; }
     setMapOpen(!el.querySelector('#lmap-body').classList.contains('open'));
   });
-  el.querySelector('#lmap-reset').addEventListener('click', function() {
-    state.region = ''; state.area = ''; state.page = 1;
-    if (nodes.areaSel) nodes.areaSel.value = '';
-    refresh();
-  });
+  el.querySelector('#lmap-reset').addEventListener('click', goBack);
 
   // ---- per-type matrix ----
   function applyMatrix() {
@@ -2633,7 +2854,7 @@ async function renderListings(el, params = {}) {
       pagEl.innerHTML = '';
     }
 
-    var anyActive = state.type || state.area || state.region || state.price || state.size || state.bsize || state.cert || state.beds || state.baths || state.tags.length || state.q;
+    var anyActive = state.type || state.area || state.region || state.cluster || state.place || state.price || state.size || state.bsize || state.cert || state.beds || state.baths || state.tags.length || state.q;
     if (nodes.clearBtn) nodes.clearBtn.hidden = !anyActive;
     var moreCount = [state.cert, state.beds, state.baths, state.bsize].filter(Boolean).length + state.tags.length;
     if (nodes.moreLbl) nodes.moreLbl.textContent = t('filter.more_filters', 'More Filters') + (moreCount > 0 ? ' (' + moreCount + ')' : '');
@@ -2658,7 +2879,15 @@ async function renderListings(el, params = {}) {
       lastItems = results[0].data;
       lastMeta = results[0].meta || lastMeta;
       renderGrid();
-      if (results[1]) map.setCounts(results[1]);
+      if (results[1]) {
+        lastCounts = {
+          regions: results[1].regions || {},
+          areas: results[1].areas || {},
+          places: results[1].places || {}
+        };
+        map.setCounts(results[1]);
+      }
+      renderPlaceChips();
     } catch (e) {
       if (seq !== refreshSeq) return;
       console.error('Listings refresh failed:', e);
@@ -2696,11 +2925,31 @@ async function renderListings(el, params = {}) {
   });
   el.querySelector('#fil-area').addEventListener('change', function() {
     var v = this.value;
-    if (v.indexOf('region:') === 0) { state.region = v.slice(7); state.area = ''; }
-    else { state.area = v; state.region = ''; }
+    state.place = '';
+    if (v.indexOf('region:') === 0) {
+      state.region = v.slice(7); state.cluster = ''; state.area = '';
+    } else if (v) {
+      state.area = v;
+      state.region = areaRegionOf(v);
+      state.cluster = clusterOfArea(state.region, v); // zoom map to the cluster
+    } else {
+      state.region = ''; state.cluster = ''; state.area = '';
+    }
     state.page = 1;
     refresh();
   });
+
+  // Place filter chips — narrow to exactly one Place (toggle off to re-broaden)
+  if (nodes.placeChips) {
+    nodes.placeChips.addEventListener('click', function(e) {
+      var chip = e.target.closest('.place-chip');
+      if (!chip) return;
+      var pk = chip.getAttribute('data-place');
+      state.place = (state.place === pk) ? '' : pk;
+      state.page = 1;
+      refresh();
+    });
+  }
 
   el.querySelector('#fil-tags').addEventListener('click', function(e) {
     var btn = e.target.closest('.filter-tag');
@@ -2741,7 +2990,7 @@ async function renderListings(el, params = {}) {
   });
 
   el.querySelector('#clearAllFiltersBtn').addEventListener('click', function() {
-    state = { type: '', area: '', region: '', price: '', size: '', bsize: '', cert: '', beds: '', baths: '', tags: [], sort: '', q: '', agent_id: '', page: 1 };
+    state = { type: '', region: '', cluster: '', area: '', place: '', price: '', size: '', bsize: '', cert: '', beds: '', baths: '', tags: [], sort: '', q: '', agent_id: '', page: 1 };
     ['fil-type', 'fil-area', 'fil-price', 'fil-size', 'fil-bsize', 'fil-cert', 'fil-beds', 'fil-baths', 'fil-sort'].forEach(function(id) {
       var sel = document.getElementById(id);
       if (sel) sel.value = '';
@@ -2750,10 +2999,14 @@ async function renderListings(el, params = {}) {
   });
 
   // Desktop: map always open; mobile: open if a location filter arrived in the URL
-  if (!isMobile() || state.region || state.area) setMapOpen(true);
+  if (!isMobile() || hasLocation()) setMapOpen(true);
 
   // ---- initial load ----
   await refresh();
+  // Cluster pills size via getBBox, which returns 0 while the view is still
+  // detached during the initial render — re-measure once it's in the document.
+  requestAnimationFrame(function() { if (map) map.relayout(); });
+  setTimeout(function() { if (map) map.relayout(); }, 120);
 }
 
 

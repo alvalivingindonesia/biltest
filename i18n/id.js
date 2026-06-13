@@ -179,6 +179,7 @@ window.I18N_ID = {
   'filter.more_filters': 'Filter Lainnya',
   'filter.clear_all': 'Hapus semua',
   'filter.under': 'Di bawah',
+  'filter.places_in': 'Tempat di',
 
   // Sorting
   'sort.label': 'Urutkan',

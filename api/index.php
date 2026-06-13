@@ -682,11 +682,23 @@ function handle_filters(): void {
         }
     }
 
+    // Places — the Area→Place filter chips read this (docs/adr/0010). Empty
+    // until the migration creates the table; the map degrades gracefully.
+    $places = [];
+    try {
+        $places = $db->query("SELECT place_key, label, label_id, area_key, sort_order FROM places WHERE is_active = 1 ORDER BY sort_order, label")->fetchAll();
+    } catch (Exception $e) {
+        try {
+            $places = $db->query("SELECT place_key, label, area_key FROM places ORDER BY label")->fetchAll();
+        } catch (Exception $e2) { /* places table not migrated yet */ }
+    }
+
     json_out([
         'groups' => $groups,
         'categories' => $categories,
         'areas' => $areas,
         'regions' => $regions,
+        'places' => $places,
         'project_types' => $project_types,
         'project_statuses' => $project_statuses,
         'listing_types' => $listing_types,
@@ -1222,10 +1234,19 @@ function build_listing_filters(array $skip = []): array {
         $params[] = $_GET['listing_type'];
     }
     // Filter: area (rolls up — includes all Places under the Area, since every
-    // Place listing also carries its parent area_key)
+    // Place listing also carries its parent area_key). Accepts a comma list so
+    // a map Cluster can filter to the union of its member Areas (docs/adr/0011)
+    // without the backend knowing what a Cluster is.
     if (!empty($_GET['area']) && !in_array('area', $skip)) {
-        $where[] = 'l.area_key = ?';
-        $params[] = $_GET['area'];
+        $area_keys = array_values(array_filter(array_map('trim', explode(',', $_GET['area']))));
+        if (count($area_keys) === 1) {
+            $where[] = 'l.area_key = ?';
+            $params[] = $area_keys[0];
+        } elseif (count($area_keys) > 1) {
+            $ph = implode(',', array_fill(0, count($area_keys), '?'));
+            $where[] = "l.area_key IN ($ph)";
+            $params = array_merge($params, $area_keys);
+        }
     }
     // Filter: place (narrows to exactly that Place — Place tier, docs/adr/0010)
     if (!empty($_GET['place']) && !in_array('place', $skip)) {
@@ -1340,7 +1361,10 @@ function build_listing_filters(array $skip = []): array {
 function handle_listing_counts(): void {
     try {
         $db = get_db();
-        [$where_sql, $params] = build_listing_filters(['area', 'region']);
+        // Skip ALL location filters so the map shows the full geographic
+        // distribution of the current (non-location) search — clusters derive
+        // their count client-side by summing member Areas (docs/adr/0011).
+        [$where_sql, $params] = build_listing_filters(['area', 'region', 'place']);
         $stmt = $db->prepare(
             "SELECT l.area_key, a.region_key, COUNT(*) AS c
              FROM listings l
@@ -1361,9 +1385,31 @@ function handle_listing_counts(): void {
             $rk = $row['region_key'] ?: 'other';
             $regions[$rk] = ($regions[$rk] ?? 0) + $n;
         }
-        json_out(['regions' => $regions, 'areas' => $areas, 'total' => $total]);
+
+        // Per-Place counts for the Area→Place filter chips. Guarded: absent
+        // until the Place migration runs (docs/adr/0010).
+        $places = [];
+        if (_col_exists($db, 'listings', 'place_key')) {
+            $pstmt = $db->prepare(
+                "SELECT l.place_key, COUNT(*) AS c
+                 FROM listings l
+                 WHERE {$where_sql} AND l.place_key IS NOT NULL AND l.place_key <> ''
+                 GROUP BY l.place_key"
+            );
+            $pstmt->execute($params);
+            foreach ($pstmt->fetchAll() as $row) {
+                $places[$row['place_key']] = (int)$row['c'];
+            }
+        }
+
+        json_out([
+            'regions' => $regions ?: new stdClass(),
+            'areas'   => $areas   ?: new stdClass(),
+            'places'  => $places  ?: new stdClass(),
+            'total'   => $total,
+        ]);
     } catch (Exception $e) {
-        json_out(['regions' => new stdClass(), 'areas' => new stdClass(), 'total' => 0, 'debug_error' => $e->getMessage()]);
+        json_out(['regions' => new stdClass(), 'areas' => new stdClass(), 'places' => new stdClass(), 'total' => 0, 'debug_error' => $e->getMessage()]);
     }
 }
 

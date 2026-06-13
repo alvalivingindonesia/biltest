@@ -182,6 +182,7 @@ window.I18N_EN = {
   'filter.more_filters': 'More Filters',
   'filter.clear_all': 'Clear all',
   'filter.under': 'Under',
+  'filter.places_in': 'Places in',
 
   // Sorting
   'sort.label': 'Sort by',

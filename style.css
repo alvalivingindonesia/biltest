@@ -9095,6 +9095,30 @@ body.cmd-palette-open { overflow: hidden; }
 .lmap-amark.active .lmap-amark-label,
 .lmap-amark:hover .lmap-amark-label { fill: var(--color-accent); }
 
+/* ---- Cluster hotspot pills (docs/adr/0011) ---- */
+.lmap-cluster { opacity: 0; pointer-events: none; cursor: pointer; transition: opacity 0.4s cubic-bezier(0.25, 1, 0.5, 1); }
+.lmap-cluster.visible { opacity: 1; pointer-events: auto; }
+.lmap-cluster.visible.lmap-cluster--empty { opacity: 0.4; pointer-events: none; }
+.lmap-cluster-bg {
+  fill: rgba(248, 243, 234, 0.92);
+  stroke: var(--lmap-border);
+  stroke-width: 1;
+  transition: fill 0.25s, stroke 0.25s;
+  filter: drop-shadow(0 1px 2px rgba(90, 70, 40, 0.18));
+}
+.lmap-cluster:hover .lmap-cluster-bg { fill: #fff; stroke: var(--lmap-text); }
+.lmap-cluster-name {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  fill: var(--lmap-text);
+  pointer-events: none;
+}
+.lmap-cluster:hover .lmap-cluster-name { fill: var(--color-accent); }
+[data-theme="dark"] .lmap-cluster-bg { fill: rgba(40, 36, 28, 0.92); }
+[data-theme="dark"] .lmap-cluster:hover .lmap-cluster-bg { fill: #2f2a20; }
+
 .lmap-reset {
   position: absolute;
   top: 14px;
@@ -9238,6 +9262,44 @@ body.cmd-palette-open { overflow: hidden; }
 .listings-grid { transition: opacity 0.25s ease; }
 .listings-grid.grid-loading { opacity: 0.45; pointer-events: none; }
 .price-approx { font-size: 0.7em; opacity: 0.65; margin-right: 3px; vertical-align: 0.12em; }
+
+/* ---- Place filter chips (Area→Place narrowing, docs/adr/0010) ---- */
+.place-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 var(--space-4);
+}
+.place-chips[hidden] { display: none; }
+.place-chips-label {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-right: 2px;
+}
+.place-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 13px;
+  border-radius: 20px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-interactive);
+}
+.place-chip:hover { border-color: var(--color-accent); color: var(--color-text); }
+.place-chip.active { background: var(--color-text); border-color: var(--color-text); color: var(--color-surface); }
+.place-chip-n { opacity: 0.55; font-variant-numeric: tabular-nums; }
+.place-chip.active .place-chip-n { opacity: 0.8; }
 
 .listings-pagination {
   display: flex;
