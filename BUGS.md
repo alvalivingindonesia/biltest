@@ -118,3 +118,13 @@ outranks a display-only one).
 - **Repro / example:** https://www.lamudi.co.id/properti/41032-73-… shows the real title + a rich description; the DB had the generic title and no description.
 - **Suggested fix:** Prefer JSON-LD name / `<h1>` over the breadcrumb, rejecting generic titles (`lc_is_generic_title`); capture the full description (worker `readDescription`, paste importer JSON-LD/h1); guard the server so re-check never overwrites a real title with a generic one. Existing rows self-heal as the Worker re-checks them.
 - **Resolution:** 2026-06-13 — `pickTitle`/`readDescription` in the worker (all 3 sites send the full `description`); paste importer prefers the non-generic title; `lc_is_generic_title` guard in `listing_ingest.php` — commit pending this session. Existing listings get corrected on the next Worker re-check cycle.
+
+### BUG-009 — Listing images didn't render (photo_urls stored JSON-LD ImageObjects)
+- **Status:** fixed
+- **Severity:** high (most crawled listings showed no image despite having a valid, live image URL)
+- **Area:** `api/index.php` (`attach_listing_primary_image`, `handle_listing_detail`); `worker/lib/extractors.js` (`imageUrls`)
+- **Reported:** 2026-06-13
+- **Description:** The crawler stored schema.org JSON-LD `ImageObject`s in `photo_urls` (`[{"@type":"ImageObject","contentUrl":"https://…jpg","name":…}]`) instead of plain URL strings. The API set `image.url` to the *whole object*, so the frontend rendered `<img src="[object Object]">` → blank. The actual URL was inside `contentUrl` all along; images were never missing or stale (verified live: `200 image/jpeg`, hotlinkable). The image-backfill tool reported `0 filled` because no `photo_urls` were actually empty.
+- **Repro / example:** `GET /api/listings` → `data[0].image.url` was `{"@type":"ImageObject","contentUrl":"https://picture.rumah123.com/…"}` rather than the URL string.
+- **Suggested fix:** Add `_photo_url_str()` that coerces a string OR an ImageObject (`contentUrl`/`url`/`@id`) to a URL; use it in the list image-derivation and as a `photo_urls` fallback for the detail gallery (non-destructive, no DB rewrite). Normalize `product.image` to plain URLs in the extractor (`imageUrls`) so future crawls store clean data.
+- **Resolution:** 2026-06-13 — `_photo_url_str` + tolerant list/detail derivation in `api/index.php`; `imageUrls()` normalizer applied to all four site extractors; verified live API now returns `image.url` as a string and the URLs load — commit c6a2888.
