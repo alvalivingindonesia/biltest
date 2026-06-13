@@ -16,6 +16,7 @@
     "recrawl-thin": "node listing-worker.js --recrawl-thin --headful",
     "backfill-images": "node listing-worker.js --backfill-images",
     "backfill-images:lamudi": "node listing-worker.js --backfill-images --site=lamudi",
+    "refresh-images:lamudi": "node listing-worker.js --backfill-images --site=lamudi --refresh",
     "ping": "node listing-worker.js --ping",
     "postinstall": "playwright install chromium"
   },

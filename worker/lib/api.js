@@ -33,5 +33,5 @@ export const api = {
   serveText:           (after, limit) => call('serve_text', { after_id: after, limit }),
   postLocation:        (p)      => call('post_location', p),
   pullRecrawl:         (after, limit) => call('pull_recrawl', { after_id: after, limit }),
-  postCardImages:      (site, cards)  => call('post_card_images', { source_site: site, cards }),
+  postCardImages:      (site, cards, refresh) => call('post_card_images', { source_site: site, cards, refresh: !!refresh }),
 };

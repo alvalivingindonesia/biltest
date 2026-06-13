@@ -181,6 +181,9 @@ function handle_post_card_images() {
     $d = get_post_data();
     $site = trim((string)($d['source_site'] ?? ''));
     $cards = isset($d['cards']) && is_array($d['cards']) ? $d['cards'] : array();
+    // --refresh: overwrite a matched listing's image even if it already has one
+    // (fixes stale Lamudi CDN URLs that have expired into broken images).
+    $refresh = !empty($d['refresh']);
     if ($site === '' || !$cards) { json_out(array('ok' => true, 'matched' => 0, 'updated' => 0)); }
 
     $byId  = $db->prepare("SELECT id, photo_urls FROM listings WHERE source_site = ? AND source_listing_id = ? LIMIT 1");
@@ -199,7 +202,10 @@ function handle_post_card_images() {
         if (!$row) continue;
         $matched++;
         $cur = trim((string)$row['photo_urls']);
-        if ($cur === '' || $cur === '[]' || $cur === 'null' || $cur === '""') {
+        $isEmpty = ($cur === '' || $cur === '[]' || $cur === 'null' || $cur === '""');
+        // Fill empties always; in refresh mode also overwrite when the stored
+        // image differs from the fresh card image (don't churn identical rows).
+        if ($isEmpty || ($refresh && strpos($cur, $img) === false)) {
             $upd->execute(array(json_encode(array($img), JSON_UNESCAPED_SLASHES), (int)$row['id']));
             $updated++;
         }

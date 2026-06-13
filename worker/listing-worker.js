@@ -302,7 +302,8 @@ async function reextractLocations() {
     const IMG_PAGES = parseInt(process.env.IMAGE_PAGES || '20', 10);
     const imgDelay = () => 4000 + Math.floor(Math.random() * 5000); // search pages: gentler than detail crawl
     const onlySite = (process.argv.find((a) => a.startsWith('--site=')) || '').split('=')[1] || process.env.SITE || '';
-    log('BACKFILL-IMAGES starting', { IMG_PAGES, HEADFUL, onlySite: onlySite || '(all)' });
+    const REFRESH = process.argv.includes('--refresh'); // overwrite stale/broken images, not just empty ones
+    log('BACKFILL-IMAGES starting', { IMG_PAGES, HEADFUL, onlySite: onlySite || '(all)', refresh: REFRESH });
     const work = await api.pullWork(1); // just for the discovery_sources list
     let sources = (work.discovery_sources || []);
     log('active discovery sources:', sources.map((s) => s.source_site).join(', ') || '(none)');
@@ -351,7 +352,7 @@ async function reextractLocations() {
           fresh.forEach((c) => seen.add(c.url));
           const payload = fresh.map((c) => ({ source_listing_id: SITES[site].idFromUrl(c.url), url: c.url, image: c.img }));
           let res = { matched: 0, updated: 0 };
-          try { res = await api.postCardImages(site, payload); } catch (e) { log('post images failed', e.message); }
+          try { res = await api.postCardImages(site, payload, REFRESH); } catch (e) { log('post images failed', e.message); }
           matched += res.matched || 0; updated += res.updated || 0;
           log('images', site, src.label || '', 'p' + p, '—', fresh.length, 'new of', cards.length, '→', (res.updated || 0), 'filled (', (res.matched || 0), 'matched, total', updated + ')');
           await sleep(imgDelay());
