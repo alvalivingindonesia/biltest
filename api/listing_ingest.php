@@ -231,8 +231,12 @@ function handle_post_listing() {
         $no_history = array('photo_urls', 'short_description', 'price_idr_per_sqm', 'price_label', 'land_size_are');
         $apply = function($col, $val) use (&$set, &$par, $locked, $db, $id, $existing, $no_history) {
             if (lc_is_locked($locked, $col)) return;
+            // Never blank out an existing value with a null the scraper simply
+            // failed to extract (e.g. OLX has no structured land size).
+            $cur = isset($existing[$col]) ? $existing[$col] : null;
+            if (($val === null || $val === '') && $cur !== null && $cur !== '') return;
             if (!in_array($col, $no_history, true)) {
-                lc_record_revision($db, $id, $col, isset($existing[$col]) ? $existing[$col] : null, $val, 'worker');
+                lc_record_revision($db, $id, $col, $cur, $val, 'worker');
             }
             $set[] = "$col = ?"; $par[] = $val;
         };
@@ -246,6 +250,8 @@ function handle_post_listing() {
                     'unit_label' => $unit_label, 'land_size_sqm' => $land_sqm, 'source_url' => $source_url,
                 ));
                 // keep old price; still refresh per-sqm/label provenance
+            } elseif ($new_idr === null && $existing['price_idr'] !== null) {
+                // Extraction failed this cycle — keep the existing price, don't blank it.
             } else {
                 lc_record_revision($db, $id, 'price_idr', $existing['price_idr'], $new_idr, 'worker');
                 $set[] = "price_idr = ?";          $par[] = $new_idr;

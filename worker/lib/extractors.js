@@ -242,7 +242,61 @@ const dotproperty = {
   },
 };
 
-const SITES = { lamudi, rumah123, dotproperty };
+// ─────────────────────────────────────────────────────────────────────
+// OLX — re-check only (NOT in discovery: OLX owns Lamudi → duplicates).
+// Existing OLX listings from the paste importer still need liveness + refresh.
+// ─────────────────────────────────────────────────────────────────────
+const olx = {
+  detailUrlPattern: /olx\.co\.id\/item\//i,
+  idFromUrl: (url) => {
+    const m = url.match(/-iid-(\d+)/i) || url.match(/(\d{7,})/);
+    return m ? m[1] : url;
+  },
+  searchLinkPattern: /https?:\/\/www\.olx\.co\.id\/item\/[^"']+/gi,
+  async extractDetail(page, url) {
+    const pg = await readPage(page);
+    const product = findLd(pg.ld, ['Product', 'RealEstateListing', 'Offer', 'Residence', 'Place'])[0] || {};
+    const offer = product.offers || product || {};
+    const addr = product.address || {};
+    const h1 = (await page.locator('h1').first().textContent().catch(() => '')) || '';
+    const title = pickTitle(product.name, h1);
+    const description = await readDescription(page, product.description, pg.text);
+    // OLX shows a TOTAL price; grab JSON-LD first, else the price element. // TUNE
+    let priceText = '';
+    try { priceText = (await page.locator('[data-aut-id="itemPrice"], span[data-aut-id="itemPrice"], [class*="rice"]').first().textContent({ timeout: 1500 }).catch(() => '')) || ''; } catch (_) { priceText = ''; }
+    return {
+      source_site: 'olx',
+      source_listing_id: olx.idFromUrl(url),
+      source_url: url,
+      title: String(title).trim(),
+      price_amount: numFrom(offer.price) || numFrom(priceText),
+      price_currency: offer.priceCurrency || 'IDR',
+      price_unit_label: 'Total', // OLX cards are totals; description fallback handles per-are notes server-side
+      land_size_sqm: numFrom(product.floorSize?.value || product.lotSize?.value), // usually null → mined server-side
+      building_size_sqm: null,
+      bedrooms: numFrom(product.numberOfBedrooms),
+      bathrooms: numFrom(product.numberOfBathroomsTotal || product.numberOfBathrooms),
+      certificate_text: description,
+      description,
+      kecamatan: addr.addressLocality || '',
+      desa: addr.addressRegion || '',
+      district: [addr.addressLocality, addr.addressRegion].filter(Boolean).join(', '),
+      listing_type: '',
+      photos: (Array.isArray(product.image) ? product.image : [product.image]).filter(Boolean).slice(0, 5).concat(pg.ogImages).slice(0, 5),
+      agent: {
+        name: product.seller?.name || product.broker?.name || '',
+        agency: '',
+        phone: phoneFromWa(pg.waLink),
+        source_agent_id: '',
+        profile_url: '',
+        photo_url: '',
+        verified: false,
+      },
+    };
+  },
+};
+
+const SITES = { lamudi, rumah123, dotproperty, olx };
 
 // Extract candidate detail-page links from a search-results page.
 async function extractSearchLinks(page, site) {

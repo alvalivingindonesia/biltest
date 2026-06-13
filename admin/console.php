@@ -1146,6 +1146,11 @@ function toggleSidebarSub(e,id){
     <a href="?s=guides" class="<?= $section==='guides'?'active':'' ?>">Guides (<?= $guide_count ?>)</a>
     <h2>Property Listings</h2>
     <a href="?s=listings" class="<?= $section==='listings'?'active':'' ?>">All Listings (<?= $listing_count ?>)<?php if($listing_pending_count):?> <span style="background:#f59e0b;color:#fff;border-radius:10px;padding:0 6px;font-size:11px;margin-left:4px"><?=$listing_pending_count?></span><?php endif;?></a>
+    <a href="modified_listings.php">Modified Listings ↗</a>
+    <a href="ingest_console.php">Ingest Console ↗</a>
+    <a href="recanonicalize_listings.php">Re-canonicalise ↗</a>
+    <a href="ingest_console.php?tab=review">Review Queue ↗</a>
+    <a href="ingest_console.php?tab=agents">Agents (cross-portal) ↗</a>
     <h2>User Management</h2>
     <a href="?s=users" class="<?= $section==='users'?'active':'' ?>">Users (<?= $user_count ?>)</a>
     <a href="?s=claims" class="<?= $section==='claims'?'active':'' ?>">Claims<?php if($claim_count):?> <span style="background:#f59e0b;color:#fff;border-radius:10px;padding:0 6px;font-size:11px;margin-left:4px"><?=$claim_count?></span><?php endif;?></a>

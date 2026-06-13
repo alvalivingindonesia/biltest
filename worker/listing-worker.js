@@ -33,6 +33,7 @@ function siteOf(url) {
   if (/lamudi\.co\.id/i.test(url)) return 'lamudi';
   if (/rumah123\.com/i.test(url)) return 'rumah123';
   if (/dotproperty\.id/i.test(url)) return 'dotproperty';
+  if (/olx\.co\.id/i.test(url)) return 'olx';
   return null;
 }
 
