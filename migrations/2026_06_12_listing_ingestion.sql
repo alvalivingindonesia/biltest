@@ -226,8 +226,10 @@ CREATE TABLE IF NOT EXISTS discovery_sources (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT IGNORE INTO discovery_sources (source_site, label, search_url, max_pages, is_active) VALUES
-    ('lamudi',      'Lamudi — Lombok land',    'https://www.lamudi.co.id/lombok/tanah/dijual/',        3, 1),
-    ('lamudi',      'Lamudi — Lombok houses',  'https://www.lamudi.co.id/lombok/rumah/dijual/',        3, 1),
+    ('lamudi',      'Lamudi — Lombok Tengah land',   'https://www.lamudi.co.id/jual/nusa-tenggara-barat/lombok-tengah/tanah/', 5, 1),
+    ('lamudi',      'Lamudi — Lombok Tengah houses', 'https://www.lamudi.co.id/jual/nusa-tenggara-barat/lombok-tengah/rumah/', 3, 1),
+    ('lamudi',      'Lamudi — Lombok Barat land',    'https://www.lamudi.co.id/jual/nusa-tenggara-barat/lombok-barat/tanah/',  4, 1),
+    ('lamudi',      'Lamudi — Lombok Utara land',    'https://www.lamudi.co.id/jual/nusa-tenggara-barat/lombok-utara/tanah/',  4, 1),
     ('rumah123',    'Rumah123 — Lombok land',  'https://www.rumah123.com/jual/lombok-tengah/tanah/',   3, 1),
     ('rumah123',    'Rumah123 — Lombok houses','https://www.rumah123.com/jual/lombok-tengah/rumah/',   3, 1),
     ('dotproperty', 'DotProperty — Lombok',    'https://www.dotproperty.id/en/properties-for-sale/lombok', 3, 1);
