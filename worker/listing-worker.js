@@ -22,7 +22,7 @@ const RECHECK_LIMIT   = parseInt(process.env.RECHECK_LIMIT || '80', 10);
 const DISCOVERY_LIMIT = parseInt(process.env.DISCOVERY_LIMIT || '40', 10);
 const DELAY_MIN = parseInt(process.env.DELAY_MIN_MS || '30000', 10);
 const DELAY_MAX = parseInt(process.env.DELAY_MAX_MS || '60000', 10);
-const HEADFUL   = process.env.HEADFUL === '1';
+const HEADFUL   = process.env.HEADFUL === '1' || new Set(process.argv.slice(2)).has('--headful');
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 // --disable-http2: OLX's CDN drops Playwright's HTTP/2 connection
