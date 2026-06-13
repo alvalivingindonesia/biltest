@@ -423,7 +423,7 @@ function projectPriceHtml(usd) {
 
 // ---- Dynamic filter data (loaded from DB) ----
 const FilterData = {
-  areas: [], regions: [], groups: [], categories: [], project_types: [], project_statuses: [], listing_types: [], land_certificate_types: [],
+  areas: [], regions: [], places: [], groups: [], categories: [], project_types: [], project_statuses: [], listing_types: [], land_certificate_types: [],
   feature_tags: [], currency_rates: {},
   _loaded: false,
   async load() {
@@ -432,6 +432,7 @@ const FilterData = {
       const f = await DataLayer.getFilters();
       this.areas = f.areas || [];
       this.regions = f.regions || [];
+      this.places = f.places || [];
       this.groups = f.groups || [];
       this.categories = f.categories || [];
       this.project_types = f.project_types || [];
