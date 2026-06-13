@@ -314,10 +314,11 @@ async function reextractLocations() {
         for (let p = 1; p <= IMG_PAGES; p++) {
           const url = src.search_url + (src.search_url.includes('?') ? '&' : '?') + 'page=' + p;
           const page = await ctx.newPage();
-          let cards = [];
+          let cards = [], diag = '';
           try {
             const nav = await goto(page, url);
-            if (!nav.failed) {
+            if (nav.failed) { diag = 'nav failed: ' + nav.error; }
+            else {
               // scroll to trigger lazy-loaded cards + images before reading
               try {
                 await page.evaluate(async () => {
@@ -327,10 +328,18 @@ async function reextractLocations() {
                 await page.waitForTimeout(1500);
               } catch (_) {}
               cards = await extractSearchCards(page, site);
+              if (!cards.length) {
+                try {
+                  const t = await page.title();
+                  const html = await page.content();
+                  const m = (html.match(new RegExp(SITES[site].detailUrlPattern.source, 'gi')) || []).length;
+                  diag = `finalUrl=${nav.finalUrl} title="${(t || '').slice(0, 50)}" rawDetailLinks=${m} htmlLen=${html.length}`;
+                } catch (_) {}
+              }
             }
-          } catch (e) { log('cards error', url, e.message); }
+          } catch (e) { diag = 'err: ' + e.message; }
           finally { await page.close(); }
-          if (!cards.length) { log('images', site, 'p' + p, 'no cards — end of source'); break; }
+          if (!cards.length) { log('images', site, 'p' + p, 'no cards —', diag); break; }
           const payload = cards.map((c) => ({ source_listing_id: SITES[site].idFromUrl(c.url), url: c.url, image: c.img }));
           let res = { matched: 0, updated: 0 };
           try { res = await api.postCardImages(site, payload); } catch (e) { log('post images failed', e.message); }
