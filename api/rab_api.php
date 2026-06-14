@@ -191,8 +191,24 @@ function handle_calculate() {
     $data = get_post_data();
 
     $preset_id    = (int)(isset($data['preset_id']) ? $data['preset_id'] : 0);
-    $quality      = isset($data['quality']) ? $data['quality'] : 'mid';
-    if (!in_array($quality, array('low','mid','high'))) $quality = 'mid';
+    // The wizard sends a 4-tier finish quality (economy/architectural/premium/
+    // signature); older callers may send low/mid/high. Map each to its base-rate
+    // column — signature = premium rate x1.5, matching the live preview — plus a
+    // low/mid/high value to store in quality_level (keeps that column valid).
+    $quality_in = isset($data['quality']) ? $data['quality'] : 'architectural';
+    $tier_map = array(
+        'economy'       => array('col' => 'base_cost_per_m2_low',  'mult' => 1.0, 'store' => 'low',  'label' => 'Economy'),
+        'architectural' => array('col' => 'base_cost_per_m2_mid',  'mult' => 1.0, 'store' => 'mid',  'label' => 'Architectural'),
+        'premium'       => array('col' => 'base_cost_per_m2_high', 'mult' => 1.0, 'store' => 'high', 'label' => 'Premium'),
+        'signature'     => array('col' => 'base_cost_per_m2_high', 'mult' => 1.5, 'store' => 'high', 'label' => 'Signature'),
+        // Back-compat with the old low/mid/high vocabulary
+        'low'  => array('col' => 'base_cost_per_m2_low',  'mult' => 1.0, 'store' => 'low',  'label' => 'Economy'),
+        'mid'  => array('col' => 'base_cost_per_m2_mid',  'mult' => 1.0, 'store' => 'mid',  'label' => 'Architectural'),
+        'high' => array('col' => 'base_cost_per_m2_high', 'mult' => 1.0, 'store' => 'high', 'label' => 'Premium'),
+    );
+    if (!isset($tier_map[$quality_in])) $quality_in = 'architectural';
+    $tier = $tier_map[$quality_in];
+    $store_quality = $tier['store'];
     $num_storeys  = (int)(isset($data['num_storeys']) ? $data['num_storeys'] : 1);
     $fa1          = (float)(isset($data['floor_area_1']) ? $data['floor_area_1'] : 0);
     $fa2          = (float)(isset($data['floor_area_2']) ? $data['floor_area_2'] : 0);
@@ -213,8 +229,7 @@ function handle_calculate() {
     $preset = $p_q->fetch();
     if (!$preset) { json_error(400, 'Preset not found.'); }
 
-    $col = 'base_cost_per_m2_' . $quality;
-    $building_rate  = (float)$preset[$col];
+    $building_rate  = (float)$preset[$tier['col']] * $tier['mult'];
     $loc            = (float)$preset['location_factor'];
     $cont_pct       = (float)$preset['contingency_percent'];
 
@@ -252,7 +267,7 @@ function handle_calculate() {
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
     $ins->execute(array(
         $uid, $estimate_name ? $estimate_name : null, $is_saved,
-        $preset_id, $quality, $num_storeys,
+        $preset_id, $store_quality, $num_storeys,
         $fa1, $fa2, $fa3, $fa4,
         $walkable, $rooftop_area,
         $has_pool, $pool_inf, $pool_area,
@@ -262,8 +277,6 @@ function handle_calculate() {
     ));
     $run_id = (int)$db->lastInsertId();
 
-    $ql_map = array('low' => 'Economy', 'mid' => 'Standard', 'high' => 'Premium');
-
     json_out(array(
         'success' => true,
         'run_id' => $run_id,
@@ -271,8 +284,8 @@ function handle_calculate() {
         'result' => array(
             'id' => $run_id,
             'preset_name' => $preset['name'],
-            'quality_label' => isset($ql_map[$quality]) ? $ql_map[$quality] : $quality,
-            'quality_level' => $quality,
+            'quality_label' => $tier['label'],
+            'quality_level' => $store_quality,
             'num_storeys' => $num_storeys,
             'floor_areas' => array($fa1, $fa2, $fa3, $fa4),
             'total_floor_area' => $total_floor,
@@ -313,7 +326,7 @@ function handle_my_estimates() {
     $stmt->execute(array($uid));
     $rows = $stmt->fetchAll();
 
-    $ql_map = array('low' => 'Economy', 'mid' => 'Standard', 'high' => 'Premium');
+    $ql_map = array('low' => 'Economy', 'mid' => 'Architectural', 'high' => 'Premium');
     $results = array();
     foreach ($rows as $r) {
         $r['quality_label'] = isset($ql_map[$r['quality_level']]) ? $ql_map[$r['quality_level']] : $r['quality_level'];
@@ -403,7 +416,7 @@ function handle_estimate() {
         json_error(403, 'Access denied.');
     }
 
-    $ql_map = array('low' => 'Economy', 'mid' => 'Standard', 'high' => 'Premium');
+    $ql_map = array('low' => 'Economy', 'mid' => 'Architectural', 'high' => 'Premium');
     $run['quality_label'] = isset($ql_map[$run['quality_level']]) ? $ql_map[$run['quality_level']] : $run['quality_level'];
 
     json_out(array('data' => $run));

@@ -89,7 +89,7 @@ window.I18N_EN = {
   'home.explore_cta': 'Explore',
   'home.build_cost_tools': 'Build Cost Tools',
   'home.build_cost_tools_desc': 'Estimate your project cost before you build',
-  'home.quick_calc_title': 'Quick Calculator',
+  'home.quick_calc_title': 'Build Cost Indicator',
   'home.quick_calc_desc': 'Get a fast estimate of your build cost in minutes.',
   'home.quick_calc_cta': 'Start Calculating',
   'home.rab_gen_title': 'Detailed RAB Generator',

@@ -120,10 +120,12 @@ git push origin main
 ```
 
 ## Deployment
-- Push to `main` branch on GitHub
-- Manual deploy: copy changed files to server via FTP/SSH (HostPapa shared hosting)
-- No CI/CD pipeline yet — changes go live on manual upload
-- Test at: https://biltest.roving-i.com.au
+- **Auto-deploy from `main` only:** the test webserver uses cPanel Git Version
+  Control (`.cpanel.yml`) which runs **only when you push to `main`** — it copies
+  the repo to the live subdomain. Pushing to a feature branch does NOT deploy.
+  So to make a change go live: merge/fast-forward it onto `main` and push `main`.
+- Test (live) at: https://biltest.roving-i.com.au — hard-refresh to bypass cached
+  CSS/JS, and verify there after pushing.
 
 ## Admin Access
 - Admin panel: https://biltest.roving-i.com.au/admin/console.php

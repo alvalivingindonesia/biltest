@@ -342,8 +342,10 @@ function formatLandSize(sqm, are) {
 // =====================================================
 const Currency = {
   LIST: ['IDR', 'USD', 'EUR', 'AUD'],
-  // Used only if the currency_rates table is missing/empty
-  FALLBACK_IDR: { IDR: 1, USD: 16500, EUR: 17800, AUD: 10500 },
+  // Safety net only — IDR per 1 unit. The live rates come from the
+  // currency_rates table (refreshed daily by api/cron_fx.php). Keep these
+  // roughly current so conversions stay sane if that table is empty/stale.
+  FALLBACK_IDR: { IDR: 1, USD: 17779, EUR: 20636, AUD: 12521 },
   _stored: (function() {
     try {
       var c = localStorage.getItem('bil_currency');
@@ -610,6 +612,12 @@ function iconMapPin() {
   return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`;
 }
 
+// Ultra-fine single-stroke WhatsApp glyph — inherits currentColor (charcoal/bronze),
+// no brand-green fill. Used in the editorial directory in place of the green badge.
+function iconWhatsAppLine() {
+  return `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 20.5l1.3-3.7A8 8 0 1 1 7.2 19.2l-3.7 1.3z"/><path d="M9 9.2c.2-.5.4-.5.7-.5h.5c.2 0 .4 0 .6.5l.6 1.4c.1.2 0 .4-.1.5l-.4.5c-.1.2-.2.3 0 .6.3.5.8 1.1 1.4 1.5.4.3.6.3.8.1l.5-.5c.2-.2.3-.2.6-.1l1.3.7c.2.1.3.2.3.4 0 .5-.4 1.2-.8 1.4-.5.3-1.1.5-2.6-.1-1.9-.8-3.2-2.6-3.7-3.5-.2-.4-.7-1.4 0-2.4z"/></svg>`;
+}
+
 function iconClock() {
   return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
 }
@@ -749,6 +757,10 @@ async function router() {
   // Prevents the pinned ScrollTrigger from leaking onto replaced DOM.
   if (typeof HeroReveal !== 'undefined') HeroReveal.destroy();
 
+  // Expose the current route on <body> for per-page CSS hooks (e.g. hide the
+  // WhatsApp FAB on the developers directory). Reset on every navigation.
+  document.body.setAttribute('data-page', page);
+
   switch (page) {
     case 'home': await renderHome(view); break;
     case 'directory': await renderDirectory(view, params); break;
@@ -857,7 +869,17 @@ async function renderHome(el) {
         </div>
       </div>
       <div class="hero-scroll-hint" aria-hidden="true">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+        <svg class="hero-scroll-arrow" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="url(#heroScrollGold)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <defs>
+            <linearGradient id="heroScrollGold" x1="12" y1="4" x2="12" y2="20" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#E8D4A0"/>
+              <stop offset="0.45" stop-color="#C49A3A"/>
+              <stop offset="0.55" stop-color="#9C7212"/>
+              <stop offset="1" stop-color="#D9BE78"/>
+            </linearGradient>
+          </defs>
+          <path d="M12 5v14M5 12l7 7 7-7"/>
+        </svg>
       </div>
     </section>
 
@@ -1659,39 +1681,41 @@ async function renderProviderDetail(el, slug) {
 // =====================================================
 
 function renderDeveloperCard(dev, index = 0) {
-  const badge = dev.badge ? `<span class="card-badge">${renderBadge(dev.badge)}</span>` : '';
-  const featuredBadge = dev.is_featured ? '<span class="card-badge card-badge--featured">★ Featured</span>' : '';
-  const ratingInline = dev.google_rating
-    ? `<span class="card-rating-inline"><span class="card-rating-star">★</span> ${dev.google_rating.toFixed(1)} <span class="card-rating-count">(${dev.google_review_count})</span></span>`
-    : '';
-  const areas = dev.areas_focus.map(a => formatAreaLabel(a)).join(', ');
-  const thumbImg = dev.logo_url || dev.profile_photo_url;
-  const hasPhoto = !!thumbImg;
-  const categoryLabel = (dev.categories && dev.categories.length > 0) ? dev.categories.map(c => formatCategoryLabel(c.key || c)).join(' · ') : 'Developer';
+  // Editorial card — landscape photography dominant, no borders/shadows, no ratings or badges.
+  // Image priority: primary gallery image → hero banner → secondary photos → profile photo.
+  // The square brand logo is deliberately NOT used as the landscape crop.
+  const heroImg = (dev.image && dev.image.url) || dev.hero_image_url
+    || dev.image_url_2 || dev.image_url_3 || dev.image_url_4 || dev.profile_photo_url || '';
+  const name = escHtml(dev.name || 'Developer');
+
+  // Location eyebrow — first focus area (kept to one anchor area for a clean tracked tag).
+  const loc = (dev.areas_focus && dev.areas_focus.length)
+    ? formatAreaLabel(dev.areas_focus[0]) : '';
+  // Optional second editorial detail line: leading project type.
+  const type = (dev.project_types && dev.project_types.length)
+    ? formatProjectType(dev.project_types[0]) : '';
+  const eyebrow = [loc, type].filter(Boolean).join('  ·  ').toUpperCase();
+
+  // Strip any backend-generated trailing ellipsis ("…" or "...") — the card
+  // enforces its own clean two-line constraint in CSS, no truncation marks.
+  const rawDesc = (dev.short_description_en || '').replace(/\s*(\.{2,}|…)\s*$/, '').trim();
+  const desc = rawDesc ? escHtml(rawDesc) : '';
+  const mediaInner = heroImg
+    ? `<img src="${heroImg}" alt="${name}" class="dev-card-img" loading="lazy" decoding="async" onerror="this.parentElement.classList.add('dev-card-media--empty');this.remove();">`
+    : `<span class="dev-card-media-mark">${(dev.name || 'D').charAt(0).toUpperCase()}</span>`;
+
+  // Secondary utilities (favourite, WhatsApp) live on the detail page only —
+  // the directory feed stays quiet: image, hierarchy, single anchored CTA.
   const _devCard = `
-    <article class="card card-animate" style="animation-delay:${index * 50}ms">
-      <div class="card-visual-header">
-        ${hasPhoto ? `<img src="${thumbImg}" alt="${dev.name}" class="card-avatar${dev.logo_url ? ' card-avatar--logo' : ''}" loading="lazy" onerror="this.style.display='none'">` : `<div class="card-avatar card-avatar--placeholder"><span>${(dev.name || 'D').charAt(0).toUpperCase()}</span></div>`}
-        <div class="card-header-info">
-          <span class="card-category-label">${categoryLabel}</span>
-          <div class="card-header-badges">${featuredBadge}${badge}</div>
-        </div>
-        ${ratingInline}
-      </div>
-      <h3 class="card-name"><a href="#developer/${dev.slug}" onclick="navigate('developer/${dev.slug}');return false;">${dev.name}</a></h3>
-      <p class="card-desc">${dev.short_description_en}</p>
-      <div class="card-meta-line">
-        <span class="card-meta-item">${iconMapPin()} ${areas}</span>
-      </div>
-      <div class="card-tags-line">
-        ${dev.project_types.map(t => `<span class="card-tag">${formatProjectType(t)}</span>`).join('<span class="card-tag-dot">·</span>')}
-        ${dev.min_ticket_usd ? `<span class="card-tag-dot">·</span><span class="card-tag">From ${formatUSD(dev.min_ticket_usd)}</span>` : ''}
-      </div>
-      <div class="card-footer">
-        <button class="card-view-btn" onclick="navigate('developer/${dev.slug}')">
-          View developer ${iconArrowRight()}
-        </button>
-        <div class="card-footer-right">${renderFavBtn('developer', dev.id)}${dev.whatsapp_number ? `<a href="https://wa.me/${dev.whatsapp_number}" target="_blank" rel="noopener noreferrer" class="card-wa-btn" aria-label="WhatsApp ${dev.name}">${iconWhatsApp()}</a>` : ''}</div>
+    <article class="dev-card card-animate" style="animation-delay:${index * 60}ms">
+      <a class="dev-card-media${heroImg ? '' : ' dev-card-media--empty'}" href="#developer/${dev.slug}" onclick="navigate('developer/${dev.slug}');return false;" aria-label="${name}" tabindex="-1">
+        ${mediaInner}
+      </a>
+      <div class="dev-card-body">
+        ${eyebrow ? `<span class="dev-card-loc">${eyebrow}</span>` : ''}
+        <h3 class="dev-card-title"><a href="#developer/${dev.slug}" onclick="navigate('developer/${dev.slug}');return false;">${name}</a></h3>
+        ${desc ? `<p class="dev-card-desc">${desc}</p>` : ''}
+        <a class="dev-card-link" href="#developer/${dev.slug}" onclick="navigate('developer/${dev.slug}');return false;">View developer ${iconArrowRight()}</a>
       </div>
     </article>
   `;
@@ -1712,71 +1736,31 @@ async function renderDevelopers(el, params = {}) {
     devs = res.data;
   } catch(e) { console.error('Failed to load developers:', e); }
 
-  const areaOptions = buildAreaOptions(params.area || '');
   const isFeaturedFilter = params.featured === '1';
 
-  el.innerHTML = `
-    <div class="dir-hero">
-      <div class="container">
-        <h1 class="dir-hero-title">${isFeaturedFilter ? 'Featured ' : ''}Property Developers</h1>
-        <p class="dir-hero-desc">Active developers building villas, apartments, and land projects across Lombok.</p>
-      </div>
-    </div>
-    <div class="section">
-      <div class="container">
-        <div class="filters-bar">
-          <button class="filters-toggle-btn" onclick="this.closest('.filters-bar').querySelector('.filters-body').classList.toggle('open')">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
-            Filters
-          </button>
-          <div class="filters-body${isFeaturedFilter ? ' open' : ''}">
-            <div class="filters-grid">
-              <div class="filter-group">
-                <label class="filter-label">Area</label>
-                <select id="fil-dev-area" class="filter-select" aria-label="Area">
-                  <option value="">All areas</option>
-                  ${areaOptions}
-                </select>
-              </div>
-              <div class="filter-group">
-                <label class="filter-label">Status</label>
-                <select id="fil-dev-featured" class="filter-select" aria-label="Status">
-                  <option value="">All developers</option>
-                  <option value="1" ${isFeaturedFilter ? 'selected' : ''}>Featured only</option>
-                </select>
-              </div>
-              <div class="filter-group">
-                <label class="filter-label">Search</label>
-                <input type="text" id="fil-dev-q" class="filter-select" placeholder="Search name..." value="${params.q || ''}" style="background-image:none;padding-right:var(--space-3);">
-              </div>
-            </div>
-          </div>
-        </div>
-        <p class="results-count"><strong>${devs.length}</strong> developer${devs.length !== 1 ? 's' : ''} listed</p>
-        <div class="card-grid">
-          ${devs.map((d, i) => renderDeveloperCard(d, i)).join('')}
-        </div>
-      </div>
-    </div>
-  `;
+  // ── Layout option ──────────────────────────────────────────────────────────
+  // 'portfolio'   = Option A: asymmetric magazine grid (variable widths + stagger)
+  // 'alternating' = Option B: full-width rows, image alternates left / right
+  // Both are fully styled in style.css; flip this one constant to switch.
+  const DEV_LAYOUT = 'portfolio';
+  const gridClass = DEV_LAYOUT === 'alternating'
+    ? 'dev-portfolio-grid dev-portfolio-grid--alternating'
+    : 'dev-portfolio-grid';
 
-  // Filter event listeners
-  const filArea = el.querySelector('#fil-dev-area');
-  const filFeatured = el.querySelector('#fil-dev-featured');
-  const filQ = el.querySelector('#fil-dev-q');
-  function applyDevFilters() {
-    const p = {};
-    if (filArea.value) {
-      if (filArea.value.startsWith('region:')) p.region = filArea.value.replace('region:', '');
-      else p.area = filArea.value;
-    }
-    if (filFeatured.value) p.featured = filFeatured.value;
-    if (filQ.value) p.q = filQ.value;
-    navigate('developers', p);
-  }
-  filArea.addEventListener('change', applyDevFilters);
-  filFeatured.addEventListener('change', applyDevFilters);
-  let debounce; filQ.addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(applyDevFilters, 400); });
+  el.innerHTML = `
+    <section class="dev-dir">
+      <div class="container">
+        <header class="dev-dir-head">
+          <h1 class="dev-dir-title">${isFeaturedFilter ? 'Featured ' : ''}Developers &amp; Projects</h1>
+          <p class="dev-dir-desc">A curated selection of developers shaping villas, residences and land across Lombok.</p>
+        </header>
+
+        <div class="${gridClass}">
+          ${devs.map((d, i) => renderDeveloperCard(d, i)).join('') || '<p class="dev-empty">No developers to show yet.</p>'}
+        </div>
+      </div>
+    </section>
+  `;
 
   requestAnimationFrame(() => animateCards(el));
 }
@@ -2370,11 +2354,52 @@ function createLombokMap(wrapEl, opts) {
     return best ? { el: best, type: type } : null;
   }
 
+  // Is the click on this text label? Diagonal labels have a huge axis-aligned
+  // bounding box, so test the click in the label's OWN (un-rotated) coordinate
+  // frame against its tight getBBox — this ignores the rotation and the empty
+  // corners of the slanted box. (Labels are pointer-events:none, so we hit-test
+  // them here rather than relying on e.target.)
+  function labelHit(textEl, e) {
+    if (!textEl) return false;
+    var ctm = textEl.getScreenCTM();
+    if (!ctm) return false;
+    var pt = svg.createSVGPoint();
+    pt.x = e.clientX; pt.y = e.clientY;
+    var loc = pt.matrixTransform(ctm.inverse());
+    var bb;
+    try { bb = textEl.getBBox(); } catch (err) { return false; }
+    var pad = 1.5;
+    return loc.x >= bb.x - pad && loc.x <= bb.x + bb.width + pad
+        && loc.y >= bb.y - pad && loc.y <= bb.y + bb.height + pad;
+  }
+
   svg.addEventListener('click', function(e) {
     var zone = e.target.closest('.lmap-czone');
     if (zone && zone.classList.contains('visible') && !zone.classList.contains('lmap-czone--empty')) {
       if (opts.onSelect) opts.onSelect({ region: zone.getAttribute('data-region'), cluster: zone.getAttribute('data-cluster'), area: '', place: '' });
       return;
+    }
+    // Clicking an Area/Place *name* (the text label) is the "show me the
+    // listings here" action: set the location filter and scroll to the results.
+    // Clicking the dot only sets the filter so the map stays put for further
+    // drilling. Detect names geometrically (labelHit) so slanted labels respond
+    // only on the text itself, not their big bounding rectangle.
+    var amarks = svg.querySelectorAll('.lmap-amark.visible');
+    for (var ai = 0; ai < amarks.length; ai++) {
+      if (labelHit(amarks[ai].querySelector('.lmap-amark-label'), e)) {
+        var nak = amarks[ai].getAttribute('data-area'), nark = amarks[ai].getAttribute('data-region');
+        if (opts.onSelect) opts.onSelect({ region: nark, cluster: clusterOfArea(nark, nak), area: nak, place: '', scroll: true });
+        return;
+      }
+    }
+    var pmarks = svg.querySelectorAll('.lmap-place.visible:not(.empty)');
+    for (var pi = 0; pi < pmarks.length; pi++) {
+      if (labelHit(pmarks[pi].querySelector('.lmap-place-label'), e)) {
+        var npk = pmarks[pi].getAttribute('data-place'), npa = pmarks[pi].getAttribute('data-area');
+        var nprk = (LOMBOK_MAP.areas[npa] || {}).r || selRegion;
+        if (opts.onSelect) opts.onSelect({ region: nprk, cluster: clusterOfArea(nprk, npa), area: npa, place: npk, scroll: true });
+        return;
+      }
     }
     var dot = nearestDot(clickToSvg(e));
     if (dot && dot.type === 'area') {
@@ -2873,9 +2898,10 @@ async function renderListings(el, params = {}) {
       state.place = sel.place || '';
       state.page = 1;
       syncAreaDropdown();
-      // Picking a final Area/Place on mobile: keep the map open, just scroll
-      // down to the results so it's obvious the filter applied.
-      refresh((sel.area || sel.place) && isMobile());
+      // Clicking a dot/zone refines the filter but keeps the user on the map;
+      // clicking a place/area *name* commits the location and (on mobile, where
+      // the list sits below the map) scrolls down to the results.
+      refresh(!!sel.scroll && isMobile());
     }
   });
 
@@ -2891,16 +2917,19 @@ async function renderListings(el, params = {}) {
   }
 
   // Context-aware back: one level up, broadening the filter (docs/adr/0011).
+  // An Area sits inside its Cluster's zoom — the whole Cluster is still on
+  // screen when an Area is picked — so "back" from an Area skips the Cluster and
+  // broadens straight to the Region.
   function backTarget() {
     if (state.place) return { label: areaDisplayLabel(state.area) };
-    if (state.area) return { label: state.cluster ? clusterDisplayLabel(state.region, state.cluster) : regionDisplayLabel(state.region) };
+    if (state.area) return { label: regionDisplayLabel(state.region) };
     if (state.cluster) return { label: regionDisplayLabel(state.region) };
     if (state.region) return { label: t('map.all_lombok', 'All Lombok') };
     return null;
   }
   function goBack() {
     if (state.place) state.place = '';
-    else if (state.area) state.area = '';
+    else if (state.area) { state.area = ''; state.cluster = ''; }
     else if (state.cluster) state.cluster = '';
     else if (state.region) state.region = '';
     state.page = 1;
@@ -5533,7 +5562,7 @@ async function renderRABCalculator(el) {
   el.innerHTML = ''
     + '<div class="dir-hero">'
     + '  <div class="container">'
-    + '    <h1 class="dir-hero-title">RAB Cost Tools</h1>'
+    + '    <h1 class="dir-hero-title">Build Cost Indicator</h1>'
     + '    <p class="dir-hero-desc">Estimate building costs for your Lombok villa or home — from a quick calculation to a full bill of quantities.</p>'
     + '    <div class="rab-hero-tabs">'
     + '      <a href="#rab-calculator" class="rab-tab active">Calculator</a>'
@@ -8984,7 +9013,9 @@ function initApp() {
 // =====================================================
 
 var MobileFilterDrawer = (function() {
-  var FILTER_PAGES = { directory: true, listings: true, developers: true, agents: true };
+  // Pages that expose filters and therefore the mobile "Filter Results" button.
+  // Developers is intentionally excluded — its directory is filter-free (editorial layout).
+  var FILTER_PAGES = { directory: true, listings: true, agents: true };
   var filterEl = null;       // The original filter element we'll re-parent
   var placeholder = null;    // Marker node so we can put it back
   var drawer, panel, body, btn;

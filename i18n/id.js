@@ -86,7 +86,7 @@ window.I18N_ID = {
   'home.explore_cta': 'Jelajahi',
   'home.build_cost_tools': 'Alat Estimasi Biaya',
   'home.build_cost_tools_desc': 'Perkirakan biaya proyek Anda sebelum membangun',
-  'home.quick_calc_title': 'Kalkulator Cepat',
+  'home.quick_calc_title': 'Build Cost Indicator',
   'home.quick_calc_desc': 'Dapatkan estimasi biaya bangunan dalam hitungan menit.',
   'home.quick_calc_cta': 'Mulai Hitung',
   'home.rab_gen_title': 'Generator RAB Lengkap',
