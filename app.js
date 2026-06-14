@@ -612,6 +612,12 @@ function iconMapPin() {
   return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`;
 }
 
+// Ultra-fine single-stroke WhatsApp glyph — inherits currentColor (charcoal/bronze),
+// no brand-green fill. Used in the editorial directory in place of the green badge.
+function iconWhatsAppLine() {
+  return `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 20.5l1.3-3.7A8 8 0 1 1 7.2 19.2l-3.7 1.3z"/><path d="M9 9.2c.2-.5.4-.5.7-.5h.5c.2 0 .4 0 .6.5l.6 1.4c.1.2 0 .4-.1.5l-.4.5c-.1.2-.2.3 0 .6.3.5.8 1.1 1.4 1.5.4.3.6.3.8.1l.5-.5c.2-.2.3-.2.6-.1l1.3.7c.2.1.3.2.3.4 0 .5-.4 1.2-.8 1.4-.5.3-1.1.5-2.6-.1-1.9-.8-3.2-2.6-3.7-3.5-.2-.4-.7-1.4 0-2.4z"/></svg>`;
+}
+
 function iconClock() {
   return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
 }
@@ -1641,39 +1647,43 @@ async function renderProviderDetail(el, slug) {
 // =====================================================
 
 function renderDeveloperCard(dev, index = 0) {
-  const badge = dev.badge ? `<span class="card-badge">${renderBadge(dev.badge)}</span>` : '';
-  const featuredBadge = dev.is_featured ? '<span class="card-badge card-badge--featured">★ Featured</span>' : '';
-  const ratingInline = dev.google_rating
-    ? `<span class="card-rating-inline"><span class="card-rating-star">★</span> ${dev.google_rating.toFixed(1)} <span class="card-rating-count">(${dev.google_review_count})</span></span>`
+  // Editorial card — landscape photography dominant, no borders/shadows, no ratings or badges.
+  // Image priority: primary gallery image → hero banner → secondary photos → profile photo.
+  // The square brand logo is deliberately NOT used as the landscape crop.
+  const heroImg = (dev.image && dev.image.url) || dev.hero_image_url
+    || dev.image_url_2 || dev.image_url_3 || dev.image_url_4 || dev.profile_photo_url || '';
+  const name = escHtml(dev.name || 'Developer');
+
+  // Location eyebrow — first focus area (kept to one anchor area for a clean tracked tag).
+  const loc = (dev.areas_focus && dev.areas_focus.length)
+    ? formatAreaLabel(dev.areas_focus[0]) : '';
+  // Optional second editorial detail line: leading project type.
+  const type = (dev.project_types && dev.project_types.length)
+    ? formatProjectType(dev.project_types[0]) : '';
+  const eyebrow = [loc, type].filter(Boolean).join('  ·  ').toUpperCase();
+
+  const desc = dev.short_description_en ? escHtml(dev.short_description_en) : '';
+  const mediaInner = heroImg
+    ? `<img src="${heroImg}" alt="${name}" class="dev-card-img" loading="lazy" decoding="async" onerror="this.parentElement.classList.add('dev-card-media--empty');this.remove();">`
+    : `<span class="dev-card-media-mark">${(dev.name || 'D').charAt(0).toUpperCase()}</span>`;
+
+  const waLink = dev.whatsapp_number
+    ? `<a href="https://wa.me/${dev.whatsapp_number}" target="_blank" rel="noopener noreferrer" class="dev-card-wa" aria-label="WhatsApp ${name}" onclick="event.stopPropagation();">${iconWhatsAppLine()}</a>`
     : '';
-  const areas = dev.areas_focus.map(a => formatAreaLabel(a)).join(', ');
-  const thumbImg = dev.logo_url || dev.profile_photo_url;
-  const hasPhoto = !!thumbImg;
-  const categoryLabel = (dev.categories && dev.categories.length > 0) ? dev.categories.map(c => formatCategoryLabel(c.key || c)).join(' · ') : 'Developer';
+
   const _devCard = `
-    <article class="card card-animate" style="animation-delay:${index * 50}ms">
-      <div class="card-visual-header">
-        ${hasPhoto ? `<img src="${thumbImg}" alt="${dev.name}" class="card-avatar${dev.logo_url ? ' card-avatar--logo' : ''}" loading="lazy" onerror="this.style.display='none'">` : `<div class="card-avatar card-avatar--placeholder"><span>${(dev.name || 'D').charAt(0).toUpperCase()}</span></div>`}
-        <div class="card-header-info">
-          <span class="card-category-label">${categoryLabel}</span>
-          <div class="card-header-badges">${featuredBadge}${badge}</div>
+    <article class="dev-card card-animate" style="animation-delay:${index * 60}ms">
+      <a class="dev-card-media${heroImg ? '' : ' dev-card-media--empty'}" href="#developer/${dev.slug}" onclick="navigate('developer/${dev.slug}');return false;" aria-label="${name}" tabindex="-1">
+        ${mediaInner}
+      </a>
+      <div class="dev-card-body">
+        ${eyebrow ? `<span class="dev-card-loc">${eyebrow}</span>` : ''}
+        <h3 class="dev-card-title"><a href="#developer/${dev.slug}" onclick="navigate('developer/${dev.slug}');return false;">${name}</a></h3>
+        ${desc ? `<p class="dev-card-desc">${desc}</p>` : ''}
+        <div class="dev-card-foot">
+          <a class="dev-card-link" href="#developer/${dev.slug}" onclick="navigate('developer/${dev.slug}');return false;">View developer ${iconArrowRight()}</a>
+          <span class="dev-card-actions">${renderFavBtn('developer', dev.id)}${waLink}</span>
         </div>
-        ${ratingInline}
-      </div>
-      <h3 class="card-name"><a href="#developer/${dev.slug}" onclick="navigate('developer/${dev.slug}');return false;">${dev.name}</a></h3>
-      <p class="card-desc">${dev.short_description_en}</p>
-      <div class="card-meta-line">
-        <span class="card-meta-item">${iconMapPin()} ${areas}</span>
-      </div>
-      <div class="card-tags-line">
-        ${dev.project_types.map(t => `<span class="card-tag">${formatProjectType(t)}</span>`).join('<span class="card-tag-dot">·</span>')}
-        ${dev.min_ticket_usd ? `<span class="card-tag-dot">·</span><span class="card-tag">From ${formatUSD(dev.min_ticket_usd)}</span>` : ''}
-      </div>
-      <div class="card-footer">
-        <button class="card-view-btn" onclick="navigate('developer/${dev.slug}')">
-          View developer ${iconArrowRight()}
-        </button>
-        <div class="card-footer-right">${renderFavBtn('developer', dev.id)}${dev.whatsapp_number ? `<a href="https://wa.me/${dev.whatsapp_number}" target="_blank" rel="noopener noreferrer" class="card-wa-btn" aria-label="WhatsApp ${dev.name}">${iconWhatsApp()}</a>` : ''}</div>
       </div>
     </article>
   `;
@@ -1696,50 +1706,59 @@ async function renderDevelopers(el, params = {}) {
 
   const areaOptions = buildAreaOptions(params.area || '');
   const isFeaturedFilter = params.featured === '1';
+  const hasQuery = !!(params.q && params.q.trim());
+
+  // ── Layout option ──────────────────────────────────────────────────────────
+  // 'portfolio'   = Option A: asymmetric magazine grid (variable widths + stagger)
+  // 'alternating' = Option B: full-width rows, image alternates left / right
+  // Both are fully styled in style.css; flip this one constant to switch.
+  const DEV_LAYOUT = 'portfolio';
+  const gridClass = DEV_LAYOUT === 'alternating'
+    ? 'dev-portfolio-grid dev-portfolio-grid--alternating'
+    : 'dev-portfolio-grid';
 
   el.innerHTML = `
-    <div class="dir-hero">
+    <section class="dev-dir">
       <div class="container">
-        <h1 class="dir-hero-title">${isFeaturedFilter ? 'Featured ' : ''}Property Developers</h1>
-        <p class="dir-hero-desc">Active developers building villas, apartments, and land projects across Lombok.</p>
-      </div>
-    </div>
-    <div class="section">
-      <div class="container">
-        <div class="filters-bar">
-          <button class="filters-toggle-btn" onclick="this.closest('.filters-bar').querySelector('.filters-body').classList.toggle('open')">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
-            Filters
-          </button>
-          <div class="filters-body${isFeaturedFilter ? ' open' : ''}">
-            <div class="filters-grid">
-              <div class="filter-group">
-                <label class="filter-label">Area</label>
-                <select id="fil-dev-area" class="filter-select" aria-label="Area">
-                  <option value="">All areas</option>
-                  ${areaOptions}
-                </select>
-              </div>
-              <div class="filter-group">
-                <label class="filter-label">Status</label>
-                <select id="fil-dev-featured" class="filter-select" aria-label="Status">
-                  <option value="">All developers</option>
-                  <option value="1" ${isFeaturedFilter ? 'selected' : ''}>Featured only</option>
-                </select>
-              </div>
-              <div class="filter-group">
-                <label class="filter-label">Search</label>
-                <input type="text" id="fil-dev-q" class="filter-select" placeholder="Search name..." value="${params.q || ''}" style="background-image:none;padding-right:var(--space-3);">
-              </div>
+        <header class="dev-dir-head">
+          <span class="dev-dir-eyebrow">Directory</span>
+          <h1 class="dev-dir-title">${isFeaturedFilter ? 'Featured ' : ''}Developers &amp; Projects</h1>
+          <p class="dev-dir-desc">A curated selection of developers shaping villas, residences and land across Lombok.</p>
+        </header>
+
+        <div class="dev-filterbar">
+          <div class="dev-filterbar-selects">
+            <div class="dev-field">
+              <span class="dev-field-label">Area</span>
+              <select id="fil-dev-area" class="dev-select" aria-label="Filter by area">
+                <option value="">All areas</option>
+                ${areaOptions}
+              </select>
+            </div>
+            <span class="dev-filterbar-sep" aria-hidden="true"></span>
+            <div class="dev-field">
+              <span class="dev-field-label">Status</span>
+              <select id="fil-dev-featured" class="dev-select" aria-label="Filter by status">
+                <option value="">All developers</option>
+                <option value="1" ${isFeaturedFilter ? 'selected' : ''}>Featured only</option>
+              </select>
             </div>
           </div>
+          <div class="dev-search${hasQuery ? ' is-open' : ''}" id="dev-search">
+            <button type="button" class="dev-search-trigger" id="dev-search-trigger" aria-expanded="${hasQuery ? 'true' : 'false'}">
+              ${iconSearch()}<span class="dev-search-label">Search by name…</span>
+            </button>
+            <input type="text" id="fil-dev-q" class="dev-search-input" placeholder="Search by name…" value="${escHtml(params.q || '')}" aria-label="Search developers by name">
+          </div>
         </div>
-        <p class="results-count"><strong>${devs.length}</strong> developer${devs.length !== 1 ? 's' : ''} listed</p>
-        <div class="card-grid">
-          ${devs.map((d, i) => renderDeveloperCard(d, i)).join('')}
+
+        <p class="dev-results-count">${devs.length} ${devs.length === 1 ? 'developer' : 'developers'}</p>
+
+        <div class="${gridClass}">
+          ${devs.map((d, i) => renderDeveloperCard(d, i)).join('') || '<p class="dev-empty">No developers match your search.</p>'}
         </div>
       </div>
-    </div>
+    </section>
   `;
 
   // Filter event listeners
@@ -1753,12 +1772,28 @@ async function renderDevelopers(el, params = {}) {
       else p.area = filArea.value;
     }
     if (filFeatured.value) p.featured = filFeatured.value;
-    if (filQ.value) p.q = filQ.value;
+    if (filQ.value.trim()) p.q = filQ.value.trim();
     navigate('developers', p);
   }
   filArea.addEventListener('change', applyDevFilters);
   filFeatured.addEventListener('change', applyDevFilters);
   let debounce; filQ.addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(applyDevFilters, 400); });
+  filQ.addEventListener('keydown', (e) => { if (e.key === 'Enter') { clearTimeout(debounce); applyDevFilters(); } });
+
+  // Expandable search: the trigger reveals the input, focus follows; collapse if left empty.
+  const search = el.querySelector('#dev-search');
+  const trigger = el.querySelector('#dev-search-trigger');
+  trigger.addEventListener('click', () => {
+    search.classList.add('is-open');
+    trigger.setAttribute('aria-expanded', 'true');
+    filQ.focus();
+  });
+  filQ.addEventListener('blur', () => {
+    if (!filQ.value.trim()) {
+      search.classList.remove('is-open');
+      trigger.setAttribute('aria-expanded', 'false');
+    }
+  });
 
   requestAnimationFrame(() => animateCards(el));
 }
