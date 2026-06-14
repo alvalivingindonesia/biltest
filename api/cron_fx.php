@@ -7,8 +7,9 @@
  * On any failure it exits WITHOUT touching the table, so the site keeps
  * serving the last known rates.
  *
- * Run via cPanel cron, once daily:
- *   /usr/local/bin/php /home/rovin629/public_html/api/cron_fx.php
+ * Run via cPanel cron, once daily (path = the deployed subdomain dir per
+ * .cpanel.yml; CLI runs need no token):
+ *   /usr/local/bin/php /home/rovin629/subdomains/biltest.roving-i.com.au/api/cron_fx.php
  *
  * Browser access is blocked unless the private config defines
  * CRON_FX_TOKEN and the request supplies ?token=<that value>.
