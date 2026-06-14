@@ -857,7 +857,17 @@ async function renderHome(el) {
         </div>
       </div>
       <div class="hero-scroll-hint" aria-hidden="true">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+        <svg class="hero-scroll-arrow" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="url(#heroScrollGold)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <defs>
+            <linearGradient id="heroScrollGold" x1="12" y1="4" x2="12" y2="20" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#FCE8B0"/>
+              <stop offset="0.45" stop-color="#D9A93B"/>
+              <stop offset="0.55" stop-color="#B8860B"/>
+              <stop offset="1" stop-color="#F6D87A"/>
+            </linearGradient>
+          </defs>
+          <path d="M12 5v14M5 12l7 7 7-7"/>
+        </svg>
       </div>
     </section>
 
