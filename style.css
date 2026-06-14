@@ -9383,11 +9383,22 @@ body.cmd-palette-open { overflow: hidden; }
    typography. Mirrors the homepage "Featured" aesthetic.
    ===================================================== */
 
-/* Page section — light canvas, clears the fixed nav, generous whitespace */
+/* Page section — light canvas, clears the fixed nav, generous whitespace.
+   Editorial colour scale (exact spec values, kept theme-aware via vars). */
 .dev-dir {
+  --dev-label: #8A8A8A;   /* category / location label */
+  --dev-title: #111111;   /* project title */
+  --dev-body:  #4A4A4A;   /* body description (soft premium charcoal) */
+  --dev-cta:   #111111;   /* primary CTA */
   background: var(--color-bg);
   padding-top: calc(var(--nav-height) + clamp(40px, 6vw, 72px));
   padding-bottom: clamp(64px, 10vw, 128px);
+}
+[data-theme="dark"] .dev-dir {
+  --dev-label: var(--color-text-faint);
+  --dev-title: var(--color-text);
+  --dev-body:  var(--color-text-muted);
+  --dev-cta:   var(--color-text);
 }
 
 /* Hide the global WhatsApp FAB on the developers directory only
@@ -9549,15 +9560,17 @@ body[data-page="developers"] .wa-fab { display: none !important; }
 }
 
 /* ── Editorial card (shared base — vertical stack) ────────────────────
-   No border, no background block, no shadow. Image dominant. */
+   No border, no background block, no shadow. Image dominant.
+   Spacing is asymmetric (engineered step-down), so no uniform gap —
+   each text element declares its own top margin from the previous one. */
 .dev-card {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
 }
 .dev-card-media {
   display: block;
   overflow: hidden;                 /* clips the hover scale */
+  margin-bottom: 16px;              /* image → category label */
   border-radius: var(--radius-lg);
   aspect-ratio: 16 / 10;            /* sweeping landscape crop */
   background: var(--color-surface-offset);
@@ -9591,59 +9604,61 @@ body[data-page="developers"] .wa-fab { display: none !important; }
 .dev-card-body {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
 }
+
+/* Category / location label — 10px, uppercase, wide tracking, soft grey */
 .dev-card-loc {
   font-family: var(--font-body);
-  font-size: var(--text-xs);
+  font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.15em;
+  line-height: 1.2;
   text-transform: uppercase;
-  color: var(--color-text-faint);
+  color: var(--dev-label);
 }
+
+/* Project title — 22px editorial serif. Category → title = 6px (tightly bound) */
 .dev-card-title {
   font-family: var(--font-display);
-  font-size: clamp(1.25rem, 1rem + 0.7vw, 1.65rem);
-  font-weight: 500;
-  letter-spacing: 0.005em;
-  line-height: 1.18;
-  margin: 0;
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: 0;
+  margin: 6px 0 0;
 }
 .dev-card-title a {
-  color: var(--color-text);
+  color: var(--dev-title);
   text-decoration: none;
   transition: color 0.25s ease;
 }
 .dev-card-title a:hover { color: var(--color-primary); }
+
+/* Body description — 14px light, premium charcoal. Title → body = 12px.
+   Strict two-line constraint with a clean clip — NO ellipsis. (em-based
+   so the clamp holds at any font size, e.g. the larger Option B rows.) */
 .dev-card-desc {
   font-family: var(--font-body);
-  font-size: var(--text-sm);
-  line-height: 1.55;
-  color: var(--color-text-muted);
-  margin: 0;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 1.5;
+  color: var(--dev-body);
+  margin: 12px 0 0;
+  max-height: 3em;          /* 2 lines × 1.5 line-height */
   overflow: hidden;
 }
 
-/* Footer: text link + ultra-fine action icons (no green badge) */
-.dev-card-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  margin-top: var(--space-1);
-}
+/* Primary CTA — a distinct interactive anchor, stepped 24px below the body */
 .dev-card-link {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 8px;
+  align-self: flex-start;
+  margin-top: 24px;
   font-family: var(--font-body);
-  font-size: var(--text-sm);
+  font-size: 13px;
   font-weight: 500;
   letter-spacing: 0.02em;
-  color: var(--color-text);
+  color: var(--dev-cta);
   text-decoration: none;
 }
 .dev-card-link svg {
@@ -9651,19 +9666,6 @@ body[data-page="developers"] .wa-fab { display: none !important; }
   flex-shrink: 0;
 }
 .dev-card-link:hover svg { transform: translateX(5px); }
-.dev-card-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-.dev-card-actions .fav-btn { padding: var(--space-1); }
-.dev-card-wa {
-  display: inline-flex;
-  align-items: center;
-  color: var(--color-text-muted);
-  transition: color 0.25s ease, transform 0.18s ease;
-}
-.dev-card-wa:hover { color: var(--color-secondary-active); transform: scale(1.1); }
 
 /* Admin edit wrapper inside the grid still behaves as a grid item */
 .dev-portfolio-grid > .admin-card-wrap { position: relative; }
@@ -9674,7 +9676,9 @@ body[data-page="developers"] .wa-fab { display: none !important; }
 .dev-portfolio-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: clamp(var(--space-8), 5vw, var(--space-16)) clamp(var(--space-6), 3vw, var(--space-10));
+  /* Row gap = component isolation margin: 72–96px of pure whitespace
+     between one card's CTA and the next card's image. */
+  gap: clamp(72px, 9vw, 96px) clamp(var(--space-6), 3vw, var(--space-10));
   align-items: start;
 }
 @media (min-width: 640px) {
@@ -9724,8 +9728,7 @@ body[data-page="developers"] .wa-fab { display: none !important; }
     font-weight: 400;
   }
   .dev-portfolio-grid--alternating .dev-card-desc {
-    -webkit-line-clamp: 3;
-    font-size: var(--text-base);
+    font-size: var(--text-base);   /* max-height:3em keeps the 2-line clip */
   }
 }
 

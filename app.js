@@ -1666,15 +1666,16 @@ function renderDeveloperCard(dev, index = 0) {
     ? formatProjectType(dev.project_types[0]) : '';
   const eyebrow = [loc, type].filter(Boolean).join('  ·  ').toUpperCase();
 
-  const desc = dev.short_description_en ? escHtml(dev.short_description_en) : '';
+  // Strip any backend-generated trailing ellipsis ("…" or "...") — the card
+  // enforces its own clean two-line constraint in CSS, no truncation marks.
+  const rawDesc = (dev.short_description_en || '').replace(/\s*(\.{2,}|…)\s*$/, '').trim();
+  const desc = rawDesc ? escHtml(rawDesc) : '';
   const mediaInner = heroImg
     ? `<img src="${heroImg}" alt="${name}" class="dev-card-img" loading="lazy" decoding="async" onerror="this.parentElement.classList.add('dev-card-media--empty');this.remove();">`
     : `<span class="dev-card-media-mark">${(dev.name || 'D').charAt(0).toUpperCase()}</span>`;
 
-  const waLink = dev.whatsapp_number
-    ? `<a href="https://wa.me/${dev.whatsapp_number}" target="_blank" rel="noopener noreferrer" class="dev-card-wa" aria-label="WhatsApp ${name}" onclick="event.stopPropagation();">${iconWhatsAppLine()}</a>`
-    : '';
-
+  // Secondary utilities (favourite, WhatsApp) live on the detail page only —
+  // the directory feed stays quiet: image, hierarchy, single anchored CTA.
   const _devCard = `
     <article class="dev-card card-animate" style="animation-delay:${index * 60}ms">
       <a class="dev-card-media${heroImg ? '' : ' dev-card-media--empty'}" href="#developer/${dev.slug}" onclick="navigate('developer/${dev.slug}');return false;" aria-label="${name}" tabindex="-1">
@@ -1684,10 +1685,7 @@ function renderDeveloperCard(dev, index = 0) {
         ${eyebrow ? `<span class="dev-card-loc">${eyebrow}</span>` : ''}
         <h3 class="dev-card-title"><a href="#developer/${dev.slug}" onclick="navigate('developer/${dev.slug}');return false;">${name}</a></h3>
         ${desc ? `<p class="dev-card-desc">${desc}</p>` : ''}
-        <div class="dev-card-foot">
-          <a class="dev-card-link" href="#developer/${dev.slug}" onclick="navigate('developer/${dev.slug}');return false;">View developer ${iconArrowRight()}</a>
-          <span class="dev-card-actions">${renderFavBtn('developer', dev.id)}${waLink}</span>
-        </div>
+        <a class="dev-card-link" href="#developer/${dev.slug}" onclick="navigate('developer/${dev.slug}');return false;">View developer ${iconArrowRight()}</a>
       </div>
     </article>
   `;
