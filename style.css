@@ -9390,6 +9390,10 @@ body.cmd-palette-open { overflow: hidden; }
   padding-bottom: clamp(64px, 10vw, 128px);
 }
 
+/* Hide the global WhatsApp FAB on the developers directory only
+   (data-page is set per route in app.js) */
+body[data-page="developers"] .wa-fab { display: none !important; }
+
 /* ── Editorial header ─────────────────────────────────────────────── */
 .dev-dir-head {
   max-width: 60ch;

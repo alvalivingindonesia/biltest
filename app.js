@@ -757,6 +757,10 @@ async function router() {
   // Prevents the pinned ScrollTrigger from leaking onto replaced DOM.
   if (typeof HeroReveal !== 'undefined') HeroReveal.destroy();
 
+  // Expose the current route on <body> for per-page CSS hooks (e.g. hide the
+  // WhatsApp FAB on the developers directory). Reset on every navigation.
+  document.body.setAttribute('data-page', page);
+
   switch (page) {
     case 'home': await renderHome(view); break;
     case 'directory': await renderDirectory(view, params); break;
@@ -1704,9 +1708,7 @@ async function renderDevelopers(el, params = {}) {
     devs = res.data;
   } catch(e) { console.error('Failed to load developers:', e); }
 
-  const areaOptions = buildAreaOptions(params.area || '');
   const isFeaturedFilter = params.featured === '1';
-  const hasQuery = !!(params.q && params.q.trim());
 
   // ── Layout option ──────────────────────────────────────────────────────────
   // 'portfolio'   = Option A: asymmetric magazine grid (variable widths + stagger)
@@ -1721,79 +1723,16 @@ async function renderDevelopers(el, params = {}) {
     <section class="dev-dir">
       <div class="container">
         <header class="dev-dir-head">
-          <span class="dev-dir-eyebrow">Directory</span>
           <h1 class="dev-dir-title">${isFeaturedFilter ? 'Featured ' : ''}Developers &amp; Projects</h1>
           <p class="dev-dir-desc">A curated selection of developers shaping villas, residences and land across Lombok.</p>
         </header>
 
-        <div class="dev-filterbar">
-          <div class="dev-filterbar-selects">
-            <div class="dev-field">
-              <span class="dev-field-label">Area</span>
-              <select id="fil-dev-area" class="dev-select" aria-label="Filter by area">
-                <option value="">All areas</option>
-                ${areaOptions}
-              </select>
-            </div>
-            <span class="dev-filterbar-sep" aria-hidden="true"></span>
-            <div class="dev-field">
-              <span class="dev-field-label">Status</span>
-              <select id="fil-dev-featured" class="dev-select" aria-label="Filter by status">
-                <option value="">All developers</option>
-                <option value="1" ${isFeaturedFilter ? 'selected' : ''}>Featured only</option>
-              </select>
-            </div>
-          </div>
-          <div class="dev-search${hasQuery ? ' is-open' : ''}" id="dev-search">
-            <button type="button" class="dev-search-trigger" id="dev-search-trigger" aria-expanded="${hasQuery ? 'true' : 'false'}">
-              ${iconSearch()}<span class="dev-search-label">Search by name…</span>
-            </button>
-            <input type="text" id="fil-dev-q" class="dev-search-input" placeholder="Search by name…" value="${escHtml(params.q || '')}" aria-label="Search developers by name">
-          </div>
-        </div>
-
-        <p class="dev-results-count">${devs.length} ${devs.length === 1 ? 'developer' : 'developers'}</p>
-
         <div class="${gridClass}">
-          ${devs.map((d, i) => renderDeveloperCard(d, i)).join('') || '<p class="dev-empty">No developers match your search.</p>'}
+          ${devs.map((d, i) => renderDeveloperCard(d, i)).join('') || '<p class="dev-empty">No developers to show yet.</p>'}
         </div>
       </div>
     </section>
   `;
-
-  // Filter event listeners
-  const filArea = el.querySelector('#fil-dev-area');
-  const filFeatured = el.querySelector('#fil-dev-featured');
-  const filQ = el.querySelector('#fil-dev-q');
-  function applyDevFilters() {
-    const p = {};
-    if (filArea.value) {
-      if (filArea.value.startsWith('region:')) p.region = filArea.value.replace('region:', '');
-      else p.area = filArea.value;
-    }
-    if (filFeatured.value) p.featured = filFeatured.value;
-    if (filQ.value.trim()) p.q = filQ.value.trim();
-    navigate('developers', p);
-  }
-  filArea.addEventListener('change', applyDevFilters);
-  filFeatured.addEventListener('change', applyDevFilters);
-  let debounce; filQ.addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(applyDevFilters, 400); });
-  filQ.addEventListener('keydown', (e) => { if (e.key === 'Enter') { clearTimeout(debounce); applyDevFilters(); } });
-
-  // Expandable search: the trigger reveals the input, focus follows; collapse if left empty.
-  const search = el.querySelector('#dev-search');
-  const trigger = el.querySelector('#dev-search-trigger');
-  trigger.addEventListener('click', () => {
-    search.classList.add('is-open');
-    trigger.setAttribute('aria-expanded', 'true');
-    filQ.focus();
-  });
-  filQ.addEventListener('blur', () => {
-    if (!filQ.value.trim()) {
-      search.classList.remove('is-open');
-      trigger.setAttribute('aria-expanded', 'false');
-    }
-  });
 
   requestAnimationFrame(() => animateCards(el));
 }
