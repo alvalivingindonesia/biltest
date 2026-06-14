@@ -770,6 +770,8 @@ async function router() {
     case 'create-listing': await renderCreateListing(view); break;
     case 'agent-signup': await renderAgentSignup(view); break;
     case 'about': renderAbout(view); break;
+    case 'tax-land': renderLandTaxCalculator(view); break;
+    case 'tax-house': renderHouseTaxCalculator(view); break;
     case 'rab-calculator': await renderRABCalculator(view); break;
     case 'rab-estimates': await renderRABEstimates(view); break;
     case 'rab-result': await renderRABResult(view, params); break;
@@ -931,6 +933,34 @@ async function renderHome(el) {
             <h3 class="rab-tool-card-title">${t('home.rab_gen_title', 'Detailed RAB Generator')}</h3>
             <p class="rab-tool-card-desc">${t('home.rab_gen_desc', 'Generate a full Rencana Anggaran Biaya breakdown for your project.')}</p>
             <span class="rab-tool-btn rab-tool-btn--filled">${t('home.rab_gen_cta', 'Unlock Feature')}</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- PROPERTY SALE TAX TOOLS — two-card standalone section -->
+    <section class="rab-tools-section rab-tools-section--alt">
+      <div class="container">
+        <div class="rab-tools-header">
+          <h2 class="rab-tools-heading">${t('home.tax_tools', 'Property Sale Tax Calculator')}</h2>
+          <p class="rab-tools-subline">${t('home.tax_tools_desc', 'See the taxes a Lombok sale involves — for both buyer and seller')}</p>
+        </div>
+        <div class="rab-tools-grid">
+          <a href="#tax-land" class="rab-tool-card" onclick="navigate('tax-land');return false;">
+            <div class="rab-tool-card-icon" aria-hidden="true">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></svg>
+            </div>
+            <h3 class="rab-tool-card-title">${t('home.tax_land_title', 'Land Sale Tax')}</h3>
+            <p class="rab-tool-card-desc">${t('home.tax_land_desc', 'Calculate buyer & seller taxes on a land-only sale.')}</p>
+            <span class="rab-tool-btn rab-tool-btn--outline">${t('home.tax_land_cta', 'Calculate Tax')}</span>
+          </a>
+          <a href="#tax-house" class="rab-tool-card" onclick="navigate('tax-house');return false;">
+            <div class="rab-tool-card-icon" aria-hidden="true">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </div>
+            <h3 class="rab-tool-card-title">${t('home.tax_house_title', 'House & Land Sale Tax')}</h3>
+            <p class="rab-tool-card-desc">${t('home.tax_house_desc', 'Include VAT & luxury tax for a house and land sale.')}</p>
+            <span class="rab-tool-btn rab-tool-btn--outline">${t('home.tax_house_cta', 'Calculate Tax')}</span>
           </a>
         </div>
       </div>
@@ -5988,6 +6018,421 @@ function saveRABEstimate(runId) {
     showToast(e.message || 'Unable to save estimate.', 'error');
     if (btn) { btn.disabled = false; btn.innerHTML = 'Save Estimate'; }
   });
+}
+
+
+// =====================================================
+// RENDER: PROPERTY SALE TAX CALCULATOR (Land & House)
+// Pure client-side, no API, no auth — a free acquisition tool.
+// Shows the taxes & fees a Lombok property sale involves for BOTH
+// the buyer and the seller. Two modes share one engine: 'land' / 'house'.
+// =====================================================
+
+var TAX_RATES = {
+  pph_pct: 2.5,             // Seller — PPh Final (income tax on the transfer)
+  bphtb_pct: 5.0,           // Buyer  — BPHTB (land & building acquisition duty)
+  ppn_pct: 11.0,            // Buyer  — PPN (VAT) on a NEW build from a developer
+  ppnbm_pct: 20.0,          // Buyer  — PPnBM (luxury goods sales tax)
+  notary_pct: 1.0,          // Notary / PPAT (deed) fee — negotiable
+  npoptkp_default: 60000000 // BPHTB non-taxable allowance (NPOPTKP) — set regionally
+};
+
+function renderLandTaxCalculator(el)  { renderTaxCalculator(el, 'land'); }
+function renderHouseTaxCalculator(el) { renderTaxCalculator(el, 'house'); }
+
+function renderTaxCalculator(el, mode) {
+  var isHouse = mode === 'house';
+  el.innerHTML = ''
+    + '<div class="dir-hero">'
+    + '  <div class="container">'
+    + '    <h1 class="dir-hero-title">Property Sale Tax Calculator</h1>'
+    + '    <p class="dir-hero-desc">Estimate the taxes and fees a Lombok property sale involves — for both the buyer and the seller.</p>'
+    + '    <div class="rab-hero-tabs">'
+    + '      <a href="#tax-land" class="rab-tab' + (isHouse ? '' : ' active') + '"' + (isHouse ? ' onclick="navigate(\'tax-land\');return false;"' : '') + '>Land Only</a>'
+    + '      <a href="#tax-house" class="rab-tab' + (isHouse ? ' active' : '') + '"' + (isHouse ? '' : ' onclick="navigate(\'tax-house\');return false;"') + '>Land &amp; House</a>'
+    + '    </div>'
+    + '  </div>'
+    + '</div>'
+    + '<div class="section">'
+    + '  <div class="container">'
+    + '    <div class="rab-calc-layout">'
+    +        buildTaxWizardShell(mode)
+    +        buildTaxSidebar(mode)
+    + '    </div>'
+    + '  </div>'
+    + '</div>';
+
+  initTaxWizard(el, mode);
+}
+
+function buildTaxWizardShell(mode) {
+  var isHouse = mode === 'house';
+  var npoptkp = TAX_RATES.npoptkp_default;
+  var labels = isHouse
+    ? ['Property value', 'VAT &amp; luxury', 'Base &amp; costs']
+    : ['Sale price', 'Tax base', 'Other costs'];
+
+  // ── STEP 1 — value ──
+  var step1 = isHouse
+    ? ''
+      + '    <div class="wizard-pane is-active" data-pane="1">'
+      + '      <h4>Property value</h4>'
+      + '      <p class="wizard-hint">Enter the land and building values that together make up the sale price.</p>'
+      + '      <div class="rab-fields-grid">'
+      + '        <div class="rab-field"><label class="rab-label">Land value (Rp)</label><input type="number" name="land_value" class="rab-input" min="0" step="1000000" placeholder="e.g. 800000000"></div>'
+      + '        <div class="rab-field"><label class="rab-label">Building value (Rp)</label><input type="number" name="building_value" class="rab-input" min="0" step="1000000" placeholder="e.g. 1200000000"></div>'
+      + '      </div>'
+      + '      <p class="tax-computed-price">Total sale price: <strong id="tax-price-preview">' + fmtIDR(0) + '</strong></p>'
+      + '    </div>'
+    : ''
+      + '    <div class="wizard-pane is-active" data-pane="1">'
+      + '      <h4>Sale price</h4>'
+      + '      <p class="wizard-hint">Enter the agreed sale price, or work it out from the land size.</p>'
+      + '      <div class="rab-field">'
+      + '        <label class="rab-label">How do you want to enter the price?</label>'
+      + '        <div class="rab-radio-row">'
+      + '          <label class="rab-check-label"><input type="radio" name="price_method" value="total" checked><span>Total price</span></label>'
+      + '          <label class="rab-check-label"><input type="radio" name="price_method" value="size"><span>By land size</span></label>'
+      + '        </div>'
+      + '      </div>'
+      + '      <div class="rab-field" id="tax-total-wrap"><label class="rab-label">Agreed sale price (Rp)</label><input type="number" name="sale_price" class="rab-input" min="0" step="1000000" placeholder="e.g. 1000000000"></div>'
+      + '      <div id="tax-size-wrap" style="display:none">'
+      + '        <div class="rab-fields-grid">'
+      + '          <div class="rab-field"><label class="rab-label">Land size (are)</label><input type="number" name="land_are" class="rab-input" min="0" step="0.5" placeholder="e.g. 10"></div>'
+      + '          <div class="rab-field"><label class="rab-label">Price per are (Rp)</label><input type="number" name="price_per_are" class="rab-input" min="0" step="1000000" placeholder="e.g. 100000000"></div>'
+      + '        </div>'
+      + '        <p class="tax-field-note">1 are = 100 m² — a common way to price land in Lombok.</p>'
+      + '      </div>'
+      + '      <p class="tax-computed-price">Sale price used: <strong id="tax-price-preview">' + fmtIDR(0) + '</strong></p>'
+      + '    </div>';
+
+  // ── STEP 2 ──
+  var step2 = isHouse
+    ? ''
+      + '    <div class="wizard-pane" data-pane="2">'
+      + '      <h4>VAT &amp; luxury tax</h4>'
+      + '      <p class="wizard-hint">These apply when you buy a new build from a developer. Skip them for a normal (secondary) sale between individuals.</p>'
+      + '      <label class="rab-check-label"><input type="checkbox" name="is_developer" id="tax-ck-dev"><span>New build bought from a developer (VAT / PPN applies)</span></label>'
+      + '      <div id="tax-ppn-wrap" style="display:none;margin-left:28px;margin-bottom:var(--space-4)">'
+      + '        <div class="rab-field"><label class="rab-label">VAT rate — PPN (%)</label><input type="number" name="ppn_pct" class="rab-input" min="0" step="0.5" value="11"></div>'
+      + '      </div>'
+      + '      <label class="rab-check-label"><input type="checkbox" name="is_luxury" id="tax-ck-lux"><span>Luxury property (PPnBM applies)</span></label>'
+      + '      <div id="tax-ppnbm-wrap" style="display:none;margin-left:28px">'
+      + '        <div class="rab-field"><label class="rab-label">Luxury tax rate — PPnBM (%)</label><input type="number" name="ppnbm_pct" class="rab-input" min="0" step="1" value="20"></div>'
+      + '      </div>'
+      + '    </div>'
+    : ''
+      + '    <div class="wizard-pane" data-pane="2">'
+      + '      <h4>Tax base</h4>'
+      + '      <p class="wizard-hint">Transfer taxes are charged on the higher of your sale price and the government-assessed value (NJOP).</p>'
+      + '      <div class="rab-field"><label class="rab-label">Government value — NJOP (Rp) <span class="tax-opt">optional</span></label><input type="number" name="njop" class="rab-input" min="0" step="1000000" placeholder="Leave blank to use the sale price"></div>'
+      + '      <div class="rab-field"><label class="rab-label">BPHTB allowance — NPOPTKP (Rp)</label><input type="number" name="npoptkp" class="rab-input" min="0" step="1000000" value="' + npoptkp + '"><p class="tax-field-note">Deducted before the buyer’s 5% duty. Set by each region — commonly Rp 60–90 million.</p></div>'
+      + '    </div>';
+
+  // ── STEP 3 ──
+  var njopBlock = ''
+      + '      <div class="rab-field"><label class="rab-label">Government value — NJOP (Rp) <span class="tax-opt">optional</span></label><input type="number" name="njop" class="rab-input" min="0" step="1000000" placeholder="Leave blank to use the sale price"></div>'
+      + '      <div class="rab-field"><label class="rab-label">BPHTB allowance — NPOPTKP (Rp)</label><input type="number" name="npoptkp" class="rab-input" min="0" step="1000000" value="' + npoptkp + '"><p class="tax-field-note">Deducted before the buyer’s 5% duty. Set by each region — commonly Rp 60–90 million.</p></div>';
+  var notaryBlock = ''
+      + '      <label class="rab-check-label"><input type="checkbox" name="inc_notary" id="tax-ck-notary" checked><span>Include notary / PPAT (deed) fee</span></label>'
+      + '      <div id="tax-notary-wrap" style="margin-left:28px">'
+      + '        <div class="rab-fields-grid">'
+      + '          <div class="rab-field"><label class="rab-label">Notary fee (% of price)</label><input type="number" name="notary_pct" class="rab-input" min="0" step="0.1" value="1"></div>'
+      + '          <div class="rab-field"><label class="rab-label">Who pays the notary?</label><select name="notary_payer" class="rab-select"><option value="buyer" selected>Buyer</option><option value="split">Split 50 : 50</option><option value="seller">Seller</option></select></div>'
+      + '        </div>'
+      + '        <p class="tax-field-note">Notary / PPAT fees are negotiable and often split. By convention the buyer pays.</p>'
+      + '      </div>';
+  var step3 = isHouse
+    ? ''
+      + '    <div class="wizard-pane" data-pane="3">'
+      + '      <h4>Tax base &amp; other costs</h4>'
+      + '      <p class="wizard-hint">Set the government value, allowance, and any deed fees.</p>'
+      +        njopBlock
+      +        notaryBlock
+      + '    </div>'
+    : ''
+      + '    <div class="wizard-pane" data-pane="3">'
+      + '      <h4>Other costs</h4>'
+      + '      <p class="wizard-hint">Add the deed fee, and choose who covers it.</p>'
+      +        notaryBlock
+      + '    </div>';
+
+  return ''
+    + '<div class="rab-calc-main">'
+    + '<form id="tax-calc-form" class="wizard" autocomplete="off">'
+    + '  <div class="wizard-stepper" role="tablist">'
+    + '    <button type="button" class="wizard-step-tab is-active" data-step="1" role="tab"><span class="wizard-step-num">1</span><span class="wizard-step-label"><small>Step 1</small>' + labels[0] + '</span></button>'
+    + '    <button type="button" class="wizard-step-tab is-disabled" data-step="2" role="tab"><span class="wizard-step-num">2</span><span class="wizard-step-label"><small>Step 2</small>' + labels[1] + '</span></button>'
+    + '    <button type="button" class="wizard-step-tab is-disabled" data-step="3" role="tab"><span class="wizard-step-num">3</span><span class="wizard-step-label"><small>Step 3</small>' + labels[2] + '</span></button>'
+    + '  </div>'
+    + '  <div class="wizard-body">'
+    +      step1
+    +      step2
+    +      step3
+    + '  </div>'
+    + '  <div class="wizard-footer">'
+    + '    <div class="wizard-total">'
+    + '      <span class="wizard-total-label">Total tax &amp; fees (buyer + seller)</span>'
+    + '      <span class="wizard-total-value" id="tax-live-total">' + fmtIDR(0) + '</span>'
+    + '    </div>'
+    + '    <div class="wizard-nav">'
+    + '      <button type="button" class="btn btn--ghost btn--sm" id="tax-wiz-back" disabled>Back</button>'
+    + '      <button type="button" class="btn btn--primary" id="tax-wiz-next">Next</button>'
+    + '      <button type="submit" class="btn btn--primary btn--lg" id="tax-calc-submit" style="display:none;">'
+    + '        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h8M8 14h4"/></svg>'
+    + '        Calculate Taxes'
+    + '      </button>'
+    + '    </div>'
+    + '  </div>'
+    + '</form>'
+    + '<div id="tax-result-area" style="display:none;margin-top:var(--space-6);"></div>'
+    + '</div>';
+}
+
+function buildTaxSidebar(mode) {
+  var isHouse = mode === 'house';
+  return ''
+    + '<div class="rab-calc-sidebar">'
+    + '<div class="rab-card rab-info-card">'
+    + '  <h4 style="font-family:var(--font-display);font-size:var(--text-base);margin-bottom:var(--space-2);color:var(--color-heading)">How it works</h4>'
+    + '  <ol class="rab-howto">'
+    + '    <li>' + (isHouse ? 'Enter the land &amp; building value' : 'Enter the agreed sale price') + '</li>'
+    + '    <li>' + (isHouse ? 'Flag VAT &amp; luxury tax for new developer builds' : 'Add the NJOP &amp; allowance if you have them') + '</li>'
+    + '    <li>Choose which costs to include</li>'
+    + '    <li>See the full buyer &amp; seller breakdown</li>'
+    + '  </ol>'
+    + '  <p class="rab-disclaimer">Estimates only, for general guidance — always confirm with a notary (PPAT) and a tax advisor before transacting.</p>'
+    + '</div>'
+    + '<div class="rab-card rab-info-card">'
+    + '  <h4 style="font-family:var(--font-display);font-size:var(--text-base);margin-bottom:var(--space-2);color:var(--color-heading)">Good to know</h4>'
+    + '  <ul class="tax-notes">'
+    + '    <li>The <strong>seller</strong> pays income tax (PPh Final, 2.5%); the <strong>buyer</strong> pays acquisition duty (BPHTB, 5%).</li>'
+    + (isHouse ? '    <li>VAT (PPN) and luxury tax (PPnBM) only apply to new builds sold by a developer, not private resales.</li>' : '')
+    + '    <li>Tax is charged on the <strong>higher</strong> of your price and the NJOP.</li>'
+    + '    <li>Rates are statutory as of 2025; the NPOPTKP allowance is set per region.</li>'
+    + '  </ul>'
+    + '</div>'
+    + '</div>';
+}
+
+function initTaxWizard(el, mode) {
+  var isHouse = mode === 'house';
+  var form = el.querySelector('#tax-calc-form');
+  if (!form) return;
+  var TOTAL_STEPS = 3;
+  var currentStep = 1;
+
+  var tabs    = form.querySelectorAll('.wizard-step-tab');
+  var panes   = form.querySelectorAll('.wizard-pane');
+  var backBtn = form.querySelector('#tax-wiz-back');
+  var nextBtn = form.querySelector('#tax-wiz-next');
+  var submit  = form.querySelector('#tax-calc-submit');
+  var totalEl = form.querySelector('#tax-live-total');
+
+  function setStep(n) {
+    currentStep = Math.max(1, Math.min(TOTAL_STEPS, n));
+    tabs.forEach(function(t) {
+      var step = parseInt(t.dataset.step);
+      t.classList.remove('is-active', 'is-disabled', 'is-complete');
+      if (step === currentStep) t.classList.add('is-active');
+      else if (step < currentStep) t.classList.add('is-complete');
+      else t.classList.add('is-disabled');
+    });
+    panes.forEach(function(p) {
+      p.classList.toggle('is-active', parseInt(p.dataset.pane) === currentStep);
+    });
+    backBtn.disabled = (currentStep === 1);
+    if (currentStep === TOTAL_STEPS) {
+      nextBtn.style.display = 'none';
+      submit.style.display = '';
+    } else {
+      nextBtn.style.display = '';
+      submit.style.display = 'none';
+    }
+  }
+
+  tabs.forEach(function(t) {
+    t.addEventListener('click', function() {
+      var step = parseInt(t.dataset.step);
+      if (step <= currentStep || t.classList.contains('is-complete')) setStep(step);
+    });
+  });
+  nextBtn.addEventListener('click', function() { setStep(currentStep + 1); });
+  backBtn.addEventListener('click', function() { setStep(currentStep - 1); });
+
+  // Land: price-entry method toggle
+  if (!isHouse) {
+    form.querySelectorAll('input[name=price_method]').forEach(function(r) {
+      r.addEventListener('change', function() {
+        var size = (form.querySelector('input[name=price_method]:checked') || {}).value === 'size';
+        var sizeWrap = form.querySelector('#tax-size-wrap');
+        var totalWrap = form.querySelector('#tax-total-wrap');
+        if (sizeWrap)  sizeWrap.style.display  = size ? '' : 'none';
+        if (totalWrap) totalWrap.style.display = size ? 'none' : '';
+        recompute();
+      });
+    });
+  }
+
+  // House: developer (PPN) and luxury (PPnBM) toggles
+  if (isHouse) {
+    var ckDev = form.querySelector('#tax-ck-dev');
+    if (ckDev) ckDev.addEventListener('change', function() {
+      form.querySelector('#tax-ppn-wrap').style.display = this.checked ? '' : 'none';
+      recompute();
+    });
+    var ckLux = form.querySelector('#tax-ck-lux');
+    if (ckLux) ckLux.addEventListener('change', function() {
+      form.querySelector('#tax-ppnbm-wrap').style.display = this.checked ? '' : 'none';
+      recompute();
+    });
+  }
+
+  // Notary fee toggle
+  var ckNotary = form.querySelector('#tax-ck-notary');
+  if (ckNotary) ckNotary.addEventListener('change', function() {
+    form.querySelector('#tax-notary-wrap').style.display = this.checked ? '' : 'none';
+    recompute();
+  });
+
+  // Reactive recompute on any field change
+  form.querySelectorAll('input, select').forEach(function(inp) {
+    inp.addEventListener('input', recompute);
+    inp.addEventListener('change', recompute);
+  });
+
+  function recompute() {
+    var r = computeTax(mode, readTaxInputs(form, mode));
+    var pv = form.querySelector('#tax-price-preview');
+    if (pv) pv.textContent = fmtIDR(r.price);
+    var prev = totalEl.textContent;
+    var next = fmtIDR(r.combined);
+    totalEl.textContent = next;
+    if (prev !== next) {
+      totalEl.classList.remove('is-pulsing');
+      void totalEl.offsetWidth;
+      totalEl.classList.add('is-pulsing');
+    }
+  }
+
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    renderTaxResult(el, mode, computeTax(mode, readTaxInputs(form, mode)));
+  });
+
+  setStep(1);
+  recompute();
+}
+
+function readTaxInputs(form, mode) {
+  function n(name) {
+    var f = form.querySelector('[name=' + name + ']');
+    if (!f) return 0;
+    var v = parseFloat(f.value);
+    return isNaN(v) ? 0 : v;
+  }
+  function ck(id) { var f = form.querySelector('#' + id); return f ? f.checked : false; }
+
+  var inp = { mode: mode };
+  if (mode === 'house') {
+    inp.land_value = n('land_value');
+    inp.building_value = n('building_value');
+    inp.is_developer = ck('tax-ck-dev');
+    inp.ppn_pct = inp.is_developer ? n('ppn_pct') : 0;
+    inp.is_luxury = ck('tax-ck-lux');
+    inp.ppnbm_pct = inp.is_luxury ? n('ppnbm_pct') : 0;
+  } else {
+    inp.price_method = (form.querySelector('input[name=price_method]:checked') || { value: 'total' }).value;
+    inp.sale_price = n('sale_price');
+    inp.land_are = n('land_are');
+    inp.price_per_are = n('price_per_are');
+  }
+  inp.njop = n('njop');
+  inp.npoptkp = n('npoptkp');
+  inp.inc_notary = ck('tax-ck-notary');
+  inp.notary_pct = inp.inc_notary ? n('notary_pct') : 0;
+  inp.notary_payer = (form.querySelector('[name=notary_payer]') || { value: 'buyer' }).value;
+  return inp;
+}
+
+function computeTax(mode, inp) {
+  var R = TAX_RATES;
+  var price = (mode === 'house')
+    ? (inp.land_value + inp.building_value)
+    : (inp.price_method === 'size' ? inp.land_are * inp.price_per_are : inp.sale_price);
+
+  var base = Math.max(price, inp.njop || 0);
+
+  var pph = base * R.pph_pct / 100;                               // seller
+  var bphtbBase = Math.max(0, base - (inp.npoptkp || 0));
+  var bphtb = bphtbBase * R.bphtb_pct / 100;                      // buyer
+  var ppn   = (mode === 'house' && inp.is_developer) ? price * (inp.ppn_pct || 0) / 100 : 0;   // buyer
+  var ppnbm = (mode === 'house' && inp.is_luxury)    ? price * (inp.ppnbm_pct || 0) / 100 : 0; // buyer
+
+  var notary = inp.inc_notary ? price * (inp.notary_pct || 0) / 100 : 0;
+  var notaryBuyer  = inp.notary_payer === 'buyer'  ? notary : (inp.notary_payer === 'split' ? notary / 2 : 0);
+  var notarySeller = inp.notary_payer === 'seller' ? notary : (inp.notary_payer === 'split' ? notary / 2 : 0);
+
+  var sellerTotal = pph + notarySeller;
+  var buyerTotal  = bphtb + ppn + ppnbm + notaryBuyer;
+
+  return {
+    price: price, base: base, usedNjop: (inp.njop || 0) > price,
+    pph: pph, bphtb: bphtb, bphtbBase: bphtbBase, ppn: ppn, ppnbm: ppnbm,
+    notary: notary, notaryBuyer: notaryBuyer, notarySeller: notarySeller,
+    sellerTotal: sellerTotal, buyerTotal: buyerTotal,
+    combined: sellerTotal + buyerTotal,
+    netToSeller: price - sellerTotal, totalToBuyer: price + buyerTotal,
+    npoptkp: inp.npoptkp || 0, ppn_pct: inp.ppn_pct || 0, ppnbm_pct: inp.ppnbm_pct || 0
+  };
+}
+
+function renderTaxResult(el, mode, r) {
+  var area = el.querySelector('#tax-result-area');
+  if (!area) return;
+  area.style.display = 'block';
+  area.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  var R = TAX_RATES;
+  var subtitle = (mode === 'house' ? 'House &amp; land sale' : 'Land sale')
+    + ' • ' + fmtIDR(r.price)
+    + (r.usedNjop ? ' • taxed on NJOP ' + fmtIDR(r.base) : '');
+
+  var sellerRows = '<div class="rab-result-row"><span>Income Tax — PPh Final (' + R.pph_pct + '%)</span><span>' + fmtIDR(r.pph) + '</span></div>';
+  if (r.notarySeller > 0) sellerRows += '<div class="rab-result-row"><span>Notary / PPAT (share)</span><span>' + fmtIDR(r.notarySeller) + '</span></div>';
+  sellerRows += '<div class="rab-result-row rab-result-row--total"><span>Seller total</span><span>' + fmtIDR(r.sellerTotal) + '</span></div>';
+
+  var buyerRows = '<div class="rab-result-row"><span>Acquisition Duty — BPHTB (' + R.bphtb_pct + '% over ' + fmtIDR(r.npoptkp) + ')</span><span>' + fmtIDR(r.bphtb) + '</span></div>';
+  if (r.ppn > 0)   buyerRows += '<div class="rab-result-row"><span>VAT — PPN (' + r.ppn_pct + '%)</span><span>' + fmtIDR(r.ppn) + '</span></div>';
+  if (r.ppnbm > 0) buyerRows += '<div class="rab-result-row"><span>Luxury Tax — PPnBM (' + r.ppnbm_pct + '%)</span><span>' + fmtIDR(r.ppnbm) + '</span></div>';
+  if (r.notaryBuyer > 0) buyerRows += '<div class="rab-result-row"><span>Notary / PPAT</span><span>' + fmtIDR(r.notaryBuyer) + '</span></div>';
+  buyerRows += '<div class="rab-result-row rab-result-row--total"><span>Buyer total</span><span>' + fmtIDR(r.buyerTotal) + '</span></div>';
+
+  area.innerHTML = ''
+    + '<div class="rab-result-breakdown">'
+    + '  <div class="rab-result-header">'
+    + '    <h2 class="rab-result-title">Your Tax &amp; Cost Estimate</h2>'
+    + '    <p class="rab-result-subtitle">' + subtitle + '</p>'
+    + '  </div>'
+    + '  <div class="rab-result-grand">'
+    + '    <span class="rab-result-grand-label">Total taxes &amp; fees (buyer + seller)</span>'
+    + '    <span class="rab-result-grand-val">' + fmtIDR(r.combined) + '</span>'
+    + '  </div>'
+    + '  <div class="tax-parties">'
+    + '    <div class="tax-party"><h3 class="tax-group-title tax-group-title--seller">Seller pays</h3><div class="rab-result-rows">' + sellerRows + '</div></div>'
+    + '    <div class="tax-party"><h3 class="tax-group-title tax-group-title--buyer">Buyer pays</h3><div class="rab-result-rows">' + buyerRows + '</div></div>'
+    + '  </div>'
+    + '  <div class="tax-summary-grid">'
+    + '    <div class="tax-summary-card"><span class="tax-summary-label">Net amount seller receives</span><span class="tax-summary-val">' + fmtIDR(r.netToSeller) + '</span><span class="tax-summary-sub">Sale price − seller taxes</span></div>'
+    + '    <div class="tax-summary-card tax-summary-card--buyer"><span class="tax-summary-label">Total cost to buyer</span><span class="tax-summary-val">' + fmtIDR(r.totalToBuyer) + '</span><span class="tax-summary-sub">Sale price + buyer taxes &amp; fees</span></div>'
+    + '  </div>'
+    + '  <p class="rab-disclaimer">Estimate only, for general guidance. Uses statutory rates current in 2025: PPh Final 2.5% (seller) and BPHTB 5% (buyer), charged on the higher of the transaction price and the NJOP. The NPOPTKP allowance, notary / PPAT fees and the application of PPN / PPnBM vary by region, property and deal — always confirm with a notary (PPAT) and tax advisor before transacting.</p>'
+    + '  <div class="rab-result-actions">'
+    + '    <button class="btn btn--outline" onclick="navigate(\'' + (mode === 'house' ? 'tax-house' : 'tax-land') + '\');return false;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg> New calculation</button>'
+    + '    <button class="btn btn--ghost" onclick="window.print()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> Print</button>'
+    + '    <a class="btn btn--ghost" href="#directory?group=professional_services" onclick="navigate(\'directory?group=professional_services\');return false;">Find a notary or legal advisor</a>'
+    + '  </div>'
+    + '</div>';
 }
 
 
