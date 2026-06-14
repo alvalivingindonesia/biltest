@@ -120,10 +120,10 @@ git push origin main
 ```
 
 ## Deployment
-- Push to `main` branch on GitHub
-- Manual deploy: copy changed files to server via FTP/SSH (HostPapa shared hosting)
-- No CI/CD pipeline yet — changes go live on manual upload
-- Test at: https://biltest.roving-i.com.au
+- **Auto-deploy:** committing and pushing triggers a webhook that uploads the
+  changes to the test webserver automatically — no manual FTP/SSH step needed.
+  Just commit + push and the change goes live.
+- Test (live) at: https://biltest.roving-i.com.au — verify there after pushing.
 
 ## Admin Access
 - Admin panel: https://biltest.roving-i.com.au/admin/console.php
