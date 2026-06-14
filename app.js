@@ -5560,7 +5560,7 @@ async function renderRABCalculator(el) {
   el.innerHTML = ''
     + '<div class="dir-hero">'
     + '  <div class="container">'
-    + '    <h1 class="dir-hero-title">RAB Cost Tools</h1>'
+    + '    <h1 class="dir-hero-title">Build Cost Indicator</h1>'
     + '    <p class="dir-hero-desc">Estimate building costs for your Lombok villa or home — from a quick calculation to a full bill of quantities.</p>'
     + '    <div class="rab-hero-tabs">'
     + '      <a href="#rab-calculator" class="rab-tab active">Calculator</a>'
