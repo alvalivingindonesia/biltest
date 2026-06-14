@@ -9071,9 +9071,13 @@ body.cmd-palette-open { overflow: hidden; }
 .lmap--zoomed .lmap-rlabel { opacity: 0; }
 
 .lmap-amark { opacity: 0; pointer-events: none; cursor: pointer; transition: opacity 0.45s cubic-bezier(0.25, 1, 0.5, 1); }
-.lmap-amark.visible { opacity: 1; pointer-events: auto; pointer-events: bounding-box; }
+/* Only the dot and the text are clickable — no rectangular bounding-box hit
+   region (those overlap between neighbours and steal name clicks). Dots are
+   also resolved geometrically (nearestDot), so the enlarged hit circle is
+   disabled to stop it covering adjacent names. */
+.lmap-amark.visible { opacity: 1; pointer-events: auto; }
 .lmap-amark.visible.empty { opacity: 0.5; }
-.lmap-amark-hit { fill: transparent; stroke: none; r: calc(var(--lmap-u) * 15); }
+.lmap-amark-hit { fill: transparent; stroke: none; r: calc(var(--lmap-u) * 15); pointer-events: none; }
 .lmap-amark-dot {
   fill: var(--color-accent);
   stroke: var(--lmap-sea);
@@ -9132,9 +9136,9 @@ body.cmd-palette-open { overflow: hidden; }
 
 /* ---- Place dots — secondary to Area markers; labels on hover/active only ---- */
 .lmap-place { opacity: 0; pointer-events: none; cursor: pointer; transition: opacity 0.35s cubic-bezier(0.25, 1, 0.5, 1); }
-.lmap-place.visible { opacity: 1; pointer-events: auto; pointer-events: bounding-box; }
+.lmap-place.visible { opacity: 1; pointer-events: auto; }
 .lmap-place.empty { display: none; }
-.lmap-place-hit { fill: transparent; r: calc(var(--lmap-u) * 13); }
+.lmap-place-hit { fill: transparent; r: calc(var(--lmap-u) * 13); pointer-events: none; }
 .lmap-place-dot {
   fill: var(--lmap-sea);
   stroke: var(--color-accent);
