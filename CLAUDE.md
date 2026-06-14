@@ -120,10 +120,12 @@ git push origin main
 ```
 
 ## Deployment
-- **Auto-deploy:** committing and pushing triggers a webhook that uploads the
-  changes to the test webserver automatically — no manual FTP/SSH step needed.
-  Just commit + push and the change goes live.
-- Test (live) at: https://biltest.roving-i.com.au — verify there after pushing.
+- **Auto-deploy from `main` only:** the test webserver uses cPanel Git Version
+  Control (`.cpanel.yml`) which runs **only when you push to `main`** — it copies
+  the repo to the live subdomain. Pushing to a feature branch does NOT deploy.
+  So to make a change go live: merge/fast-forward it onto `main` and push `main`.
+- Test (live) at: https://biltest.roving-i.com.au — hard-refresh to bypass cached
+  CSS/JS, and verify there after pushing.
 
 ## Admin Access
 - Admin panel: https://biltest.roving-i.com.au/admin/console.php
