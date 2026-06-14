@@ -2340,6 +2340,25 @@ function createLombokMap(wrapEl, opts) {
     return best ? { el: best, type: type } : null;
   }
 
+  // Is the click on this text label? Diagonal labels have a huge axis-aligned
+  // bounding box, so test the click in the label's OWN (un-rotated) coordinate
+  // frame against its tight getBBox — this ignores the rotation and the empty
+  // corners of the slanted box. (Labels are pointer-events:none, so we hit-test
+  // them here rather than relying on e.target.)
+  function labelHit(textEl, e) {
+    if (!textEl) return false;
+    var ctm = textEl.getScreenCTM();
+    if (!ctm) return false;
+    var pt = svg.createSVGPoint();
+    pt.x = e.clientX; pt.y = e.clientY;
+    var loc = pt.matrixTransform(ctm.inverse());
+    var bb;
+    try { bb = textEl.getBBox(); } catch (err) { return false; }
+    var pad = 1.5;
+    return loc.x >= bb.x - pad && loc.x <= bb.x + bb.width + pad
+        && loc.y >= bb.y - pad && loc.y <= bb.y + bb.height + pad;
+  }
+
   svg.addEventListener('click', function(e) {
     var zone = e.target.closest('.lmap-czone');
     if (zone && zone.classList.contains('visible') && !zone.classList.contains('lmap-czone--empty')) {
@@ -2347,22 +2366,26 @@ function createLombokMap(wrapEl, opts) {
       return;
     }
     // Clicking an Area/Place *name* (the text label) is the "show me the
-    // listings here" action: it sets the location filter and scrolls to the
-    // results. Clicking the dot only sets the filter so the map stays put for
-    // further drilling. (Labels sit in the marker group, which uses
-    // pointer-events: bounding-box, so detect via e.target on the label.)
-    var nameG = e.target.closest('.lmap-amark-label') ? e.target.closest('.lmap-amark') : null;
-    if (nameG && nameG.classList.contains('visible')) {
-      var nak = nameG.getAttribute('data-area'), nark = nameG.getAttribute('data-region');
-      if (opts.onSelect) opts.onSelect({ region: nark, cluster: clusterOfArea(nark, nak), area: nak, place: '', scroll: true });
-      return;
+    // listings here" action: set the location filter and scroll to the results.
+    // Clicking the dot only sets the filter so the map stays put for further
+    // drilling. Detect names geometrically (labelHit) so slanted labels respond
+    // only on the text itself, not their big bounding rectangle.
+    var amarks = svg.querySelectorAll('.lmap-amark.visible');
+    for (var ai = 0; ai < amarks.length; ai++) {
+      if (labelHit(amarks[ai].querySelector('.lmap-amark-label'), e)) {
+        var nak = amarks[ai].getAttribute('data-area'), nark = amarks[ai].getAttribute('data-region');
+        if (opts.onSelect) opts.onSelect({ region: nark, cluster: clusterOfArea(nark, nak), area: nak, place: '', scroll: true });
+        return;
+      }
     }
-    var placeNameG = e.target.closest('.lmap-place-label') ? e.target.closest('.lmap-place') : null;
-    if (placeNameG && placeNameG.classList.contains('visible') && !placeNameG.classList.contains('empty')) {
-      var npk = placeNameG.getAttribute('data-place'), npa = placeNameG.getAttribute('data-area');
-      var nprk = (LOMBOK_MAP.areas[npa] || {}).r || selRegion;
-      if (opts.onSelect) opts.onSelect({ region: nprk, cluster: clusterOfArea(nprk, npa), area: npa, place: npk, scroll: true });
-      return;
+    var pmarks = svg.querySelectorAll('.lmap-place.visible:not(.empty)');
+    for (var pi = 0; pi < pmarks.length; pi++) {
+      if (labelHit(pmarks[pi].querySelector('.lmap-place-label'), e)) {
+        var npk = pmarks[pi].getAttribute('data-place'), npa = pmarks[pi].getAttribute('data-area');
+        var nprk = (LOMBOK_MAP.areas[npa] || {}).r || selRegion;
+        if (opts.onSelect) opts.onSelect({ region: nprk, cluster: clusterOfArea(nprk, npa), area: npa, place: npk, scroll: true });
+        return;
+      }
     }
     var dot = nearestDot(clickToSvg(e));
     if (dot && dot.type === 'area') {

@@ -9100,6 +9100,9 @@ body.cmd-palette-open { overflow: hidden; }
   stroke-width: calc(var(--lmap-u) * 3);
   stroke-linejoin: round;
   transition: fill 0.25s;
+  /* Slanted labels have a huge axis-aligned hit box that overlaps neighbours;
+     hit-test the name geometrically in JS (labelHit) instead. */
+  pointer-events: none;
 }
 .lmap-amark.active .lmap-amark-label,
 .lmap-amark:hover .lmap-amark-label { fill: var(--color-accent); }
@@ -9161,6 +9164,7 @@ body.cmd-palette-open { overflow: hidden; }
   stroke-width: calc(var(--lmap-u) * 3);
   stroke-linejoin: round;
   transition: fill 0.25s;
+  pointer-events: none; /* geometric hit-test in JS (labelHit) */
 }
 .lmap-place:hover .lmap-place-label,
 .lmap-place.active .lmap-place-label { fill: var(--color-accent); }
