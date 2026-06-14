@@ -2346,6 +2346,24 @@ function createLombokMap(wrapEl, opts) {
       if (opts.onSelect) opts.onSelect({ region: zone.getAttribute('data-region'), cluster: zone.getAttribute('data-cluster'), area: '', place: '' });
       return;
     }
+    // Clicking an Area/Place *name* (the text label) is the "show me the
+    // listings here" action: it sets the location filter and scrolls to the
+    // results. Clicking the dot only sets the filter so the map stays put for
+    // further drilling. (Labels sit in the marker group, which uses
+    // pointer-events: bounding-box, so detect via e.target on the label.)
+    var nameG = e.target.closest('.lmap-amark-label') ? e.target.closest('.lmap-amark') : null;
+    if (nameG && nameG.classList.contains('visible')) {
+      var nak = nameG.getAttribute('data-area'), nark = nameG.getAttribute('data-region');
+      if (opts.onSelect) opts.onSelect({ region: nark, cluster: clusterOfArea(nark, nak), area: nak, place: '', scroll: true });
+      return;
+    }
+    var placeNameG = e.target.closest('.lmap-place-label') ? e.target.closest('.lmap-place') : null;
+    if (placeNameG && placeNameG.classList.contains('visible') && !placeNameG.classList.contains('empty')) {
+      var npk = placeNameG.getAttribute('data-place'), npa = placeNameG.getAttribute('data-area');
+      var nprk = (LOMBOK_MAP.areas[npa] || {}).r || selRegion;
+      if (opts.onSelect) opts.onSelect({ region: nprk, cluster: clusterOfArea(nprk, npa), area: npa, place: npk, scroll: true });
+      return;
+    }
     var dot = nearestDot(clickToSvg(e));
     if (dot && dot.type === 'area') {
       var ak = dot.el.getAttribute('data-area'), ark = dot.el.getAttribute('data-region');
@@ -2843,9 +2861,10 @@ async function renderListings(el, params = {}) {
       state.place = sel.place || '';
       state.page = 1;
       syncAreaDropdown();
-      // Picking a final Area/Place on mobile: keep the map open, just scroll
-      // down to the results so it's obvious the filter applied.
-      refresh((sel.area || sel.place) && isMobile());
+      // Clicking a dot/zone refines the filter but keeps the user on the map;
+      // clicking a place/area *name* commits the location and (on mobile, where
+      // the list sits below the map) scrolls down to the results.
+      refresh(!!sel.scroll && isMobile());
     }
   });
 
@@ -2861,16 +2880,19 @@ async function renderListings(el, params = {}) {
   }
 
   // Context-aware back: one level up, broadening the filter (docs/adr/0011).
+  // An Area sits inside its Cluster's zoom — the whole Cluster is still on
+  // screen when an Area is picked — so "back" from an Area skips the Cluster and
+  // broadens straight to the Region.
   function backTarget() {
     if (state.place) return { label: areaDisplayLabel(state.area) };
-    if (state.area) return { label: state.cluster ? clusterDisplayLabel(state.region, state.cluster) : regionDisplayLabel(state.region) };
+    if (state.area) return { label: regionDisplayLabel(state.region) };
     if (state.cluster) return { label: regionDisplayLabel(state.region) };
     if (state.region) return { label: t('map.all_lombok', 'All Lombok') };
     return null;
   }
   function goBack() {
     if (state.place) state.place = '';
-    else if (state.area) state.area = '';
+    else if (state.area) { state.area = ''; state.cluster = ''; }
     else if (state.cluster) state.cluster = '';
     else if (state.region) state.region = '';
     state.page = 1;
