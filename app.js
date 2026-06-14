@@ -345,7 +345,7 @@ const Currency = {
   // Safety net only — IDR per 1 unit. The live rates come from the
   // currency_rates table (refreshed daily by api/cron_fx.php). Keep these
   // roughly current so conversions stay sane if that table is empty/stale.
-  FALLBACK_IDR: { IDR: 1, USD: 16500, EUR: 17800, AUD: 12521 },
+  FALLBACK_IDR: { IDR: 1, USD: 17779, EUR: 20636, AUD: 12521 },
   _stored: (function() {
     try {
       var c = localStorage.getItem('bil_currency');
