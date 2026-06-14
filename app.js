@@ -8570,7 +8570,9 @@ function initApp() {
 // =====================================================
 
 var MobileFilterDrawer = (function() {
-  var FILTER_PAGES = { directory: true, listings: true, developers: true, agents: true };
+  // Pages that expose filters and therefore the mobile "Filter Results" button.
+  // Developers is intentionally excluded — its directory is filter-free (editorial layout).
+  var FILTER_PAGES = { directory: true, listings: true, agents: true };
   var filterEl = null;       // The original filter element we'll re-parent
   var placeholder = null;    // Marker node so we can put it back
   var drawer, panel, body, btn;
