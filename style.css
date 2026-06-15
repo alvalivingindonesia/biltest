@@ -8100,13 +8100,13 @@ body.drawer-open { overflow: hidden; }
 /* Full-bleed dark canvas the plate floats on */
 .tools-ledger-section {
   /* Local design tokens — keep this component's palette self-contained */
-  --ledger-plate:        #284a66;                 /* brand-blue master plate (lifted) */
+  --ledger-plate:        #0d1c30;                 /* rich deep navy master plate */
   --ledger-gold:         #c9a45c;                 /* muted gold / warm bronze     */
   --ledger-gold-bright:  #e8d4a0;                 /* gold highlight (hover, PRO)  */
   --ledger-hairline:     rgba(255, 255, 255, 0.05);
   --ledger-ghost-border: rgba(255, 255, 255, 0.12);
 
-  background: #1f3a52;                             /* brand-blue backdrop (matches --color-primary) */
+  background: #0a1322;                             /* deepest navy backdrop */
   padding: clamp(64px, 9vw, 120px) 0;             /* luxury vertical breathing room */
 }
 
@@ -8259,7 +8259,7 @@ body.drawer-open { overflow: hidden; }
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #1f3a52;
+  color: #0a1322;
   background: linear-gradient(135deg, var(--ledger-gold-bright), var(--ledger-gold));
   border-radius: 3px;
   transform: translateY(-2px);                    /* optically align with serif cap-height */
