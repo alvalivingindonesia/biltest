@@ -719,7 +719,7 @@ async function router() {
       a.classList.add('active');
     }
     // RAB Tools
-    if (hrefPage === 'rab-calculator' && (page === 'rab-calculator' || page === 'rab-estimates' || page === 'rab-result' || page === 'rab-projects' || page === 'rab-project' || page === 'rab-editor')) {
+    if (hrefPage === 'rab-calculator' && (page === 'rab-calculator' || page === 'rab-estimates' || page === 'rab-result' || page === 'rab-projects' || page === 'rab-project' || page === 'rab-editor' || page === 'drab' || page === 'drab-wizard' || page === 'drab-dashboard' || page === 'drab-dev' || page === 'drab-editor' || page === 'drab-catalog')) {
       a.classList.add('active');
     }
     // About
@@ -790,6 +790,12 @@ async function router() {
     case 'rab-projects': await renderRABProjects(view); break;
     case 'rab-project': await renderRABProjectDetail(view, segments[1]); break;
     case 'rab-editor': await renderRABEditor(view, segments[1]); break;
+    case 'drab': await renderDrabHome(view); break;
+    case 'drab-wizard': await renderDrabWizard(view); break;
+    case 'drab-dashboard': await renderDrabDevelopments(view); break;
+    case 'drab-dev': await renderDrabDevelopment(view, segments[1]); break;
+    case 'drab-editor': await renderDrabEditor(view, segments[1]); break;
+    case 'drab-catalog': await renderDrabCatalog(view); break;
     case 'get-quotes': await renderGetQuotes(view, params); break;
     case 'quotes': await renderQuotesDashboard(view); break;
     case 'quote': await renderQuoteDetail(view, segments[1]); break;
@@ -991,17 +997,18 @@ async function renderHome(el) {
             </span>
           </a>
 
-          <!-- Row 4 · Detailed RAB Generator [PRO] → full RAB project tool -->
-          <a class="tool-row" href="#rab-projects" onclick="navigate('rab-projects');return false;">
+          <!-- Row 4 · Detailed RAB Generator → new parametric RAB builder (ADR 0012).
+               (Old project tool stays reachable at #rab-projects as a backup.) -->
+          <a class="tool-row" href="#drab" onclick="navigate('drab');return false;">
             <span class="tool-row-icon" aria-hidden="true">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
             </span>
             <span class="tool-row-body">
               <span class="tool-row-title">${t('home.tool_rab_title', 'Detailed RAB Generator')}<span class="tool-row-pro">${t('home.tool_pro', 'PRO')}</span></span>
-              <span class="tool-row-desc">${t('home.tool_rab_desc', 'Full Rencana Anggaran Biaya breakdown for premium materials.')}</span>
+              <span class="tool-row-desc">${t('home.tool_rab_desc', 'Generate a full contractor-ready RAB from your style, structure and finish.')}</span>
             </span>
             <span class="tool-row-action">
-              <span class="tool-ghost-btn tool-ghost-btn--locked">${t('home.tool_cta_unlock', 'Unlock Feature')}<svg class="tool-btn-lock" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+              <span class="tool-ghost-btn">${t('home.tool_cta_generate', 'Generate RAB')}<svg class="tool-btn-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>
             </span>
           </a>
 

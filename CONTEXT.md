@@ -238,6 +238,90 @@ A saved mapping from a normalised label ("semen tiga roda") to a catalog materia
 unit). Created once during Reconciliation and reused forever after to auto-link future
 Price Points. Table: `material_aliases`.
 
+## Detailed RAB Generator
+
+The new cost-estimation subsystem (ADR 0012), in the isolated `drab_*` namespace.
+Distinct from the old `rab_*` "Detailed RAB (classic)" tool, which is kept frozen as
+a comparison backup.
+
+**Development**:
+The top of the RAB document hierarchy — a project that holds one or more Buildings and
+owns the shared site settings (Zone, distance band, access/terrain → Site Factor). Angin
+Tinggi is one Development with three Buildings. Table: `drab_developments`.
+_Avoid_: project (ambiguous with the old `rab_projects`), site.
+
+**Building**:
+One structure within a Development, carrying its own generation inputs (Style, Structure
+System, Roof System, Finish Tier, and the drivers) and its own RAB. One Development has
+many Buildings; one Building has many RAB versions. Table: `drab_buildings`.
+_Avoid_: unit, block, villa (Building is the generic term; "Villa 1" is a Building's name).
+
+**RAB**:
+One costed document for a Building — a versioned set of Sections and Items rendered as
+the four-page bill (Final Summary → Structure → Architecture → MEP). "RAB" = the document;
+the tool that builds it is the Detailed RAB Generator. Table: `drab_rabs`.
+_Avoid_: estimate (that is the quick calculator's output), quote.
+
+**Work Item**:
+A catalog entry for a unit of priced work (*pekerjaan*) — "Supply & install K300
+concrete", per `m3` — with EN+ID names, a discipline, an optional Spec Slot, and one
+Price per Zone. The reusable thing an Item references. Table: `drab_work_items`.
+_Avoid_: material (a Work Item is supply **and** install, not a raw material), task.
+
+**Item**:
+One priced line *inside* a RAB — a Work Item (or a custom line) with a quantity, a
+ref code (`A.1.1`), material/labour rates, and a stable `line_id`. Its quantity is a
+single number or the sum of its Takeoff Rows. Table: `drab_items`.
+
+**Takeoff Row**:
+A named sub-measurement under an Item ("Back wall: 13 − 1.2 = 11.8 m²") whose values sum
+to the Item's quantity. The tool owns the arithmetic — replacing the `#REF!`-prone manual
+sums of the source BOQs. Table: `drab_item_takeoffs`.
+_Avoid_: detail, breakdown.
+
+**Spec Slot**:
+A swappable specification position on a template line — `structural_concrete`,
+`wall_finish`, `ceiling`, `floor_finish`, `paint`, `waterproofing`. The Finish Tier
+resolves each Slot to a specific Work Item; the user can swap to alternatives per line.
+Whether `waterproofing` even appears is Tier-driven.
+_Avoid_: option, variant.
+
+**Style / Structure System / Roof System**:
+The three independent generation axes. **Style** is the template (architectural character,
+item composition, and `wall_factor`): Tropical Mediterranean, Bali villa, Joglo, Premium
+bamboo, Jakarta/Java city, Local-simple. **Structure System** (Full RCC / batu-kali +
+masonry + light-steel / steel frame / timber) and **Roof System** (tile / RCC flat *dak* /
+timber / thatch / metal) are overlays that swap items and coefficients. Authoring is
+additive, not combinatorial.
+_Avoid_: type, model (overloaded).
+
+**Driver**:
+A wizard-collected quantity that scales generated Items — floor area per level, footprint,
+bedroom/bathroom count, or an extra's size (pool/deck/rooftop/pergola/boundary). A template
+line is `driver × coefficient`. The `wall_area` driver = `floor_area × Style.wall_factor`.
+_Avoid_: parameter, input.
+
+**Zone / Site Factor**:
+**Zone** is the base-price region a Work Item Price belongs to (Mataram baseline, South
+Lombok, …). **Site Factor** is the computed uplift from `distance_band × access/terrain`,
+lifting the material component (freight) and adding a labour mobilisation uplift, shown
+transparently. Named zones are presets that pre-fill the Site Factor.
+_Avoid_: location premium (use Site Factor), region (that is the listings Region).
+
+**Indicative / Confirmed**:
+A Work Item Price's confidence. **Confirmed** = a price agreed with a contractor or paid on
+an invoice (the Villa BOQ rates). **Indicative** = everything else. Each price also carries
+a `basis` (`real_quote`, `real_boq`, `derived`, `national_ref`, `estimate`,
+`other_province_adjusted`) and a source + date. Confirmed pricing is premium-gated;
+Indicative is free. Shares vocabulary with the quote engine's Price Point index, which
+these rows are shaped to graduate into.
+_Avoid_: verified, estimate (as the flag — `estimate` is one `basis` value).
+
+**Issued Baseline**:
+A RAB version frozen as the agreed document a future Variation diffs against. Variations
+(ADR 0012, phase 2) are deferred, but the baseline + stable `line_id` plumbing ships in v1.
+_Avoid_: locked, final.
+
 ## Flagged ambiguities
 
 **"Quote" is overloaded — three distinct meanings in this codebase:**

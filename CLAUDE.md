@@ -153,3 +153,31 @@ recomputes agent Reputation. Operate it from `admin/ingest_console.php`; fix exi
 data once with `admin/recanonicalize_listings.php`. Schema:
 `migrations/2026_06_12_listing_ingestion.sql` (needs `WORKER_API_KEY` +
 `CRON_REPUTATION_TOKEN` in private config). Glossary in CONTEXT.md.
+
+## Detailed RAB Generator (ADR 0012)
+A new cost-estimation tool that generates contractor-grade RABs (BOQs) from a wizard
+(Style → Structure → Roof → Size → Extras → Finish tier → Site), in its own isolated
+**`drab_*`** schema. The old `rab_*` tool stays **frozen as a backup** ("Detailed RAB
+(classic)") — do not change it; compare against it. Engine is **hybrid**: a flat
+"Supply & Install" work-item rate catalog (the spine) with an optional AHSP coefficient
+build-up underneath (material/labour split + recompute). Generation is **multi-driver
+parametric**, coefficients calibrated from the owner's real Villa BOQs; **Spec Slots**
+let the Finish Tier auto-pick materials (incl. waterproofing) with per-line swap; a
+**Site Factor** (distance × access/terrain) lifts material + labour off a Mataram
+baseline. Prices are **Indicative/Confirmed** with provenance (`basis` incl.
+`other_province_adjusted` for styles sourced outside Lombok + premium); Confirmed pricing
+and clean export are **premium** (gate via `feature_access`, never hardcode). Hierarchy:
+**Development → Buildings → RAB**, with **stable `line_id`s + issued-baseline snapshots**
+baked in for the future Variations portal (UI deferred). Output is fully **bilingual**
+(EN+ID), IDR only, in the four-page house format (Final Summary → Structure →
+Architecture → MEP) with optional room-by-room **Takeoff Rows** under items.
+
+Code lives in dedicated files — **`drab.js`** (loaded via its own `<script>`, like
+`i18n/*.js`) and **`api/drab_api.php`** (parallel to `rab_api.php`) — a deliberate,
+ADR-recorded deviation from "all frontend JS in app.js," justified by app.js size and the
+existing i18n/per-domain-PHP precedent. Reuse the existing `.wizard` / `.rdtl-*` /
+`.rab-*` CSS (new bits in `drab.css`). Excel export is a **self-contained
+`api/lib/xlsx_writer.php` (`DrabXlsx`)** — dependency-free OOXML via `ext-zip`, no
+Composer/`vendor/`. Catalog/prices/templates seed from `migrations/2026_06_16_drab_seed.sql`
+(derived from the 3 Villa BOQs + `Lombok_RAB_Database_v2` + other-province refs); schema in
+`migrations/2026_06_16_drab_generator.sql`. Glossary in CONTEXT.md.
