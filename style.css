@@ -8100,13 +8100,13 @@ body.drawer-open { overflow: hidden; }
 /* Full-bleed dark canvas the plate floats on */
 .tools-ledger-section {
   /* Local design tokens — keep this component's palette self-contained */
-  --ledger-plate:        #0d1c30;                 /* rich deep navy master plate */
+  --ledger-plate:        #284a66;                 /* brand-blue master plate (lifted) */
   --ledger-gold:         #c9a45c;                 /* muted gold / warm bronze     */
   --ledger-gold-bright:  #e8d4a0;                 /* gold highlight (hover, PRO)  */
   --ledger-hairline:     rgba(255, 255, 255, 0.05);
   --ledger-ghost-border: rgba(255, 255, 255, 0.12);
 
-  background: #0a1322;                             /* deepest navy backdrop */
+  background: #1f3a52;                             /* brand-blue backdrop (matches --color-primary) */
   padding: clamp(64px, 9vw, 120px) 0;             /* luxury vertical breathing room */
 }
 
@@ -8259,7 +8259,7 @@ body.drawer-open { overflow: hidden; }
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #0a1322;
+  color: #1f3a52;
   background: linear-gradient(135deg, var(--ledger-gold-bright), var(--ledger-gold));
   border-radius: 3px;
   transform: translateY(-2px);                    /* optically align with serif cap-height */
@@ -9092,6 +9092,80 @@ body.cmd-palette-open { overflow: hidden; }
 /* =====================================================
    QUOTE ENGINE (Auto-Quote, dashboard, comparison)
    ===================================================== */
+
+/* ---- Supplier Inquiry Automator — full-page premium paywall ---- */
+.sia-gate {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: var(--space-8);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+.sia-gate-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: var(--space-4);
+  padding: 0.3rem 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8a6d2f;                          /* deep bronze */
+  background: rgba(201, 164, 92, 0.14);    /* soft gold wash */
+  border: 1px solid rgba(201, 164, 92, 0.4);
+  border-radius: var(--radius-full);
+}
+.sia-gate-title {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--color-heading);
+  margin: 0 0 var(--space-3);
+}
+.sia-gate-lead {
+  color: var(--color-text-muted);
+  margin: 0 auto var(--space-6);
+  max-width: 46ch;
+  line-height: 1.6;
+}
+.sia-gate-list {
+  list-style: none;
+  display: grid;
+  gap: var(--space-3);
+  text-align: left;
+  max-width: 380px;
+  margin: 0 auto var(--space-7);
+  padding: 0;
+}
+.sia-gate-list li {
+  position: relative;
+  padding-left: 1.9rem;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+.sia-gate-list li::before {
+  content: "\2713";                        /* gold tick */
+  position: absolute;
+  left: 0.35rem;
+  top: 0;
+  color: #b8923f;
+  font-weight: 700;
+}
+.sia-gate-actions {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.sia-gate-foot {
+  margin: var(--space-6) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-faint);
+}
+.sia-gate-foot a { color: var(--color-primary); font-weight: 600; }
 
 .gq-pick { display:flex; align-items:center; padding-right: var(--space-2); }
 .gq-pick-cb { width:18px; height:18px; accent-color: var(--color-primary); cursor:pointer; }

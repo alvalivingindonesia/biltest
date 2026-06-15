@@ -8375,10 +8375,55 @@ async function renderQuoteDetail(el, id) {
 }
 
 // =====================================================
-// RENDER: GET QUOTES
+// RENDER: GET QUOTES  (Supplier Inquiry Automator)
 // =====================================================
 
+// Full-page premium paywall for the Supplier Inquiry Automator. Shown to free
+// and signed-out users in place of the tool, so the feature is gated wherever
+// #get-quotes is reached (home tools, nav, dashboard, direct URL). Benefit-
+// selling per the freemium rules — never a raw error. Real entitlement is
+// enforced server-side (quotes.php → quote_engine → upgrade_required).
+function renderSupplierAutomatorGate(el, tier) {
+  var isGuest = (tier === 'guest');
+  var actions = isGuest
+    ? '<button class="btn btn--primary" onclick="showAuthModal(\'login\')">Sign in to continue</button>'
+      + '<button class="btn btn--ghost" onclick="navigate(\'account?tab=subscription\')">See plans</button>'
+    : '<button class="btn btn--primary" onclick="navigate(\'account?tab=subscription\')">Upgrade to unlock</button>';
+  el.innerHTML = ''
+    + '<div class="dir-hero" data-group="suppliers_materials"><div class="container">'
+    + '  <h1 class="dir-hero-title">Supplier Inquiry Automator</h1>'
+    + '  <p class="dir-hero-desc">Pick your suppliers once and let us chase the quotes &mdash; outreach, replies and price comparison, handled for you.</p>'
+    + '</div></div>'
+    + '<div class="section"><div class="container container--narrow">'
+    + '  <div class="sia-gate">'
+    + '    <span class="sia-gate-badge">'
+    + '      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'
+    + '      Premium feature'
+    + '    </span>'
+    + '    <h2 class="sia-gate-title">Let us chase the quotes for you</h2>'
+    + '    <p class="sia-gate-lead">Stop juggling WhatsApp threads. The automator messages every supplier you choose, structures their replies, and lays each price out side by side.</p>'
+    + '    <ul class="sia-gate-list">'
+    + '      <li>Automatic WhatsApp outreach to all your picks</li>'
+    + '      <li>Replies translated &amp; structured into one view</li>'
+    + '      <li>A live, side-by-side price-comparison dashboard</li>'
+    + '    </ul>'
+    + '    <div class="sia-gate-actions">' + actions + '</div>'
+    + '    <p class="sia-gate-foot">Just need one quote? You can still contact suppliers directly from the '
+    + '<a href="#directory?group=suppliers_materials" onclick="navigate(\'directory?group=suppliers_materials\');return false;">suppliers directory</a>.</p>'
+    + '  </div>'
+    + '</div></div>';
+}
+
 async function renderGetQuotes(el, params = {}) {
+  // Premium gate — the Supplier Inquiry Automator is a paid feature (mirrors the
+  // Detailed RAB tool). Free or signed-out users get the paywall everywhere this
+  // page is reached; entitlement is re-checked server-side on every action.
+  var _siaTier = UserAuth.user ? (UserAuth.user.effective_tier || 'free') : 'guest';
+  if (_siaTier === 'guest' || _siaTier === 'free') {
+    renderSupplierAutomatorGate(el, _siaTier);
+    return;
+  }
+
   await FilterData.load();
 
   let quoteItems = [{ id: 1, material: '', quantity: '', info: '' }];
@@ -8595,7 +8640,7 @@ async function renderGetQuotes(el, params = {}) {
   el.innerHTML = `
     <div class="dir-hero" data-group="suppliers_materials">
       <div class="container">
-        <h1 class="dir-hero-title">Get Quotes</h1>
+        <h1 class="dir-hero-title">Supplier Inquiry Automator</h1>
         <p class="dir-hero-desc">Compose one materials list, then message Lombok suppliers directly on WhatsApp &mdash; and compare their replies.</p>
         <div class="gq-stepper" role="list" aria-label="How it works">
           <div class="gq-stepper-item" role="listitem">
