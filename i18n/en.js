@@ -104,10 +104,8 @@ window.I18N_EN = {
   'home.tax_house_title': 'House & Land Sale Tax',
   'home.tax_house_desc': 'Include VAT & luxury tax for a house and land sale.',
   'home.tax_house_cta': 'Calculate Tax',
-  // Build & Transaction Tools — unified tool ledger (home + Tools nav)
-  'home.tools_eyebrow': 'Premium Tools',
-  'home.tools_title': 'Build & Transaction Tools',
-  'home.tools_subtitle': 'Localised tools and calculators for costs, taxes, and sourcing',
+  // Tools & Calculators — unified tool ledger (home + Tools nav)
+  'home.tools_title': 'Tools & Calculators',
   'home.tool_txn_title': 'Property Transaction Tax',
   'home.tool_txn_desc': 'Includes complete luxury tax (PPnBM) and VAT metrics.',
   'home.tool_land_title': 'Land Acquisition Tax',
@@ -116,8 +114,8 @@ window.I18N_EN = {
   'home.tool_est_desc': 'Quick, localized estimates for your total build budget.',
   'home.tool_rab_title': 'Detailed RAB Generator',
   'home.tool_rab_desc': 'Full Rencana Anggaran Biaya breakdown for premium materials.',
-  'home.tool_supplier_title': 'Supplier Inquiry Automator',
-  'home.tool_supplier_desc': 'Draft and dispatch structured quote requests to local suppliers.',
+  'home.tool_supplier_title': 'Supplier Inquiry Tool',
+  'home.tool_supplier_desc': 'Build structured price inquiries and message suppliers in a tap.',
   'home.tool_cta_tax': 'Calculate Tax',
   'home.tool_cta_estimate': 'Start Calculating',
   'home.tool_cta_unlock': 'Unlock Feature',

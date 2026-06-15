@@ -8116,16 +8116,6 @@ body.drawer-open { overflow: hidden; }
   max-width: 640px;
   margin: 0 auto clamp(2.5rem, 5vw, 3.5rem);
 }
-.tools-ledger-eyebrow {
-  display: block;
-  font-family: var(--font-body);
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.22em;                         /* tracked uppercase label */
-  text-transform: uppercase;
-  color: var(--ledger-gold);
-  margin-bottom: 1rem;
-}
 .tools-ledger-title {
   font-family: var(--font-display);               /* high-contrast serif */
   font-size: clamp(2rem, 4.5vw, 2.9rem);
@@ -8134,16 +8124,6 @@ body.drawer-open { overflow: hidden; }
   color: #ffffff;
   margin: 0 0 0.9rem;
 }
-.tools-ledger-subtitle {
-  font-family: var(--font-body);
-  font-size: 1rem;
-  font-weight: 300;
-  line-height: 1.6;
-  color: rgba(255, 255, 255, 0.55);               /* muted silver-gray */
-  margin: 0 auto;
-  max-width: 48ch;
-}
-
 /* ---- Master plate ----------------------------------------- */
 .tools-ledger {
   position: relative;
@@ -8303,19 +8283,14 @@ body.drawer-open { overflow: hidden; }
 
   .tool-row {
     grid-template-columns: 46px 1fr;              /* icon · content */
-    grid-template-areas:
-      "icon body"
-      "action action";                            /* action drops to its own full-width row */
-    column-gap: 1rem;
-    row-gap: 1.35rem;
-    padding: 1.6rem 1.4rem;
+    grid-template-areas: "icon body";
+    column-gap: 1.5rem;                           /* more breathing room before the text */
+    padding: 1.5rem 1.4rem;
   }
   .tool-row-icon { width: 46px; height: 46px; border-radius: 10px; }
   .tool-row-title { font-size: 1.2rem; }
-  .tool-ghost-btn {
-    width: 100%;
-    justify-content: center;                      /* full-width tap target */
-  }
+  /* On mobile the whole row is the tap target — drop the per-row ghost button */
+  .tool-row-action { display: none; }
 }
 
 /* ===========================================================

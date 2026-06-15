@@ -943,9 +943,7 @@ async function renderHome(el) {
 
         <!-- Centred section heading -->
         <header class="tools-ledger-head">
-          <span class="tools-ledger-eyebrow">${t('home.tools_eyebrow', 'Premium Tools')}</span>
-          <h2 class="tools-ledger-title" id="tools-ledger-heading">${t('home.tools_title', 'Build & Transaction Tools')}</h2>
-          <p class="tools-ledger-subtitle">${t('home.tools_subtitle', 'Localised tools and calculators for costs, taxes, and sourcing')}</p>
+          <h2 class="tools-ledger-title" id="tools-ledger-heading">${t('home.tools_title', 'Tools & Calculators')}</h2>
         </header>
 
         <!-- Master plate — single unified wrapper around all tool rows -->
@@ -1007,14 +1005,14 @@ async function renderHome(el) {
             </span>
           </a>
 
-          <!-- Row 5 · Supplier Inquiry Automator [PRO] → existing Get Quotes flow -->
+          <!-- Row 5 · Supplier Inquiry Tool [PRO] → existing Get Quotes flow -->
           <a class="tool-row" href="#get-quotes" onclick="navigate('get-quotes');return false;">
             <span class="tool-row-icon" aria-hidden="true">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             </span>
             <span class="tool-row-body">
-              <span class="tool-row-title">${t('home.tool_supplier_title', 'Supplier Inquiry Automator')}<span class="tool-row-pro">${t('home.tool_pro', 'PRO')}</span></span>
-              <span class="tool-row-desc">${t('home.tool_supplier_desc', 'Draft and dispatch structured quote requests to local suppliers.')}</span>
+              <span class="tool-row-title">${t('home.tool_supplier_title', 'Supplier Inquiry Tool')}<span class="tool-row-pro">${t('home.tool_pro', 'PRO')}</span></span>
+              <span class="tool-row-desc">${t('home.tool_supplier_desc', 'Build structured price inquiries and message suppliers in a tap.')}</span>
             </span>
             <span class="tool-row-action">
               <span class="tool-ghost-btn tool-ghost-btn--locked">${t('home.tool_cta_unlock', 'Unlock Feature')}<svg class="tool-btn-lock" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
@@ -8375,15 +8373,15 @@ async function renderQuoteDetail(el, id) {
 }
 
 // =====================================================
-// RENDER: GET QUOTES  (Supplier Inquiry Automator)
+// RENDER: GET QUOTES  (Supplier Inquiry Tool)
 // =====================================================
 
-// Full-page premium paywall for the Supplier Inquiry Automator. Shown to free
-// and signed-out users in place of the tool, so the feature is gated wherever
+// Full-page premium paywall for the Supplier Inquiry Tool. Shown to free and
+// signed-out users in place of the tool, so the feature is gated wherever
 // #get-quotes is reached (home tools, nav, dashboard, direct URL). Benefit-
 // selling per the freemium rules — never a raw error. Real entitlement is
 // enforced server-side (quotes.php → quote_engine → upgrade_required).
-function renderSupplierAutomatorGate(el, tier) {
+function renderSupplierInquiryGate(el, tier) {
   var isGuest = (tier === 'guest');
   var actions = isGuest
     ? '<button class="btn btn--primary" onclick="showAuthModal(\'login\')">Sign in to continue</button>'
@@ -8391,8 +8389,8 @@ function renderSupplierAutomatorGate(el, tier) {
     : '<button class="btn btn--primary" onclick="navigate(\'account?tab=subscription\')">Upgrade to unlock</button>';
   el.innerHTML = ''
     + '<div class="dir-hero" data-group="suppliers_materials"><div class="container">'
-    + '  <h1 class="dir-hero-title">Supplier Inquiry Automator</h1>'
-    + '  <p class="dir-hero-desc">Pick your suppliers once and let us chase the quotes &mdash; outreach, replies and price comparison, handled for you.</p>'
+    + '  <h1 class="dir-hero-title">Supplier Inquiry Tool</h1>'
+    + '  <p class="dir-hero-desc">List what you want priced once, then fire off a clean, ready-to-send WhatsApp inquiry to every supplier you pick &mdash; straight from your own phone.</p>'
     + '</div></div>'
     + '<div class="section"><div class="container container--narrow">'
     + '  <div class="sia-gate">'
@@ -8400,27 +8398,27 @@ function renderSupplierAutomatorGate(el, tier) {
     + '      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'
     + '      Premium feature'
     + '    </span>'
-    + '    <h2 class="sia-gate-title">Let us chase the quotes for you</h2>'
-    + '    <p class="sia-gate-lead">Stop juggling WhatsApp threads. The automator messages every supplier you choose, structures their replies, and lays each price out side by side.</p>'
+    + '    <h2 class="sia-gate-title">Your materials list, ready to send to every vendor</h2>'
+    + '    <p class="sia-gate-lead">Tell it what you need priced &mdash; say &ldquo;5 &times; Mapei Mapeflex&rdquo; &mdash; and it builds a clean, professional inquiry for you. Tap a supplier and that message opens in your own WhatsApp, already written, ready to send. You message vendors directly and their replies come straight back to you &mdash; nothing is routed through us.</p>'
     + '    <ul class="sia-gate-list">'
-    + '      <li>Automatic WhatsApp outreach to all your picks</li>'
-    + '      <li>Replies translated &amp; structured into one view</li>'
-    + '      <li>A live, side-by-side price-comparison dashboard</li>'
+    + '      <li>Build one structured list &mdash; items, quantities and specs</li>'
+    + '      <li>A clear, vendor-ready message, in English or Bahasa</li>'
+    + '      <li>One tap pre-fills WhatsApp for each supplier you choose</li>'
     + '    </ul>'
     + '    <div class="sia-gate-actions">' + actions + '</div>'
-    + '    <p class="sia-gate-foot">Just need one quote? You can still contact suppliers directly from the '
+    + '    <p class="sia-gate-foot">Just pricing one item? You can still message suppliers one-by-one from the free '
     + '<a href="#directory?group=suppliers_materials" onclick="navigate(\'directory?group=suppliers_materials\');return false;">suppliers directory</a>.</p>'
     + '  </div>'
     + '</div></div>';
 }
 
 async function renderGetQuotes(el, params = {}) {
-  // Premium gate — the Supplier Inquiry Automator is a paid feature (mirrors the
+  // Premium gate — the Supplier Inquiry Tool is a paid feature (mirrors the
   // Detailed RAB tool). Free or signed-out users get the paywall everywhere this
   // page is reached; entitlement is re-checked server-side on every action.
   var _siaTier = UserAuth.user ? (UserAuth.user.effective_tier || 'free') : 'guest';
   if (_siaTier === 'guest' || _siaTier === 'free') {
-    renderSupplierAutomatorGate(el, _siaTier);
+    renderSupplierInquiryGate(el, _siaTier);
     return;
   }
 
@@ -8640,8 +8638,8 @@ async function renderGetQuotes(el, params = {}) {
   el.innerHTML = `
     <div class="dir-hero" data-group="suppliers_materials">
       <div class="container">
-        <h1 class="dir-hero-title">Supplier Inquiry Automator</h1>
-        <p class="dir-hero-desc">Compose one materials list, then message Lombok suppliers directly on WhatsApp &mdash; and compare their replies.</p>
+        <h1 class="dir-hero-title">Supplier Inquiry Tool</h1>
+        <p class="dir-hero-desc">Compose one materials list, then message Lombok suppliers directly on WhatsApp &mdash; one tap pre-fills each message.</p>
         <div class="gq-stepper" role="list" aria-label="How it works">
           <div class="gq-stepper-item" role="listitem">
             <span class="gq-stepper-num">01</span>

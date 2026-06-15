@@ -101,10 +101,8 @@ window.I18N_ID = {
   'home.tax_house_title': 'Pajak Penjualan Rumah & Tanah',
   'home.tax_house_desc': 'Termasuk PPN & pajak barang mewah untuk penjualan rumah & tanah.',
   'home.tax_house_cta': 'Hitung Pajak',
-  // Build & Transaction Tools — unified tool ledger (home + Tools nav)
-  'home.tools_eyebrow': 'Alat Premium',
-  'home.tools_title': 'Alat Pembangunan & Transaksi',
-  'home.tools_subtitle': 'Alat dan kalkulator lokal untuk biaya, pajak, dan pengadaan',
+  // Tools & Calculators — unified tool ledger (home + Tools nav)
+  'home.tools_title': 'Alat & Kalkulator',
   'home.tool_txn_title': 'Pajak Transaksi Properti',
   'home.tool_txn_desc': 'Termasuk metrik pajak barang mewah (PPnBM) dan PPN lengkap.',
   'home.tool_land_title': 'Pajak Perolehan Tanah',
@@ -113,8 +111,8 @@ window.I18N_ID = {
   'home.tool_est_desc': 'Estimasi cepat dan lokal untuk total anggaran pembangunan Anda.',
   'home.tool_rab_title': 'Generator RAB Lengkap',
   'home.tool_rab_desc': 'Rincian Rencana Anggaran Biaya lengkap untuk material premium.',
-  'home.tool_supplier_title': 'Otomator Permintaan Pemasok',
-  'home.tool_supplier_desc': 'Susun dan kirim permintaan penawaran terstruktur ke pemasok lokal.',
+  'home.tool_supplier_title': 'Alat Permintaan Pemasok',
+  'home.tool_supplier_desc': 'Buat permintaan harga terstruktur dan kirim ke pemasok dalam sekali ketuk.',
   'home.tool_cta_tax': 'Hitung Pajak',
   'home.tool_cta_estimate': 'Mulai Hitung',
   'home.tool_cta_unlock': 'Buka Fitur',
