@@ -931,59 +931,96 @@ async function renderHome(el) {
       </div>
     </section>
 
-    <!-- RAB CALCULATOR — two-card standalone section -->
-    <section class="rab-tools-section">
+    <!-- ============================================================
+         BUILD & TRANSACTION TOOLS — unified premium "tool ledger".
+         One deep-navy master plate lists every build & transaction
+         tool as an aligned row (icon · content · action). Replaces
+         the old split RAB / Property-Tax card sections so all tools
+         live under one roof. See .tools-ledger in style.css.
+         ============================================================ -->
+    <section class="tools-ledger-section" aria-labelledby="tools-ledger-heading">
       <div class="container">
-        <div class="rab-tools-header">
-          <h2 class="rab-tools-heading">${t('home.build_cost_tools', 'Build Cost Tools')}</h2>
-          <p class="rab-tools-subline">${t('home.build_cost_tools_desc', 'Estimate your project cost before you build')}</p>
-        </div>
-        <div class="rab-tools-grid">
-          <a href="#rab-calculator" class="rab-tool-card" onclick="navigate('rab-calculator');return false;">
-            <div class="rab-tool-card-icon" aria-hidden="true">
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h8M8 14h4"/></svg>
-            </div>
-            <h3 class="rab-tool-card-title">${t('home.quick_calc_title', 'Quick Calculator')}</h3>
-            <p class="rab-tool-card-desc">${t('home.quick_calc_desc', 'Get a fast estimate of your build cost in minutes.')}</p>
-            <span class="rab-tool-btn rab-tool-btn--outline">${t('home.quick_calc_cta', 'Start Calculating')}</span>
-          </a>
-          <a href="#rab-projects" class="rab-tool-card rab-tool-card--pro" onclick="navigate('rab-projects');return false;">
-            <span class="rab-tool-pro-badge">${t('home.pro_badge', 'Pro')}</span>
-            <div class="rab-tool-card-icon" aria-hidden="true">
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-            </div>
-            <h3 class="rab-tool-card-title">${t('home.rab_gen_title', 'Detailed RAB Generator')}</h3>
-            <p class="rab-tool-card-desc">${t('home.rab_gen_desc', 'Generate a full Rencana Anggaran Biaya breakdown for your project.')}</p>
-            <span class="rab-tool-btn rab-tool-btn--filled">${t('home.rab_gen_cta', 'Unlock Feature')}</span>
-          </a>
-        </div>
-      </div>
-    </section>
 
-    <!-- PROPERTY SALE TAX TOOLS — two-card standalone section -->
-    <section class="rab-tools-section rab-tools-section--alt">
-      <div class="container">
-        <div class="rab-tools-header">
-          <h2 class="rab-tools-heading">${t('home.tax_tools', 'Property Sale Tax Calculator')}</h2>
-          <p class="rab-tools-subline">${t('home.tax_tools_desc', 'See the taxes a Lombok sale involves — for both buyer and seller')}</p>
-        </div>
-        <div class="rab-tools-grid">
-          <a href="#tax-land" class="rab-tool-card" onclick="navigate('tax-land');return false;">
-            <div class="rab-tool-card-icon" aria-hidden="true">
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></svg>
-            </div>
-            <h3 class="rab-tool-card-title">${t('home.tax_land_title', 'Land Sale Tax')}</h3>
-            <p class="rab-tool-card-desc">${t('home.tax_land_desc', 'Calculate buyer & seller taxes on a land-only sale.')}</p>
-            <span class="rab-tool-btn rab-tool-btn--outline">${t('home.tax_land_cta', 'Calculate Tax')}</span>
+        <!-- Centred section heading -->
+        <header class="tools-ledger-head">
+          <span class="tools-ledger-eyebrow">${t('home.tools_eyebrow', 'Premium Tools')}</span>
+          <h2 class="tools-ledger-title" id="tools-ledger-heading">${t('home.tools_title', 'Build & Transaction Tools')}</h2>
+          <p class="tools-ledger-subtitle">${t('home.tools_subtitle', 'Localised tools and calculators for costs, taxes, and sourcing')}</p>
+        </header>
+
+        <!-- Master plate — single unified wrapper around all tool rows -->
+        <div class="tools-ledger">
+
+          <!-- Row 1 · Property Transaction Tax → house & land sale tax (VAT + PPnBM) -->
+          <a class="tool-row" href="#tax-house" onclick="navigate('tax-house');return false;">
+            <span class="tool-row-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </span>
+            <span class="tool-row-body">
+              <span class="tool-row-title">${t('home.tool_txn_title', 'Property Transaction Tax')}</span>
+              <span class="tool-row-desc">${t('home.tool_txn_desc', 'Includes complete luxury tax (PPnBM) and VAT metrics.')}</span>
+            </span>
+            <span class="tool-row-action">
+              <span class="tool-ghost-btn">${t('home.tool_cta_tax', 'Calculate Tax')}<svg class="tool-btn-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>
+            </span>
           </a>
-          <a href="#tax-house" class="rab-tool-card" onclick="navigate('tax-house');return false;">
-            <div class="rab-tool-card-icon" aria-hidden="true">
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-            </div>
-            <h3 class="rab-tool-card-title">${t('home.tax_house_title', 'House & Land Sale Tax')}</h3>
-            <p class="rab-tool-card-desc">${t('home.tax_house_desc', 'Include VAT & luxury tax for a house and land sale.')}</p>
-            <span class="rab-tool-btn rab-tool-btn--outline">${t('home.tax_house_cta', 'Calculate Tax')}</span>
+
+          <!-- Row 2 · Land Acquisition Tax → land-only sale tax -->
+          <a class="tool-row" href="#tax-land" onclick="navigate('tax-land');return false;">
+            <span class="tool-row-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+            </span>
+            <span class="tool-row-body">
+              <span class="tool-row-title">${t('home.tool_land_title', 'Land Acquisition Tax')}</span>
+              <span class="tool-row-desc">${t('home.tool_land_desc', 'Calculate buyer and seller tax liabilities for land purchases.')}</span>
+            </span>
+            <span class="tool-row-action">
+              <span class="tool-ghost-btn">${t('home.tool_cta_tax', 'Calculate Tax')}<svg class="tool-btn-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>
+            </span>
           </a>
+
+          <!-- Row 3 · Construction Cost Estimator → quick RAB calculator -->
+          <a class="tool-row" href="#rab-calculator" onclick="navigate('rab-calculator');return false;">
+            <span class="tool-row-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="16" y1="14" x2="16" y2="18"/><path d="M8 10h.01M12 10h.01M8 14h.01M12 14h.01M8 18h.01M12 18h.01"/></svg>
+            </span>
+            <span class="tool-row-body">
+              <span class="tool-row-title">${t('home.tool_est_title', 'Construction Cost Estimator')}</span>
+              <span class="tool-row-desc">${t('home.tool_est_desc', 'Quick, localized estimates for your total build budget.')}</span>
+            </span>
+            <span class="tool-row-action">
+              <span class="tool-ghost-btn">${t('home.tool_cta_estimate', 'Start Calculating')}<svg class="tool-btn-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>
+            </span>
+          </a>
+
+          <!-- Row 4 · Detailed RAB Generator [PRO] → full RAB project tool -->
+          <a class="tool-row" href="#rab-projects" onclick="navigate('rab-projects');return false;">
+            <span class="tool-row-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            </span>
+            <span class="tool-row-body">
+              <span class="tool-row-title">${t('home.tool_rab_title', 'Detailed RAB Generator')}<span class="tool-row-pro">${t('home.tool_pro', 'PRO')}</span></span>
+              <span class="tool-row-desc">${t('home.tool_rab_desc', 'Full Rencana Anggaran Biaya breakdown for premium materials.')}</span>
+            </span>
+            <span class="tool-row-action">
+              <span class="tool-ghost-btn tool-ghost-btn--locked">${t('home.tool_cta_unlock', 'Unlock Feature')}<svg class="tool-btn-lock" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+            </span>
+          </a>
+
+          <!-- Row 5 · Supplier Inquiry Automator [PRO] → existing Get Quotes flow -->
+          <a class="tool-row" href="#get-quotes" onclick="navigate('get-quotes');return false;">
+            <span class="tool-row-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </span>
+            <span class="tool-row-body">
+              <span class="tool-row-title">${t('home.tool_supplier_title', 'Supplier Inquiry Automator')}<span class="tool-row-pro">${t('home.tool_pro', 'PRO')}</span></span>
+              <span class="tool-row-desc">${t('home.tool_supplier_desc', 'Draft and dispatch structured quote requests to local suppliers.')}</span>
+            </span>
+            <span class="tool-row-action">
+              <span class="tool-ghost-btn tool-ghost-btn--locked">${t('home.tool_cta_unlock', 'Unlock Feature')}<svg class="tool-btn-lock" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+            </span>
+          </a>
+
         </div>
       </div>
     </section>

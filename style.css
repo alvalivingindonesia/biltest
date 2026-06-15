@@ -8081,170 +8081,246 @@ body.drawer-open { overflow: hidden; }
 }
 
 /* --- RAB Build Cost Tools — two-card standalone section --- */
-.rab-tools-section {
-  background: var(--color-primary);
-  padding: 72px 0;
+/* ============================================================
+   BUILD & TRANSACTION TOOLS — unified premium "tool ledger"
+   ------------------------------------------------------------
+   A single deep-navy master plate listing every build &
+   transaction tool as a perfectly-aligned row:
+
+       [ icon housing ] · [ title + description ] · [ action ]
+
+   Replaces the old split RAB / Property-Tax card sections so
+   every tool lives under one roof. High-end editorial "digital
+   ledger" treatment: razor-thin gold accent frame, fine-line
+   vector icons, serif titles, ghost buttons with micro-motion.
+   Always dark, independent of the light/dark theme (like the
+   home help-cta interstitial).
+   ============================================================ */
+
+/* Full-bleed dark canvas the plate floats on */
+.tools-ledger-section {
+  /* Local design tokens — keep this component's palette self-contained */
+  --ledger-plate:        #0d1c30;                 /* rich deep navy master plate */
+  --ledger-gold:         #c9a45c;                 /* muted gold / warm bronze     */
+  --ledger-gold-bright:  #e8d4a0;                 /* gold highlight (hover, PRO)  */
+  --ledger-hairline:     rgba(255, 255, 255, 0.05);
+  --ledger-ghost-border: rgba(255, 255, 255, 0.12);
+
+  background: #0a1322;                             /* deepest navy backdrop */
+  padding: clamp(64px, 9vw, 120px) 0;             /* luxury vertical breathing room */
 }
-.rab-tools-header {
+
+/* ---- Centred section heading ------------------------------ */
+.tools-ledger-head {
   text-align: center;
-  margin-bottom: var(--space-10);
+  max-width: 640px;
+  margin: 0 auto clamp(2.5rem, 5vw, 3.5rem);
 }
-.rab-tools-heading {
-  font-family: var(--font-display);
-  font-size: var(--text-2xl);
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: 0.02em;
-  margin: 0 0 var(--space-3);
+.tools-ledger-eyebrow {
+  display: block;
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;                         /* tracked uppercase label */
+  text-transform: uppercase;
+  color: var(--ledger-gold);
+  margin-bottom: 1rem;
 }
-.rab-tools-subline {
-  font-size: var(--text-base);
-  color: rgba(255,255,255,0.7);
-  margin: 0;
-  max-width: none;
-  text-align: center;
+.tools-ledger-title {
+  font-family: var(--font-display);               /* high-contrast serif */
+  font-size: clamp(2rem, 4.5vw, 2.9rem);
+  font-weight: 600;
+  line-height: 1.1;
+  color: #ffffff;
+  margin: 0 0 0.9rem;
 }
-.rab-tools-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-6);
-  max-width: 860px;
+.tools-ledger-subtitle {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 300;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.55);               /* muted silver-gray */
   margin: 0 auto;
+  max-width: 48ch;
 }
-/* Scope home-section card styles to avoid touching the RAB-page tool chooser */
-.rab-tools-section .rab-tool-card {
+
+/* ---- Master plate ----------------------------------------- */
+.tools-ledger {
   position: relative;
+  max-width: 960px;
+  margin: 0 auto;
+  background: var(--ledger-plate);
+  border: 1px solid var(--ledger-hairline);       /* subtle low-opacity boundary */
+  border-radius: 12px;                            /* refined corner radius */
+}
+/* Razor-thin gold accent frame — left vertical edge only.
+   Inset top/bottom so the hairline tucks neatly between the
+   rounded corners instead of being clipped square. */
+.tools-ledger::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(
+    180deg,
+    var(--ledger-gold-bright) 0%,
+    var(--ledger-gold) 45%,
+    #9c7212 100%
+  );
+  box-shadow: 0 0 12px rgba(201, 164, 92, 0.25);  /* delicate warm glow */
+}
+
+/* ---- Tool row (the whole row is the clickable trigger) ---- */
+.tool-row {
+  display: grid;
+  grid-template-columns: 80px 1fr auto;           /* icon · content · action */
+  grid-template-areas: "icon body action";
+  align-items: center;                            /* absolute vertical centre tracking */
+  column-gap: 1.5rem;
+  padding: 2.2rem 2rem;                           /* expansive, premium row rhythm */
+  border-bottom: 1px solid var(--ledger-hairline);/* ultra-faint rule divider */
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+.tool-row:last-child { border-bottom: none; }     /* final row: no divider */
+
+/* Round the outer rows so hover/focus respects the plate radius */
+.tool-row:first-child {
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+}
+.tool-row:last-child {
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
+/* Hover: row background subtly illuminates */
+.tool-row:hover {
+  background: rgba(255, 255, 255, 0.015);         /* ultra-faint white glow tint */
+}
+
+/* ---- Column 1 · icon housing ------------------------------ */
+.tool-row-icon {
+  grid-area: icon;
+  justify-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);          /* dark, desaturated block — layered depth */
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--ledger-gold);                      /* crisp, muted gold/bronze icon strokes */
+  transition: all 0.3s ease;
+}
+.tool-row:hover .tool-row-icon {
+  border-color: rgba(201, 164, 92, 0.35);
+  color: var(--ledger-gold-bright);
+}
+
+/* ---- Column 2 · content block ----------------------------- */
+.tool-row-body {
+  grid-area: body;
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  padding: 28px;
-  background: var(--color-bg);
-  border: none;
-  border-radius: var(--radius-lg);
-  text-decoration: none;
-  color: var(--color-text);
-  cursor: default;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.10);
-  transition: all 200ms ease;
+  gap: 0.35rem;
+  min-width: 0;                                   /* let text wrap, never horizontal overflow */
 }
-.rab-tools-section .rab-tool-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 36px rgba(0,0,0,0.18);
+.tool-row-title {
+  font-family: var(--font-display);               /* beautiful high-contrast serif */
+  font-size: 1.4rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #ffffff;
 }
-.rab-tools-section .rab-tool-card--pro {
-  box-shadow: 0 6px 32px rgba(0,0,0,0.18);
-}
-.rab-tools-section .rab-tool-card--pro:hover {
-  box-shadow: 0 12px 40px rgba(0,0,0,0.24);
-}
-.rab-tool-pro-badge {
-  position: absolute;
-  top: 0;
-  right: var(--space-5);
-  transform: translateY(-50%);
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  background: var(--color-star);
-  color: #fff;
-  padding: 3px 10px;
-  border-radius: var(--radius-full);
-  line-height: 1.6;
-}
-.rab-tools-section .rab-tool-card-icon {
-  width: 48px;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-md);
-  background: rgba(12, 124, 132, 0.12);
-  color: var(--color-accent);
-  flex-shrink: 0;
-}
-.rab-tools-section .rab-tool-card-title {
-  font-family: var(--font-display);
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: var(--color-text);
-  margin: 0;
-  text-decoration: none;
-}
-.rab-tool-lock {
-  color: var(--color-text-muted);
-  flex-shrink: 0;
-}
-.rab-tools-section .rab-tool-card-desc {
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
-  margin: 0;
+.tool-row-desc {
+  font-family: var(--font-body);                  /* clean geometric sans-serif */
+  font-size: 0.9rem;
+  font-weight: 300;                               /* light-weight */
   line-height: 1.5;
+  color: rgba(255, 255, 255, 0.5);                /* muted silver-gray */
+  max-width: 52ch;
 }
-.rab-tool-btn {
+
+/* PRO tag — sits inline beside premium tool titles */
+.tool-row-pro {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 0.6rem;
+  padding: 0.2em 0.5em;
+  font-family: var(--font-body);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #0a1322;
+  background: linear-gradient(135deg, var(--ledger-gold-bright), var(--ledger-gold));
+  border-radius: 3px;
+  transform: translateY(-2px);                    /* optically align with serif cap-height */
+}
+
+/* ---- Column 3 · interactive action (ghost button) --------- */
+.tool-row-action { grid-area: action; }
+
+.tool-ghost-btn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  height: 44px;
-  padding: 0 var(--space-5);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  gap: 0.6rem;
+  padding: 0.78rem 1.3rem;
+  background: transparent;                         /* elegant ghost container */
+  border: 1px solid var(--ledger-ghost-border);    /* sharp, ultra-thin border */
+  border-radius: 2px;                              /* crisp, editorial corners */
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;                          /* distinct tracking */
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
   white-space: nowrap;
-  margin-top: auto;
-  border: 2px solid transparent;
-  transition: all 200ms ease;
+  transition: all 0.3s ease;
 }
-.rab-tools-section .rab-tool-btn {
-  margin-top: 8px;
+/* On row hover: border transitions to a gold accent, label brightens */
+.tool-row:hover .tool-ghost-btn {
+  border-color: var(--ledger-gold);
+  color: #ffffff;
 }
-.rab-tool-btn--outline {
-  color: var(--color-accent);
-  border-color: var(--color-accent);
-  background: transparent;
-}
-.rab-tools-section .rab-tool-card:hover .rab-tool-btn--outline {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: #fff;
-}
-.rab-tool-btn--filled {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: #fff;
-}
-.rab-tools-section .rab-tool-card:hover .rab-tool-btn--filled {
-  background: var(--color-primary-hover);
-  border-color: var(--color-primary-hover);
-}
+/* Inline fine-line arrow glides 4px to the right on hover */
+.tool-btn-arrow { transition: transform 0.3s ease; }
+.tool-row:hover .tool-btn-arrow { transform: translateX(4px); }
+/* Lock glyph for premium (PRO) actions */
+.tool-btn-lock { color: var(--ledger-gold); transition: color 0.3s ease; }
+.tool-row:hover .tool-btn-lock { color: var(--ledger-gold-bright); }
+
+/* ---- Responsive — collapse cleanly into a vertical stack -- */
 @media (max-width: 640px) {
-  .rab-tools-section { padding: 52px 0; }
-  .rab-tools-grid {
-    grid-template-columns: 1fr;
-    max-width: 420px;
+  .tools-ledger-section { padding: 56px 0; }
+
+  .tool-row {
+    grid-template-columns: 46px 1fr;              /* icon · content */
+    grid-template-areas:
+      "icon body"
+      "action action";                            /* action drops to its own full-width row */
+    column-gap: 1rem;
+    row-gap: 1.35rem;
+    padding: 1.6rem 1.4rem;
   }
-  .rab-tools-heading { font-size: var(--text-xl); }
+  .tool-row-icon { width: 46px; height: 46px; border-radius: 10px; }
+  .tool-row-title { font-size: 1.2rem; }
+  .tool-ghost-btn {
+    width: 100%;
+    justify-content: center;                      /* full-width tap target */
+  }
 }
 
 /* ===========================================================
    Property Sale Tax Calculator
    =========================================================== */
-
-/* Home: lighter alt variant of the teal tools section */
-.rab-tools-section--alt {
-  background: var(--color-surface-offset);
-}
-.rab-tools-section--alt .rab-tools-heading { color: var(--color-heading); }
-.rab-tools-section--alt .rab-tools-subline { color: var(--color-text-muted); }
-.rab-tools-section--alt .rab-tool-card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-}
-.rab-tools-section--alt .rab-tool-card:hover {
-  box-shadow: 0 8px 28px rgba(0,0,0,0.10);
-}
 
 /* Wizard field helpers */
 .tax-opt {
