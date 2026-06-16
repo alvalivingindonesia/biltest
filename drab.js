@@ -34,6 +34,14 @@ function drabAttr(s) {
   // For values placed inside single-quoted inline onclick handlers.
   return String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
+function drabOnclickArg(s) {
+  // A free-text value placed inside a single-quoted JS string that itself sits
+  // inside a DOUBLE-quoted on* HTML attribute. JS-escape first, then HTML-escape,
+  // so a name containing ' " < > & can neither break out of the handler nor the
+  // attribute (HTML parser decodes the entities back before the JS runs).
+  s = String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 function drabNav(hash) {
   if (typeof navigate === 'function') return navigate(hash);
   window.location.hash = hash;
@@ -233,6 +241,81 @@ function drabHandledUpgrade(res) {
 }
 
 /* =====================================================================
+ * TOOLTIPS — any element with data-drab-tip="…" shows a floating bubble on
+ * hover / focus / tap. The bubble lives on <body> so table overflow never
+ * clips it. drabTipInit() is idempotent — one delegated listener serves the
+ * whole SPA for the session.
+ * ===================================================================== */
+var _drabTipEl = null, _drabTipFor = null, _drabTipBound = false, _drabTipPinned = false;
+function drabTipTarget(node) {
+  while (node && node !== document) {
+    if (node.nodeType === 1 && node.getAttribute && node.getAttribute('data-drab-tip')) return node;
+    node = node.parentNode;
+  }
+  return null;
+}
+function drabTipShowFor(el) {
+  var msg = el.getAttribute('data-drab-tip');
+  if (!msg) return;
+  if (!_drabTipEl) {
+    _drabTipEl = document.createElement('div');
+    _drabTipEl.className = 'drab-tip';
+    _drabTipEl.setAttribute('role', 'tooltip');
+    document.body.appendChild(_drabTipEl);
+  }
+  _drabTipEl.textContent = msg; // plain text — never inject HTML
+  _drabTipEl.style.display = 'block';
+  _drabTipEl.style.visibility = 'hidden';
+  var r = el.getBoundingClientRect();
+  var tr = _drabTipEl.getBoundingClientRect();
+  var below = (r.top - tr.height - 10) < 8;
+  var top = below ? r.bottom + 8 : r.top - tr.height - 8;
+  var left = r.left + (r.width / 2) - (tr.width / 2);
+  left = Math.max(8, Math.min(left, window.innerWidth - tr.width - 8));
+  _drabTipEl.style.top = (top + window.pageYOffset) + 'px';
+  _drabTipEl.style.left = (left + window.pageXOffset) + 'px';
+  _drabTipEl.classList.toggle('drab-tip--below', below);
+  _drabTipEl.style.visibility = 'visible';
+}
+function drabTipHide() { if (_drabTipEl) _drabTipEl.style.display = 'none'; _drabTipFor = null; _drabTipPinned = false; }
+function drabTipInit() {
+  if (_drabTipBound) return;
+  _drabTipBound = true;
+  // Hover / focus = transient preview. Tap on an info dot = pin (stays until
+  // re-tapped or a tap elsewhere). Pinning by tap (not by display state) keeps the
+  // first tap reliable on hybrid devices that also emit a synthetic mouseover.
+  document.addEventListener('mouseover', function (e) {
+    if (_drabTipPinned) return;
+    var el = drabTipTarget(e.target);
+    if (!el || el === _drabTipFor) return;
+    _drabTipFor = el; drabTipShowFor(el);
+  });
+  document.addEventListener('mouseout', function (e) {
+    if (_drabTipPinned || !_drabTipFor) return;
+    var to = e.relatedTarget;
+    if (to && _drabTipFor.contains && _drabTipFor.contains(to)) return;
+    drabTipHide();
+  });
+  document.addEventListener('focusin', function (e) {
+    if (_drabTipPinned) return;
+    var el = drabTipTarget(e.target);
+    if (el) { _drabTipFor = el; drabTipShowFor(el); }
+  });
+  document.addEventListener('focusout', function () { if (!_drabTipPinned) drabTipHide(); });
+  document.addEventListener('click', function (e) {
+    var el = drabTipTarget(e.target);
+    if (el && el.classList && el.classList.contains('drab-info')) {
+      e.preventDefault();
+      if (_drabTipPinned && _drabTipFor === el) { drabTipHide(); }
+      else { _drabTipFor = el; drabTipShowFor(el); _drabTipPinned = true; }
+      return;
+    }
+    drabTipHide();
+  });
+  window.addEventListener('scroll', function () { drabTipHide(); }, true);
+}
+
+/* =====================================================================
  * META cache — the wizard + editor forms + catalog need the lookups.
  * ===================================================================== */
 var _drabMeta = null;
@@ -256,7 +339,7 @@ async function renderDrabHome(el) {
     + '  <div class="drab-landing">'
     + '    <div class="drab-landing-lead" style="margin-bottom:var(--space-8)">'
     + '      <h2 style="font-family:var(--font-display);font-size:var(--text-2xl);margin-bottom:var(--space-3)">From design brief to a contractor-ready bill of quantities</h2>'
-    + '      <p style="color:var(--color-text-muted);max-width:62ch;margin-bottom:var(--space-5)">Answer seven quick questions — style, structure, roof, size, extras, finish and site — and the generator builds a complete Rencana Anggaran Biaya across Preliminaries, Structure, Architecture and MEP. Then refine every line, take off quantities, swap specifications, and export.</p>'
+    + '      <p style="color:var(--color-text-muted);max-width:62ch;margin-bottom:var(--space-5)">Answer five quick steps — style, structure &amp; roof, size &amp; extras, finishes, and site — and the generator builds a complete Rencana Anggaran Biaya across Preliminaries, Structure, Architecture and MEP. Every choice is optional with sensible defaults. Then refine every line, take off quantities, swap specifications, and export.</p>'
     + '      <div style="display:flex;gap:var(--space-3);flex-wrap:wrap">'
     + '        <button class="btn btn--primary btn--lg" onclick="drabNav(\'drab-wizard\')">' + drabT('drab.start_new', 'Start a new RAB') + '</button>'
     + (drabLoggedIn()
@@ -305,17 +388,7 @@ function drabHomeGuestNudge() {
     + '</div>';
 }
 function drabSavedList(devs, canSaveMulti) {
-  var rows = devs.map(function (d) {
-    return ''
-      + '<a class="rdtl-project-card" href="#drab-dev/' + d.id + '" onclick="drabNav(\'drab-dev/' + d.id + '\');return false;">'
-      + '  <div class="rdtl-project-info">'
-      + '    <h3 class="rdtl-project-name">' + drabEsc(d.name) + '</h3>'
-      + '    <p class="rdtl-project-meta">' + (d.location_text ? drabEsc(d.location_text) + ' · ' : '')
-      + (d.building_count || 0) + ' building' + ((d.building_count || 0) === 1 ? '' : 's') + '</p>'
-      + '  </div>'
-      + '  <div class="rdtl-project-right"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--color-text-faint)"><path d="M9 18l6-6-6-6"/></svg></div>'
-      + '</a>';
-  }).join('');
+  var rows = devs.map(function (d) { return drabDevCard(d); }).join('');
   return ''
     + '<div class="rdtl-toolbar"><h2 class="rdtl-section-title">' + drabT('drab.your_projects', 'Your projects') + '</h2>'
     + '<a href="#drab-dashboard" class="btn btn--ghost btn--sm" onclick="drabNav(\'drab-dashboard\');return false;">Open dashboard</a></div>'
@@ -349,7 +422,7 @@ async function renderDrabWizard(el) {
   } catch (e) {}
 
   el.innerHTML = drabHero(drabT('drab.wizard_title', 'New Detailed RAB'),
-      drabT('drab.wizard_desc', 'Seven steps to a full, itemised bill of quantities.'))
+      drabT('drab.wizard_desc', 'Five quick steps to a full, itemised bill of quantities — every choice is optional, with sensible defaults pre-picked.'))
     + '<div class="section"><div class="container"><div id="drab-wiz-mount">' + drabSpinner() + '</div></div></div>';
 
   var meta;
@@ -366,6 +439,7 @@ async function renderDrabWizard(el) {
       structure_code: firstStyle ? firstStyle.default_structure : (meta.structures[0] ? meta.structures[0].code : ''),
       roof_code: firstStyle ? firstStyle.default_roof : (meta.roofs[0] ? meta.roofs[0].code : ''),
       finish_tier: (meta.tiers && meta.tiers.some(function (x) { return x.code === 'standard'; })) ? 'standard' : (meta.tiers[0] ? meta.tiers[0].code : ''),
+      floor_code: '', // '' = Auto (match the finish tier)
       floors: 1,
       area_l1: '', area_l2: '', area_l3: '', area_other: '',
       footprint_m2: '',
@@ -387,30 +461,38 @@ async function renderDrabWizard(el) {
 }
 
 var DRAB_WIZ_STEPS = [
-  { n: 1, label: 'Style' }, { n: 2, label: 'Structure' }, { n: 3, label: 'Roof' },
-  { n: 4, label: 'Size & floors' }, { n: 5, label: 'Extras' }, { n: 6, label: 'Finish' }, { n: 7, label: 'Site' }
+  { n: 1, label: 'Style' }, { n: 2, label: 'Structure & roof' },
+  { n: 3, label: 'Size & extras' }, { n: 4, label: 'Finishes' }, { n: 5, label: 'Site' }
 ];
+var DRAB_WIZ_LAST = DRAB_WIZ_STEPS.length;
 
 function drabWizRender(mount) {
   var w = _drabWiz, lang = w.state.lang;
 
   var stepper = '<div class="wizard-stepper" role="tablist">' + DRAB_WIZ_STEPS.map(function (st) {
     var cls = st.n === w.step ? 'is-active' : (st.n < w.step ? 'is-complete' : 'is-disabled');
-    return '<button type="button" class="wizard-step-tab ' + cls + '" data-step="' + st.n + '" role="tab">'
+    return '<button type="button" class="wizard-step-tab ' + cls + '" data-step="' + st.n + '" role="tab"'
+      + ' aria-label="Step ' + st.n + ': ' + drabEsc(st.label) + '">'
       + '<span class="wizard-step-num">' + st.n + '</span>'
       + '<span class="wizard-step-label"><small>Step ' + st.n + '</small>' + drabEsc(st.label) + '</span></button>';
   }).join('') + '</div>';
 
+  // Compact progress header for narrow screens (CSS shows this, hides the tab row).
+  var curLabel = (DRAB_WIZ_STEPS[w.step - 1] || {}).label || '';
+  var mProgress = ''
+    + '<div class="drab-wiz-msteps" aria-hidden="true">'
+    + '  <div class="drab-wiz-msteps-row"><span>Step ' + w.step + ' of ' + DRAB_WIZ_LAST + '</span><strong>' + drabEsc(curLabel) + '</strong></div>'
+    + '  <div class="drab-wiz-mbar"><span style="width:' + Math.round((w.step / DRAB_WIZ_LAST) * 100) + '%"></span></div>'
+    + '</div>';
+
   var panes = ''
     + drabWizPane(1, drabWizStepStyle(lang))
-    + drabWizPane(2, drabWizStepStructure(lang))
-    + drabWizPane(3, drabWizStepRoof(lang))
-    + drabWizPane(4, drabWizStepSize())
-    + drabWizPane(5, drabWizStepExtras())
-    + drabWizPane(6, drabWizStepFinish(lang))
-    + drabWizPane(7, drabWizStepSite(lang));
+    + drabWizPane(2, drabWizStepStructureRoof(lang))
+    + drabWizPane(3, drabWizStepSizeExtras())
+    + drabWizPane(4, drabWizStepFinishes(lang))
+    + drabWizPane(5, drabWizStepSite(lang));
 
-  var isLast = w.step === 7;
+  var isLast = w.step === DRAB_WIZ_LAST;
   var footer = ''
     + '<div class="wizard-footer">'
     + '  <div class="wizard-total drab-ballpark">'
@@ -427,10 +509,11 @@ function drabWizRender(mount) {
     + '</div>';
 
   mount.innerHTML = '<form class="wizard drab-wizard" id="drab-wiz-form" autocomplete="off">'
-    + stepper + '<div class="wizard-body">' + panes + '</div>' + footer + '</form>';
+    + stepper + mProgress + '<div class="wizard-body">' + panes + '</div>' + footer + '</form>';
 
   drabWizBind(mount);
   drabWizRecalc();
+  drabTipInit();
 }
 function drabWizPane(n, inner) {
   return '<div class="wizard-pane' + (n === _drabWiz.step ? ' is-active' : '') + '" data-pane="' + n + '">' + inner + '</div>';
@@ -451,77 +534,72 @@ function drabStatusBadge(status) {
   return '<span class="drab-badge drab-badge--beta">Indicative beta</span>';
 }
 
-/* ---- Step 1: Style cards ---- */
+/* Consistent step/sub headings with an "Optional" pill + an info tooltip dot. */
+function drabOptionalPill(optional) {
+  return optional
+    ? '<span class="drab-optional-pill" data-drab-tip="Optional — we pre-pick a sensible default. Change it or just continue.">Optional</span>'
+    : '<span class="drab-required-pill" data-drab-tip="At least the ground-floor area is needed to generate a RAB.">Needed</span>';
+}
+function drabInfoDot(tip) {
+  return tip ? '<span class="drab-info" tabindex="0" role="img" aria-label="More info" data-drab-tip="' + drabEsc(tip) + '">i</span>' : '';
+}
+function drabStepHead(title, optional, hint, tip) {
+  return '<div class="drab-step-head"><h4>' + drabEsc(title) + '</h4>' + drabOptionalPill(optional) + ' ' + drabInfoDot(tip) + '</div>'
+    + (hint ? '<p class="wizard-hint">' + hint + '</p>' : '');
+}
+function drabSubHead(title, optional, hint, tip) {
+  return '<div class="drab-sub-head"><h5 class="drab-sub-title">' + drabEsc(title) + '</h5>' + drabOptionalPill(optional) + ' ' + drabInfoDot(tip) + '</div>'
+    + (hint ? '<p class="wizard-hint" style="margin-bottom:var(--space-3)">' + hint + '</p>' : '');
+}
+function drabDefaultNote(label) {
+  return label ? '<p class="drab-default-note">Your style suggests <strong>' + drabEsc(label) + '</strong> — tap any card to change.</p>' : '';
+}
+
+/* ---- Step 1: Style ---- */
 function drabWizStepStyle(lang) {
   var s = _drabWiz.state;
   var cards = (_drabWiz.meta.styles || []).map(function (st) {
     return drabChoiceCard('style', st.code, drabName(st, lang), drabName(st, lang, 'description'), st.code === s.style_code, drabStatusBadge(st.status));
   }).join('');
   return ''
-    + '<h4>' + drabT('drab.step_style', 'Architectural style') + '</h4>'
-    + '<p class="wizard-hint">Sets the wall ratio and the default structure & roof — you can change those next.</p>'
-    + '<div class="drab-choice-grid">' + cards + '</div>';
-}
-/* ---- Step 2: Structure ---- */
-function drabWizStepStructure(lang) {
-  var s = _drabWiz.state;
-  var cards = (_drabWiz.meta.structures || []).map(function (st) {
-    return drabChoiceCard('structure', st.code, drabName(st, lang), drabName(st, lang, 'description'), st.code === s.structure_code, '');
-  }).join('');
-  return ''
-    + '<h4>' + drabT('drab.step_structure', 'Structural system') + '</h4>'
-    + '<p class="wizard-hint">How the building stands up — frame, walls and foundations.</p>'
-    + '<div class="drab-choice-grid">' + cards + '</div>';
-}
-/* ---- Step 3: Roof ---- */
-function drabWizStepRoof(lang) {
-  var s = _drabWiz.state;
-  var cards = (_drabWiz.meta.roofs || []).map(function (st) {
-    return drabChoiceCard('roof', st.code, drabName(st, lang), drabName(st, lang, 'description'), st.code === s.roof_code, '');
-  }).join('');
-  return ''
-    + '<h4>' + drabT('drab.step_roof', 'Roof system') + '</h4>'
-    + '<p class="wizard-hint">The roof structure and covering.</p>'
+    + drabStepHead(drabT('drab.step_style', 'Architectural style'), true,
+        'Sets the wall ratio and pre-selects a matching structure, roof and finish — all of which you can change. Not sure? Leave the default and continue.',
+        'The style is a template: it controls the wall-to-floor ratio and which items appear. “Calibrated” styles are priced from real Lombok build data; “Indicative beta” are composed from regional references.')
     + '<div class="drab-choice-grid">' + cards + '</div>';
 }
 
-/* ---- Step 4: Size & floors ---- */
-function drabWizStepSize() {
+/* ---- Step 2: Structure & roof (two optional axes on one pane) ---- */
+function drabWizStepStructureRoof(lang) {
+  var s = _drabWiz.state, meta = _drabWiz.meta;
+  var structCards = (meta.structures || []).map(function (st) {
+    return drabChoiceCard('structure', st.code, drabName(st, lang), drabName(st, lang, 'description'), st.code === s.structure_code, '');
+  }).join('');
+  var roofCards = (meta.roofs || []).map(function (st) {
+    return drabChoiceCard('roof', st.code, drabName(st, lang), drabName(st, lang, 'description'), st.code === s.roof_code, '');
+  }).join('');
+  var style = (meta.styles || []).filter(function (x) { return x.code === s.style_code; })[0];
+  var defStruct = style ? (meta.structures || []).filter(function (x) { return x.code === style.default_structure; })[0] : null;
+  var defRoof = style ? (meta.roofs || []).filter(function (x) { return x.code === style.default_roof; })[0] : null;
+  return ''
+    + drabStepHead('Structure & roof', true,
+        'How the building stands up and what tops it. Both are optional — your style already picked a sensible pair.', '')
+    + drabSubHead('Structural system', true, '', 'Frame, walls and foundations. Full RCC is a concrete frame throughout; batu-kali + masonry + light-steel is the common Lombok house build.')
+    + drabDefaultNote(defStruct ? drabName(defStruct, lang) : '')
+    + '<div class="drab-choice-grid">' + structCards + '</div>'
+    + '<div style="height:var(--space-6)"></div>'
+    + drabSubHead('Roof system', true, '', 'The roof structure and covering — tiles, a concrete flat dak, timber, thatch or metal.')
+    + drabDefaultNote(defRoof ? drabName(defRoof, lang) : '')
+    + '<div class="drab-choice-grid">' + roofCards + '</div>';
+}
+
+/* ---- Step 3: Size, floors & extras ---- */
+function drabWizStepSizeExtras() {
   var s = _drabWiz.state;
   function fld(name, label, ph, show) {
     return '<div class="rab-field"' + (show ? '' : ' style="display:none"') + ' data-fld="' + name + '">'
       + '<label class="rab-label">' + drabEsc(label) + '</label>'
       + '<input type="number" class="rab-input" data-state="' + name + '" min="0" step="0.5" value="' + drabEsc(s[name]) + '" placeholder="' + drabEsc(ph) + '"></div>';
   }
-  var n = parseInt(s.floors, 10) || 1;
-  return ''
-    + '<h4>' + drabT('drab.step_size', 'Size & floors') + '</h4>'
-    + '<p class="wizard-hint">Storeys and the built area on each level.</p>'
-    + '<div class="rab-field">'
-    + '  <label class="rab-label">Number of floors</label>'
-    + '  <select class="rab-select" data-state="floors">'
-    + [1, 2, 3, 4].map(function (i) { return '<option value="' + i + '"' + (i === n ? ' selected' : '') + '>' + i + (i === 4 ? '+' : '') + ' floor' + (i === 1 ? '' : 's') + '</option>'; }).join('')
-    + '  </select>'
-    + '</div>'
-    + '<div class="rab-fields-grid">'
-    + fld('area_l1', 'Ground floor (m²)', 'e.g. 150', true)
-    + fld('area_l2', '1st floor (m²)', 'e.g. 120', n >= 2)
-    + fld('area_l3', '2nd floor (m²)', 'e.g. 100', n >= 3)
-    + fld('area_other', 'Other levels (m²)', 'e.g. 80', n >= 4)
-    + '</div>'
-    + '<div class="rab-fields-grid" style="margin-top:var(--space-3)">'
-    + '  <div class="rab-field"><label class="rab-label">Footprint (m²) <small style="color:var(--color-text-faint)">optional</small></label>'
-    + '    <input type="number" class="rab-input" data-state="footprint_m2" min="0" step="0.5" value="' + drabEsc(s.footprint_m2) + '" placeholder="defaults to ground floor"></div>'
-    + '  <div class="rab-field"><label class="rab-label">Bedrooms</label>'
-    + '    <input type="number" class="rab-input" data-state="bedrooms" min="0" step="1" value="' + drabEsc(s.bedrooms) + '" placeholder="e.g. 3"></div>'
-    + '  <div class="rab-field"><label class="rab-label">Bathrooms</label>'
-    + '    <input type="number" class="rab-input" data-state="bathrooms" min="0" step="1" value="' + drabEsc(s.bathrooms) + '" placeholder="e.g. 3"></div>'
-    + '</div>';
-}
-
-/* ---- Step 5: Extras (CSS reveals .drab-extra-area via input:checked ~) ---- */
-function drabWizStepExtras() {
-  var s = _drabWiz.state;
   function extra(flag, areaKey, label, ph, isLen) {
     var on = parseInt(s[flag], 10) === 1 || (isLen && drabNum(s[areaKey]) > 0);
     return ''
@@ -536,9 +614,33 @@ function drabWizStepExtras() {
       + '  </span>'
       + '</label>';
   }
+  var n = parseInt(s.floors, 10) || 1;
   return ''
-    + '<h4>' + drabT('drab.step_extras', 'Outdoor & extras') + '</h4>'
-    + '<p class="wizard-hint">Toggle what applies — each reveals its size.</p>'
+    + drabStepHead('Size & extras', false,
+        'The only inputs that really matter — enter at least the ground-floor area. Everything else is optional.',
+        'Built area drives most of the cost. Leave an upper floor blank and we assume it matches the floor below.')
+    + '<div class="rab-field" style="max-width:280px">'
+    + '  <label class="rab-label">Number of floors ' + drabInfoDot('Storeys above ground. Structure is itemised per storey in the result.') + '</label>'
+    + '  <select class="rab-select" data-state="floors">'
+    + [1, 2, 3, 4].map(function (i) { return '<option value="' + i + '"' + (i === n ? ' selected' : '') + '>' + i + (i === 4 ? '+' : '') + ' floor' + (i === 1 ? '' : 's') + '</option>'; }).join('')
+    + '  </select>'
+    + '</div>'
+    + '<div class="rab-fields-grid" style="margin-top:var(--space-3)">'
+    + fld('area_l1', 'Ground floor (m²)', 'e.g. 150', true)
+    + fld('area_l2', '1st floor (m²)', 'e.g. 120', n >= 2)
+    + fld('area_l3', '2nd floor (m²)', 'e.g. 100', n >= 3)
+    + fld('area_other', 'Upper floors (m²)', 'e.g. 80', n >= 4)
+    + '</div>'
+    + '<div class="rab-fields-grid" style="margin-top:var(--space-3)">'
+    + '  <div class="rab-field"><label class="rab-label">Footprint (m²) <small style="color:var(--color-text-faint)">optional</small> ' + drabInfoDot('Ground-floor outline used for foundations, slab and roof area. Defaults to the ground-floor area.') + '</label>'
+    + '    <input type="number" class="rab-input" data-state="footprint_m2" min="0" step="0.5" value="' + drabEsc(s.footprint_m2) + '" placeholder="defaults to ground floor"></div>'
+    + '  <div class="rab-field"><label class="rab-label">Bedrooms</label>'
+    + '    <input type="number" class="rab-input" data-state="bedrooms" min="0" step="1" value="' + drabEsc(s.bedrooms) + '" placeholder="e.g. 3"></div>'
+    + '  <div class="rab-field"><label class="rab-label">Bathrooms ' + drabInfoDot('Drives sanitary, waterproofing and plumbing quantities.') + '</label>'
+    + '    <input type="number" class="rab-input" data-state="bathrooms" min="0" step="1" value="' + drabEsc(s.bathrooms) + '" placeholder="e.g. 3"></div>'
+    + '</div>'
+    + '<hr style="border:none;border-top:1px solid var(--color-border);margin:var(--space-6) 0 var(--space-5)">'
+    + drabSubHead('Outdoor & extras', true, 'Toggle what applies — each reveals its size.', 'Pools, decks, rooftops, pergolas, carports and boundary walls are added as their own costed items.')
     + '<div class="drab-extras-grid">'
     + extra('has_pool', 'pool_area', 'Swimming pool', 'Pool area (m²) e.g. 32', false)
     + extra('has_rooftop', 'rooftop_area', 'Walkable rooftop', 'Rooftop area (m²) e.g. 60', false)
@@ -549,16 +651,29 @@ function drabWizStepExtras() {
     + '</div>';
 }
 
-/* ---- Step 6: Finish tier ---- */
-function drabWizStepFinish(lang) {
-  var s = _drabWiz.state;
-  var cards = (_drabWiz.meta.tiers || []).map(function (ti) {
+/* ---- Step 4: Finishes (finish tier + optional floor type) ---- */
+function drabWizStepFinishes(lang) {
+  var s = _drabWiz.state, meta = _drabWiz.meta;
+  var tierCards = (meta.tiers || []).map(function (ti) {
     return drabChoiceCard('tier', ti.code, drabName(ti, lang), drabName(ti, lang, 'description'), ti.code === s.finish_tier, '');
   }).join('');
+  var floors = meta.floors || [];
+  var floorHtml = '';
+  if (floors.length) {
+    var autoCard = drabChoiceCard('floor', '', 'Auto — match finish tier', 'Let the finish tier choose the floor for you.', s.floor_code === '', '');
+    var floorCards = floors.map(function (f) {
+      return drabChoiceCard('floor', f.code, drabName(f, lang), drabName(f, lang, 'description'), f.code === s.floor_code, drabStatusBadge(f.status));
+    }).join('');
+    floorHtml = ''
+      + '<div style="height:var(--space-6)"></div>'
+      + drabSubHead('Floor type', true, 'Pick a specific floor, or leave it on Auto to follow the finish tier.', 'Sets the indoor floor finish across the build. You can still swap any individual line later in the editor. Decking and rooftop floors are set by their own extras.')
+      + '<div class="drab-choice-grid">' + autoCard + floorCards + '</div>';
+  }
   return ''
-    + '<h4>' + drabT('drab.step_finish', 'Finish tier') + '</h4>'
-    + '<p class="wizard-hint">Sets the default specification for finishes and fixtures.</p>'
-    + '<div class="drab-choice-grid">' + cards + '</div>';
+    + drabStepHead('Finishes', true, 'How polished the result is — and what you walk on.', '')
+    + drabSubHead('Finish tier', true, '', 'Budget → Signature. Sets the default specification (and price level) for walls, ceilings, paint, fixtures and — unless you choose one below — the floor.')
+    + '<div class="drab-choice-grid">' + tierCards + '</div>'
+    + floorHtml;
 }
 
 /* ---- Step 7: Site & logistics + naming + language ---- */
@@ -577,8 +692,9 @@ function drabWizStepSite(lang) {
   var langOpts = [['en', 'English'], ['id', 'Bahasa Indonesia'], ['both', 'Both (EN / ID)']].map(function (l) { return '<option value="' + l[0] + '"' + (l[0] === s.lang ? ' selected' : '') + '>' + l[1] + '</option>'; }).join('');
 
   return ''
-    + '<h4>' + drabT('drab.step_site', 'Site & logistics') + '</h4>'
-    + '<p class="wizard-hint">Where you build changes material delivery and labour costs.</p>'
+    + drabStepHead(drabT('drab.step_site', 'Site & details'), true,
+        'Where you build changes material delivery and labour costs. Names are optional — we fill defaults if you skip them.',
+        'A Site Factor lifts material (freight) and labour (mobilisation) off the Mataram baseline, based on distance and access. Pick a preset or set it manually.')
     + '<div style="display:flex;gap:var(--space-4);flex-wrap:wrap;margin-bottom:var(--space-3)">'
     + '  <label class="rab-check-label"><input type="radio" name="drab-site-mode" value="preset"' + (s.site_mode !== 'advanced' ? ' checked' : '') + '><span>Quick — pick a zone preset</span></label>'
     + '  <label class="rab-check-label"><input type="radio" name="drab-site-mode" value="advanced"' + (s.site_mode === 'advanced' ? ' checked' : '') + '><span>Advanced — set distance & access</span></label>'
@@ -637,11 +753,11 @@ function drabWizBind(mount) {
       drabWizRender(mount);
     });
   });
-  ['structure', 'roof', 'tier'].forEach(function (group) {
+  ['structure', 'roof', 'tier', 'floor'].forEach(function (group) {
     form.querySelectorAll('[data-' + group + ']').forEach(function (b) {
       b.addEventListener('click', function () {
-        var key = group === 'tier' ? 'finish_tier' : group + '_code';
-        _drabWiz.state[key] = b.getAttribute('data-' + group);
+        var key = (group === 'tier') ? 'finish_tier' : (group === 'floor' ? 'floor_code' : group + '_code');
+        _drabWiz.state[key] = b.getAttribute('data-' + group) || '';
         form.querySelectorAll('[data-' + group + ']').forEach(function (x) { x.classList.remove('is-selected'); });
         b.classList.add('is-selected');
         drabWizRecalc();
@@ -691,7 +807,7 @@ function drabWizBind(mount) {
 }
 
 function drabWizGoto(step, mount) {
-  _drabWiz.step = Math.max(1, Math.min(7, step));
+  _drabWiz.step = Math.max(1, Math.min(DRAB_WIZ_LAST, step));
   drabWizRender(mount);
 }
 
@@ -747,6 +863,7 @@ function drabWizState() {
     building_name: (s.building_name || '').trim() || 'Building 1',
     style_code: s.style_code, structure_code: s.structure_code, roof_code: s.roof_code,
     finish_tier: s.finish_tier,
+    floor_code: s.floor_code || '',
     floors: parseInt(s.floors, 10) || 1,
     area_l1: ea.a1, area_l2: ea.a2, area_l3: ea.a3, area_other: ea.ao,
     footprint_m2: drabNum(s.footprint_m2),
@@ -774,7 +891,7 @@ async function drabWizGenerate(btn) {
   var body = drabWizState();
   if (body._floorArea <= 0) {
     drabToast('Please enter the built area for at least the ground floor.', 'error');
-    drabWizGoto(4, document.getElementById('drab-wiz-mount'));
+    drabWizGoto(3, document.getElementById('drab-wiz-mount'));
     return;
   }
   delete body._floorArea;
@@ -830,17 +947,7 @@ async function renderDrabDevelopments(el) {
         + '</div>';
       return;
     }
-    list.innerHTML = '<div class="rdtl-projects-list">' + devs.map(function (d) {
-      return ''
-        + '<a class="rdtl-project-card" href="#drab-dev/' + d.id + '" onclick="drabNav(\'drab-dev/' + d.id + '\');return false;">'
-        + '  <div class="rdtl-project-info">'
-        + '    <h3 class="rdtl-project-name">' + drabEsc(d.name) + '</h3>'
-        + '    <p class="rdtl-project-meta">' + (d.location_text ? drabEsc(d.location_text) + ' · ' : '')
-        + (d.building_count || 0) + ' building' + ((d.building_count || 0) === 1 ? '' : 's') + '</p>'
-        + '  </div>'
-        + '  <div class="rdtl-project-right"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--color-text-faint)"><path d="M9 18l6-6-6-6"/></svg></div>'
-        + '</a>';
-    }).join('') + '</div>'
+    list.innerHTML = '<div class="rdtl-projects-list">' + devs.map(function (d) { return drabDevCard(d); }).join('') + '</div>'
       + (!res.json.can_save_multi ? '<p style="margin-top:var(--space-3);color:var(--color-text-faint);font-size:var(--text-sm)">Free plan keeps one project. <a href="#" onclick="drabShowUpgrade(\'drab_save_multi\');return false;">Upgrade to manage more</a>.</p>' : '');
   } catch (e) {
     el.querySelector('#drab-dev-list').innerHTML = drabErrorCard(e.message);
@@ -896,6 +1003,10 @@ async function renderDrabDevelopment(el, devId) {
       + '  <div>'
       + '    <h2 class="rdtl-proj-title">' + drabEsc(dev.name) + '</h2>'
       + '    <p class="rdtl-proj-meta">' + (dev.location_text ? drabEsc(dev.location_text) + ' · ' : '') + drabEsc(dev.base_zone || '') + '</p>'
+      + '    <div class="drab-dev-toolbar">'
+      + '      <button class="btn btn--ghost btn--sm" data-drab-tip="Rename this project" onclick="drabRenameDevelopment(' + devId + ',\'' + drabOnclickArg(dev.name) + '\')">✎ Rename</button>'
+      + '      <button class="btn btn--ghost btn--sm drab-btn-danger" data-drab-tip="Delete this project and all its buildings &amp; RABs" onclick="drabDeleteDevelopment(' + devId + ',\'' + drabOnclickArg(dev.name) + '\',true)">✕ Delete project</button>'
+      + '    </div>'
       + '  </div>'
       + '  <div class="drab-summary-cell drab-summary-cell--grand">'
       + '    <span class="drab-summary-k">Development total</span>'
@@ -920,6 +1031,53 @@ function drabDeleteBuilding(buildingId, devId) {
       if (typeof router === 'function') { try { router(); } catch (e) {} }
     } else drabToast('Could not delete the building.', 'error');
   });
+}
+
+/* Re-run the current route in place (used after rename/delete on a list view). */
+function drabRerouteCurrent() {
+  if (typeof router === 'function') { try { router(); return; } catch (e) {} }
+  drabNav((window.location.hash || '#drab-dashboard').replace(/^#/, ''));
+}
+function drabRenameDevelopment(devId, currentName) {
+  var name = window.prompt('Rename this project:', currentName || '');
+  if (name === null) return;
+  name = name.trim();
+  if (!name) { drabToast('Project name cannot be empty.', 'error'); return; }
+  drabPost('save_development', { id: devId, name: name }).then(function (res) {
+    if (res.json && res.json.ok) { drabToast('Project renamed.', 'success'); drabRerouteCurrent(); }
+    else drabToast('Could not rename the project.', 'error');
+  });
+}
+function drabDeleteDevelopment(devId, name, fromDevPage) {
+  var label = name ? '“' + name + '”' : 'this project';
+  if (!window.confirm('Delete ' + label + ' and all of its buildings and RABs? This cannot be undone.')) return;
+  drabPost('delete_development', { id: devId }).then(function (res) {
+    if (res.json && res.json.ok) {
+      drabToast('Project deleted.', 'success');
+      if (fromDevPage) drabNav('drab-dashboard');
+      else drabRerouteCurrent();
+    } else drabToast('Could not delete the project.', 'error');
+  });
+}
+
+/* One development row with open + rename + delete (not wrapped in <a> so the
+   action buttons are valid and don't trigger navigation). */
+function drabDevCard(d) {
+  var meta = (d.location_text ? drabEsc(d.location_text) + ' · ' : '')
+    + (d.building_count || 0) + ' building' + ((d.building_count || 0) === 1 ? '' : 's');
+  return ''
+    + '<div class="rdtl-project-card drab-dev-card">'
+    + '  <div class="rdtl-project-info drab-dev-open" role="link" tabindex="0"'
+    + '       onclick="drabNav(\'drab-dev/' + d.id + '\')" onkeydown="if(event.key===\'Enter\'){drabNav(\'drab-dev/' + d.id + '\')}">'
+    + '    <h3 class="rdtl-project-name">' + drabEsc(d.name) + '</h3>'
+    + '    <p class="rdtl-project-meta">' + meta + '</p>'
+    + '  </div>'
+    + '  <div class="drab-dev-actions">'
+    + '    <button class="rdtl-btn-icon" title="Rename project" data-drab-tip="Rename this project" onclick="drabRenameDevelopment(' + d.id + ',\'' + drabOnclickArg(d.name) + '\')">✎</button>'
+    + '    <button class="rdtl-btn-icon rdtl-btn-icon--danger" title="Delete project" data-drab-tip="Delete this project and all its buildings" onclick="drabDeleteDevelopment(' + d.id + ',\'' + drabOnclickArg(d.name) + '\',false)">✕</button>'
+    + '    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--color-text-faint);flex-shrink:0"><path d="M9 18l6-6-6-6"/></svg>'
+    + '  </div>'
+    + '</div>';
 }
 
 /* =====================================================================
@@ -994,23 +1152,23 @@ function drabEditorRender(mount) {
     + '  <div style="display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap">'
     + drabLangToggle(lang)
     + drabSplitToggle(caps, combined)
-    + '    <button class="btn btn--outline btn--sm" onclick="drabRegenerate()">Regenerate</button>'
+    + '    <button class="btn btn--outline btn--sm" data-drab-tip="Re-run the generator from this building\'s inputs as a new version (replaces the current lines)." onclick="drabRegenerate()">Regenerate</button>'
     + drabExportMenu(rab, caps)
-    + '    <button class="btn btn--ghost btn--sm" onclick="drabShowUpgrade(\'drab_templates\')">Save as template</button>'
+    + '    <button class="btn btn--ghost btn--sm" data-drab-tip="Save this RAB as a reusable template (premium)." onclick="drabShowUpgrade(\'drab_templates\')">Save as template</button>'
     + '  </div>'
     + '</div>';
 
   // ----- Summary strip -----
-  function cell(k, v, id, extraClass) {
-    return '<div class="drab-summary-cell' + (extraClass || '') + '">'
+  function cell(k, v, id, extraClass, tip) {
+    return '<div class="drab-summary-cell' + (extraClass || '') + '"' + (tip ? ' data-drab-tip="' + drabEsc(tip) + '"' : '') + '>'
       + '<span class="drab-summary-k">' + drabEsc(k) + '</span>'
       + '<span class="drab-summary-v" id="' + id + '">' + v + '</span></div>';
   }
   var summary = '<div class="drab-summary-strip">'
-    + cell('Material', drabIDR(t.material), 'drab-sum-material')
-    + cell('Labour', drabIDR(t.labour), 'drab-sum-labour')
-    + cell('Cost / m² (indoor)', (costPerM2 ? drabIDR(costPerM2) : '—'), 'drab-sum-perm2')
-    + cell('Grand total', drabIDR(t.grand), 'drab-sum-grand', ' drab-summary-cell--grand')
+    + cell('Material', drabIDR(t.material), 'drab-sum-material', '', 'Total material cost across all four disciplines.')
+    + cell('Labour', drabIDR(t.labour), 'drab-sum-labour', '', 'Total labour cost across all four disciplines.')
+    + cell('Cost / m² (indoor)', (costPerM2 ? drabIDR(costPerM2) : '—'), 'drab-sum-perm2', '', 'Grand total ÷ indoor floor area — a quick benchmark.')
+    + cell('Grand total', drabIDR(t.grand), 'drab-sum-grand', ' drab-summary-cell--grand', 'Direct construction cost, plus any markups & tax you switch on below.')
     + '</div>'
     + drabAreaSchedule(rab.area_schedule || {});
 
@@ -1031,6 +1189,7 @@ function drabEditorRender(mount) {
   mount.innerHTML = header + summary + tabsHtml + '<div id="drab-disc-area"></div>' + markups;
   drabRenderDiscArea(combined);
   drabBindMarkups();
+  drabTipInit();
 }
 
 function drabLangToggle(lang) {
@@ -1196,12 +1355,16 @@ function drabSummaryTab(rab) {
     + '</div>';
 }
 
+function drabTh(label, cls, tip) {
+  return '<th' + (cls ? ' class="' + cls + '"' : '') + (tip ? ' data-drab-tip="' + drabEsc(tip) + '"' : '') + '>' + label + '</th>';
+}
 function drabSectionCard(sec, combined, caps) {
   var lang = _drabEditor.lang;
   var headCols = combined
-    ? '<th>Ref</th><th>Description</th><th class="drab-cat-rate">Qty</th><th>Unit</th><th class="drab-cat-rate">Unit price</th><th class="drab-cat-rate">Amount</th><th></th>'
-    : '<th>Ref</th><th>Description</th><th class="drab-cat-rate">Qty</th><th>Unit</th><th class="drab-cat-mat">Material</th><th class="drab-cat-lab">Labour</th><th class="drab-cat-rate">Amount</th><th></th>';
-  var colspan = combined ? 7 : 8;
+    ? drabTh('Ref', '', 'Reference code (section.line).') + drabTh('Description') + drabTh('Qty', 'drab-cat-rate', 'Quantity — a single number, or the sum of its take-off rows.') + drabTh('Unit', '', 'Unit of measure.') + drabTh('Unit price', 'drab-cat-rate', 'Supply &amp; install rate per unit (material + labour combined).') + drabTh('Amount', 'drab-cat-rate', 'Quantity × unit price.') + drabTh('Pricing', 'drab-cat-conf', 'How reliable this rate is — Confirmed (real BoQ/contract) or Indicative (regional ball-park).') + '<th></th>'
+    : drabTh('Ref', '', 'Reference code (section.line).') + drabTh('Description') + drabTh('Qty', 'drab-cat-rate', 'Quantity — a single number, or the sum of its take-off rows.') + drabTh('Unit', '', 'Unit of measure.') + drabTh('Material', 'drab-cat-mat', 'Material component of the unit rate.') + drabTh('Labour', 'drab-cat-lab', 'Labour component of the unit rate.') + drabTh('Amount', 'drab-cat-rate', 'Quantity × (material + labour).') + drabTh('Pricing', 'drab-cat-conf', 'How reliable this rate is — Confirmed (real BoQ/contract) or Indicative (regional ball-park).') + '<th></th>';
+  var colspan = combined ? 8 : 9;
+  var amountIdx = combined ? 6 : 7; // 1-based column of "Amount"
 
   var itemsHtml = (sec.items || []).map(function (it) { return drabItemRow(it, sec.id, combined, caps); }).join('');
 
@@ -1210,16 +1373,18 @@ function drabSectionCard(sec, combined, caps) {
     + '  <div class="rdtl-section-header">'
     + '    <h4 class="rdtl-section-name"><span style="color:var(--color-text-faint);font-variant-numeric:tabular-nums;margin-right:var(--space-2)">' + drabEsc(sec.code) + '</span>'
     + '      <span id="drab-secname-' + sec.id + '">' + drabEsc(drabName(sec, lang)) + '</span>'
-    + '      <button class="rdtl-btn-icon" title="Rename section" onclick="drabRenameSection(' + sec.id + ')">✎</button></h4>'
+    + '      <button class="rdtl-btn-icon" title="Rename section" data-drab-tip="Rename this section." onclick="drabRenameSection(' + sec.id + ')">✎</button></h4>'
     + '    <div class="rdtl-section-actions">'
-    + '      <span class="rdtl-section-total">' + drabIDR(sec.total) + '</span>'
-    + '      <button class="rdtl-btn-icon rdtl-btn-icon--danger" title="Delete section" onclick="drabDeleteSection(' + sec.id + ')">✕</button>'
+    + '      <span class="rdtl-section-total" data-drab-tip="Section sub-total (material + labour).">' + drabIDR(sec.total) + '</span>'
+    + '      <button class="rdtl-btn-icon rdtl-btn-icon--danger" title="Delete section" data-drab-tip="Delete this section and all its items." onclick="drabDeleteSection(' + sec.id + ')">✕</button>'
     + '    </div>'
     + '  </div>'
     + '  <div class="rdtl-items-table-wrap"><table class="rdtl-items-table drab-catalog-table">'
     + '    <thead><tr>' + headCols + '</tr></thead>'
     + '    <tbody>' + itemsHtml + '</tbody>'
-    + '    <tfoot><tr><td colspan="' + (colspan - 1) + '" style="text-align:right;font-weight:600">Sub-total</td><td class="drab-cat-rate" style="font-weight:700">' + drabIDR(sec.total) + '</td></tr></tfoot>'
+    + '    <tfoot><tr><td colspan="' + (amountIdx - 1) + '" style="text-align:right;font-weight:600">Sub-total</td>'
+    + '      <td class="drab-cat-rate" style="font-weight:700">' + drabIDR(sec.total) + '</td>'
+    + '      <td colspan="' + (colspan - amountIdx) + '"></td></tr></tfoot>'
     + '  </table></div>'
     + '  <div class="drab-add-item" style="margin-top:var(--space-2)"><button class="btn btn--ghost btn--sm" onclick="drabAddItem(' + sec.id + ')">+ Add item</button></div>'
     + '</div>';
@@ -1228,56 +1393,62 @@ function drabSectionCard(sec, combined, caps) {
 function drabItemRow(it, sectionId, combined, caps) {
   var lang = _drabEditor.lang;
   var name = drabName(it, lang);
-  var badges = '';
-  if (parseInt(it.is_pc_sum, 10) === 1) badges += ' <span class="drab-badge drab-badge--pc">PC Sum</span>';
-  badges += ' ' + drabConfidenceBadge(it.confidence, it.confirmed_locked);
-
   var locked = parseInt(it.confirmed_locked, 10) === 1;
+
+  var badges = '';
+  if (parseInt(it.is_pc_sum, 10) === 1) badges += '<span class="drab-badge drab-badge--pc" data-drab-tip="Prime-Cost Sum — a provisional allowance to be confirmed later.">PC Sum</span>';
+
   var priceCells;
   if (locked) {
-    var mask = '<td class="drab-cat-rate"><span class="drab-locked-veil" onclick="drabShowUpgrade(\'drab_confirmed_pricing\')"><span class="drab-locked-amount">Rp •••</span> ✦</span></td>';
+    var mask = '<td class="drab-cat-rate"><span class="drab-locked-veil" data-drab-tip="Confirmed contract-grade rate — upgrade to reveal." onclick="drabShowUpgrade(\'drab_confirmed_pricing\')"><span class="drab-locked-amount">Rp •••</span> ✦</span></td>';
     priceCells = combined ? mask : (mask + mask);
   } else if (combined) {
     priceCells = '<td class="drab-cat-rate">' + drabIDR(it.rate) + '</td>';
   } else {
     priceCells = '<td class="drab-cat-mat">' + drabIDR(it.material_rate) + '</td><td class="drab-cat-lab">' + drabIDR(it.labour_rate) + '</td>';
   }
+  var amountCell = locked
+    ? '<td class="drab-cat-rate"><span class="drab-locked-veil" data-drab-tip="Upgrade to reveal confirmed pricing." onclick="drabShowUpgrade(\'drab_confirmed_pricing\')"><span class="drab-locked-amount">Rp •••</span> ✦</span></td>'
+    : '<td class="drab-cat-rate" style="font-weight:600">' + drabIDR(it.line_total) + '</td>';
 
-  var ahspLink = it.work_item_id
-    ? ' <button class="drab-takeoff-add" title="How is this rate derived?" onclick="drabShowAhsp(' + it.work_item_id + ')">how?</button>'
+  // The "how?" build-up link only appears where there is a real AHSP breakdown.
+  var ahspLink = (it.work_item_id && parseInt(it.has_buildup, 10) === 1)
+    ? ' <button class="drab-howbtn" data-drab-tip="See how this unit rate is built up from material, labour &amp; equipment coefficients." onclick="drabShowAhsp(' + it.work_item_id + ')">how?</button>'
     : '';
   var swapBtn = it.slot_code
-    ? '<button class="rdtl-btn-icon" title="Swap specification" onclick="drabShowSwap(' + it.id + ',\'' + drabAttr(it.slot_code) + '\')">⇄</button>'
+    ? '<button class="rdtl-btn-icon" title="Swap specification" data-drab-tip="Swap this line to an alternative spec for the same slot (e.g. a different floor or wall finish)." onclick="drabShowSwap(' + it.id + ',\'' + drabAttr(it.slot_code) + '\')">⇄</button>'
     : '';
   var takeoffHint = parseInt(it.has_takeoff, 10) === 1
-    ? '<span class="drab-takeoff-flag" onclick="drabShowTakeoff(' + it.id + ')">≡ take-off</span>'
+    ? '<span class="drab-takeoff-flag" data-drab-tip="Quantity is the sum of measured take-off rows. Click to view or edit." onclick="drabShowTakeoff(' + it.id + ')">≡ take-off</span>'
     : '';
+  var subline = (badges || takeoffHint) ? '<div style="margin-top:2px">' + badges + (badges && takeoffHint ? ' ' : '') + takeoffHint + '</div>' : '';
 
   return ''
     + '<tr class="drab-item-row" data-item-id="' + it.id + '">'
     + '  <td class="drab-cat-code">' + drabEsc(it.ref_code) + '</td>'
     + '  <td><div>' + drabEsc(name) + ahspLink + '</div>'
-    + '<div style="margin-top:2px">' + badges + (takeoffHint ? ' ' + takeoffHint : '') + '</div>'
+    + subline
     + (it.remark ? '<div style="font-size:var(--text-xs);color:var(--color-text-faint)">' + drabEsc(it.remark) + '</div>' : '')
     + '  </td>'
     + '  <td class="drab-cat-rate">' + drabQtyFmt(it.quantity) + '</td>'
     + '  <td>' + drabEsc(it.unit_code || '') + '</td>'
     + priceCells
-    + '  <td class="drab-cat-rate" style="font-weight:600">' + drabIDR(it.line_total) + '</td>'
+    + amountCell
+    + '  <td class="drab-cat-conf">' + drabConfidenceBadge(it.confidence, it.confirmed_locked) + '</td>'
     + '  <td class="drab-cat-add">'
     + swapBtn
-    + '    <button class="rdtl-btn-icon" title="Break into take-off" onclick="drabShowTakeoff(' + it.id + ')">≡</button>'
-    + '    <button class="rdtl-btn-icon" title="Edit" onclick="drabEditItem(' + it.id + ',' + sectionId + ')">✎</button>'
-    + '    <button class="rdtl-btn-icon rdtl-btn-icon--danger" title="Delete" onclick="drabDeleteItem(' + it.id + ')">✕</button>'
+    + '    <button class="rdtl-btn-icon" title="Break into take-off" data-drab-tip="Split the quantity into measured take-off rows." onclick="drabShowTakeoff(' + it.id + ')">≡</button>'
+    + '    <button class="rdtl-btn-icon" title="Edit" data-drab-tip="Edit description, unit, quantity and rates." onclick="drabEditItem(' + it.id + ',' + sectionId + ')">✎</button>'
+    + '    <button class="rdtl-btn-icon rdtl-btn-icon--danger" title="Delete" data-drab-tip="Delete this line." onclick="drabDeleteItem(' + it.id + ')">✕</button>'
     + '  </td>'
     + '</tr>';
 }
 
 function drabConfidenceBadge(conf, locked) {
-  if (parseInt(locked, 10) === 1) return '<span class="drab-badge drab-badge--locked" title="Confirmed rate — upgrade to reveal">Confirmed ✦</span>';
-  if (conf === 'confirmed') return '<span class="drab-badge drab-badge--confirmed">Confirmed</span>';
-  if (conf === 'derived') return '<span class="drab-badge drab-badge--indicative">Derived</span>';
-  return '<span class="drab-badge drab-badge--indicative">Indicative</span>';
+  if (parseInt(locked, 10) === 1) return '<span class="drab-badge drab-badge--locked" data-drab-tip="Confirmed contract-grade rate — upgrade to reveal the number.">Confirmed ✦</span>';
+  if (conf === 'confirmed') return '<span class="drab-badge drab-badge--confirmed" data-drab-tip="Confirmed — from a real BoQ, paid invoice or contractor agreement.">Confirmed</span>';
+  if (conf === 'derived') return '<span class="drab-badge drab-badge--indicative" data-drab-tip="Derived — calculated from a confirmed base price (e.g. retail + freight).">Derived</span>';
+  return '<span class="drab-badge drab-badge--indicative" data-drab-tip="Indicative — a regional ball-park, not yet confirmed by a real quote.">Indicative</span>';
 }
 
 /* ----- Editor header actions ----- */
@@ -1671,7 +1842,10 @@ function drabCatalogSearch(q, disc) {
         + '</tr>';
     }).join('');
     results.innerHTML = '<div class="drab-catalog"><div class="drab-catalog-table-wrap"><table class="drab-catalog-table">'
-      + '<thead><tr><th>Code</th><th>Item</th><th>Unit</th><th class="drab-cat-mat">Material</th><th class="drab-cat-lab">Labour</th><th class="drab-cat-rate">Rate</th></tr></thead>'
+      + '<thead><tr><th>Code</th><th>Item</th><th data-drab-tip="Unit of measure.">Unit</th>'
+      + '<th class="drab-cat-mat" data-drab-tip="Material component of the supply &amp; install rate.">Material</th>'
+      + '<th class="drab-cat-lab" data-drab-tip="Labour component of the supply &amp; install rate.">Labour</th>'
+      + '<th class="drab-cat-rate" data-drab-tip="Combined supply &amp; install rate per unit.">Rate</th></tr></thead>'
       + '<tbody>' + rows + '</tbody></table></div></div>';
   }).catch(function () { results.innerHTML = drabErrorCard('Search failed.'); });
 }
@@ -1713,4 +1887,9 @@ window.drabShowSwap = drabShowSwap;
 window.drabDoSwap = drabDoSwap;
 window.drabShowAhsp = drabShowAhsp;
 window.drabDeleteBuilding = drabDeleteBuilding;
+window.drabRenameDevelopment = drabRenameDevelopment;
+window.drabDeleteDevelopment = drabDeleteDevelopment;
 window.drabReloadEditor = drabReloadEditor;
+
+/* Activate tooltips for the whole SPA session (idempotent, delegated on document). */
+if (typeof document !== 'undefined') { try { drabTipInit(); } catch (e) {} }

@@ -1034,6 +1034,202 @@
 }
 
 /* ---------------------------------------------------------------------
+   15. TOOLTIPS  (floating bubble, body-anchored so tables never clip it)
+   --------------------------------------------------------------------- */
+.drab-tip {
+  position: absolute;
+  z-index: 1200;
+  max-width: 264px;
+  padding: 8px 11px;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 400;
+  line-height: 1.42;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: normal;
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+  display: none;
+}
+
+/* small round “i” info affordance */
+.drab-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-offset);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  font-family: var(--font-display, Georgia, serif);
+  font-size: 0.7rem;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+  vertical-align: middle;
+  user-select: none;
+  transition: background var(--transition-interactive), color var(--transition-interactive), border-color var(--transition-interactive);
+}
+.drab-info:hover,
+.drab-info:focus-visible {
+  background: var(--color-accent-highlight);
+  color: var(--color-accent);
+  border-color: color-mix(in oklab, var(--color-accent) 45%, var(--color-border));
+  outline: none;
+}
+
+/* the small "how?" rate build-up link in editor rows */
+.drab-howbtn {
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: var(--color-accent);
+  background: none;
+  border: none;
+  border-bottom: 1px dotted currentColor;
+  cursor: help;
+  padding: 0 1px;
+  font-family: var(--font-body);
+}
+.drab-howbtn:hover { background: var(--color-accent-highlight); }
+
+/* ---------------------------------------------------------------------
+   16. WIZARD: optional/required pills, step headings, compact mobile steps
+   --------------------------------------------------------------------- */
+.drab-optional-pill,
+.drab-required-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  cursor: help;
+}
+.drab-optional-pill {
+  color: var(--color-text-muted);
+  background: var(--color-surface-offset);
+  border: 1px solid var(--color-border);
+}
+.drab-required-pill {
+  color: var(--color-accent-hover);
+  background: var(--color-accent-highlight);
+  border: 1px solid color-mix(in oklab, var(--color-accent) 35%, transparent);
+}
+
+.drab-step-head,
+.drab-sub-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.drab-step-head { margin-bottom: var(--space-1); }
+.drab-wizard .drab-step-head h4 { margin-bottom: 0; }
+.drab-sub-head { margin-top: var(--space-3); margin-bottom: var(--space-1); }
+.drab-sub-title {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-heading, var(--color-text));
+  margin: 0;
+}
+.drab-default-note {
+  font-size: var(--text-xs);
+  color: var(--color-text-faint);
+  margin: 0 0 var(--space-3);
+}
+.drab-default-note strong { color: var(--color-text-muted); font-weight: 600; }
+
+/* compact "Step N of M" progress (shown on narrow screens, replaces the tab row) */
+.drab-wiz-msteps { display: none; padding: var(--space-4) var(--space-5) 0; }
+.drab-wiz-msteps-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+.drab-wiz-msteps-row span {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+.drab-wiz-msteps-row strong {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  color: var(--color-primary);
+  text-align: right;
+}
+.drab-wiz-mbar {
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-dynamic);
+  overflow: hidden;
+}
+.drab-wiz-mbar span {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+  border-radius: var(--radius-full);
+  transition: width 240ms ease;
+}
+
+/* ---------------------------------------------------------------------
+   17. DEVELOPMENT CARDS WITH ACTIONS (rename / delete) + dev toolbar
+   --------------------------------------------------------------------- */
+.drab-dev-card {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+.drab-dev-open {
+  flex: 1 1 auto;
+  min-width: 0;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.drab-dev-open:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+  border-radius: var(--radius-md);
+}
+.drab-dev-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+.drab-dev-toolbar {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: var(--space-3);
+}
+.drab-btn-danger { color: var(--color-error); }
+.drab-btn-danger:hover {
+  color: var(--color-error);
+  background: var(--color-error-highlight);
+  border-color: color-mix(in oklab, var(--color-error) 35%, var(--color-border));
+}
+
+/* pricing-confidence column in the editor item tables */
+.drab-cat-conf { text-align: left; white-space: nowrap; }
+
+/* ---------------------------------------------------------------------
    13. MOBILE RESPONSIVE
    --------------------------------------------------------------------- */
 @media (max-width: 720px) {
@@ -1072,8 +1268,31 @@
   .drab-extra-switch::after,
   .drab-switch-slider::before,
   .drab-ballpark-value,
+  .drab-wiz-mbar span,
   .drab-slot-menu {
     transition: none !important;
     animation: none !important;
   }
+}
+
+/* ---------------------------------------------------------------------
+   18. MOBILE — Detailed RAB wizard & editor specifics
+   --------------------------------------------------------------------- */
+@media (max-width: 640px) {
+  /* Replace the cramped step-tab row with a compact "Step N of M" + progress. */
+  .drab-wizard .wizard-stepper { display: none; }
+  .drab-wizard .drab-wiz-msteps { display: block; }
+
+  /* Stack the dev-card actions tidily and keep tap targets comfortable. */
+  .drab-dev-actions .rdtl-btn-icon { width: 34px; height: 34px; }
+  .drab-dev-toolbar .btn { flex: 1 1 auto; }
+
+  /* Info dots are the primary way mobile users reveal help — make them tappable. */
+  .drab-info { width: 22px; height: 22px; font-size: 0.82rem; }
+}
+
+@media (max-width: 520px) {
+  /* The editor item tables gained a Pricing column — keep them scrollable. */
+  .rdtl-items-table.drab-catalog-table { min-width: 660px; }
+  .drab-step-head h4 { font-size: var(--text-base); }
 }

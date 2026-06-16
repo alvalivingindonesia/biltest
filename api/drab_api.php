@@ -123,6 +123,50 @@ function new_line_id() {
     $b = random_bytes(8);
     return 'L' . bin2hex($b);
 }
+// Schema-tolerance helpers: the UX-pass migration (floors, floor_code, per_level)
+// may not have run yet on a given environment. These let the API degrade to the
+// pre-migration behaviour instead of fatally erroring on a missing column/table.
+function drab_table_exists($db, $table) {
+    static $cache = array();
+    if (array_key_exists($table, $cache)) return $cache[$table];
+    try {
+        $st = $db->prepare("SELECT COUNT(*) c FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?");
+        $st->execute(array($table));
+        $r = $st->fetch();
+        $cache[$table] = $r ? ((int)$r['c'] > 0) : false;
+    } catch (Exception $e) { $cache[$table] = false; }
+    return $cache[$table];
+}
+function drab_has_column($db, $table, $col) {
+    static $cache = array();
+    $k = $table . '.' . $col;
+    if (array_key_exists($k, $cache)) return $cache[$k];
+    try {
+        $st = $db->prepare("SELECT COUNT(*) c FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=? AND column_name=?");
+        $st->execute(array($table, $col));
+        $r = $st->fetch();
+        $cache[$k] = $r ? ((int)$r['c'] > 0) : false;
+    } catch (Exception $e) { $cache[$k] = false; }
+    return $cache[$k];
+}
+// Resolve a chosen floor type (drab_floors.code) to its floor_finish work item id.
+function drab_floor_work_item_id($db, $floor_code) {
+    if (!$floor_code || !drab_table_exists($db, 'drab_floors')) return 0;
+    $st = $db->prepare("SELECT wi.id FROM drab_floors f JOIN drab_work_items wi ON wi.code=f.work_item_code
+        WHERE f.code=? AND f.is_active=1 AND wi.is_active=1 LIMIT 1");
+    $st->execute(array($floor_code));
+    $r = $st->fetch();
+    return $r ? (int)$r['id'] : 0;
+}
+// Bilingual section name for a per-storey superstructure block (matches the
+// wizard's own floor labels: area_l1 = Ground floor, area_l2 = 1st floor, …).
+function drab_storey_section_name($i, $multi) {
+    if (!$multi) return array('SUPERSTRUCTURE (FRAME & SLABS)', 'STRUKTUR ATAS (RANGKA & PELAT)');
+    $en = array(1 => 'GROUND FLOOR STRUCTURE', 2 => '1ST FLOOR STRUCTURE', 3 => '2ND FLOOR STRUCTURE');
+    $idn = array(1 => 'STRUKTUR LANTAI DASAR', 2 => 'STRUKTUR LANTAI 1', 3 => 'STRUKTUR LANTAI 2');
+    if (isset($en[$i])) return array($en[$i], $idn[$i]);
+    return array('UPPER FLOORS STRUCTURE', 'STRUKTUR LANTAI ATAS');
+}
 
 // ─── ROUTER ──────────────────────────────────────────────────────────────────
 $action = isset($_GET['action']) ? $_GET['action'] : '';
@@ -176,6 +220,11 @@ function handle_meta() {
         'units'       => $db->query("SELECT id,code,name_en,name_id FROM drab_units ORDER BY sort_order")->fetchAll(),
         'spec_slots'  => $db->query("SELECT code,name_en,name_id FROM drab_spec_slots ORDER BY sort_order")->fetchAll(),
     );
+    // Floor types are an optional wizard axis added by the UX-pass migration; if it
+    // hasn't run yet just return an empty list and the wizard hides the Floor cards.
+    $out['floors'] = drab_table_exists($db, 'drab_floors')
+        ? $db->query("SELECT code,name_en,name_id,description_en,description_id,status FROM drab_floors WHERE is_active=1 ORDER BY sort_order")->fetchAll()
+        : array();
     json_out(array('ok' => true, 'meta' => $out));
 }
 
@@ -300,6 +349,27 @@ function drab_generate_rab($db, $rab_id, $b, $dev, $allow_confirmed) {
     $sf = drab_site_factor($db, $dev['distance_band'], $dev['access_level']);
     $mat_pct = $sf[0]; $lab_pct = $sf[1];
 
+    // optional explicit floor choice — overrides the finish-tier default for the floor slot
+    $floor_wi = (!empty($b['floor_code'])) ? drab_floor_work_item_id($db, $b['floor_code']) : 0;
+
+    // effective per-storey areas — mirror the wizard so a blank upper level is
+    // assumed equal to the one below rather than silently dropping a storey.
+    $floors_n = (int)$b['floors']; if ($floors_n < 1) $floors_n = 1;
+    $a1 = (float)$b['area_l1']; $a2 = (float)$b['area_l2']; $a3 = (float)$b['area_l3']; $ao = (float)$b['area_other'];
+    if ($floors_n >= 2 && $a2 <= 0) $a2 = $a1;
+    if ($floors_n >= 3 && $a3 <= 0) $a3 = ($a2 > 0 ? $a2 : $a1);
+    if ($floors_n < 2) $a2 = 0;
+    if ($floors_n < 3) $a3 = 0;
+    if ($floors_n < 4) $ao = 0;
+    $levels = array();
+    if ($a1 > 0) $levels[] = array('i' => 1, 'area' => $a1);
+    if ($a2 > 0) $levels[] = array('i' => 2, 'area' => $a2);
+    if ($a3 > 0) $levels[] = array('i' => 3, 'area' => $a3);
+    if ($ao > 0) $levels[] = array('i' => 4, 'area' => $ao);
+    if (!$levels) $levels[] = array('i' => 1, 'area' => ($a1 > 0 ? $a1 : 1.0));
+    $level_sum = 0.0; foreach ($levels as $lv) $level_sum += $lv['area'];
+    $multi_level = count($levels) > 1;
+
     // which scopes apply
     $scopes = array(array('shared',''),
                     array('structure', $b['structure_code']),
@@ -319,23 +389,37 @@ function drab_generate_rab($db, $rab_id, $b, $dev, $allow_confirmed) {
     $disc_order = array('PREP' => 0, 'STR' => 1, 'ARCH' => 2, 'MEP' => 3);
     $disc_letter = array('PREP' => 'P', 'STR' => 'A', 'ARCH' => 'B', 'MEP' => 'C');
 
-    // group into sections preserving order: key = discipline|section_group
+    // group into sections preserving first-seen order. $sectionAdd appends an item,
+    // creating the section on first use (key = discipline|group).
     $sections = array(); $secOrder = array();
+    $sectionAdd = function($key, $disc, $name_en, $name_id, $item) use (&$sections, &$secOrder) {
+        if (!isset($sections[$key])) {
+            $sections[$key] = array('discipline' => $disc, 'name_en' => $name_en, 'name_id' => $name_id, 'items' => array());
+            $secOrder[] = $key;
+        }
+        $sections[$key]['items'][] = $item;
+    };
+
     foreach ($lines as $ln) {
         if (!drab_applies($ln['applies_when'], $b)) continue;
         // resolve work item
         $wi_id = $ln['work_item_id'];
         if (!$wi_id && $ln['slot_code']) {
-            $so = $db->prepare("SELECT work_item_id FROM drab_slot_options WHERE slot_code=? AND tier_code=? AND is_default=1 LIMIT 1");
-            $so->execute(array($ln['slot_code'], $tier));
-            $srow = $so->fetch();
-            if (!$srow) {
-                $so2 = $db->prepare("SELECT work_item_id FROM drab_slot_options WHERE slot_code=? LIMIT 1");
-                $so2->execute(array($ln['slot_code']));
-                $srow = $so2->fetch();
+            // an explicit floor choice wins for the floor_finish slot
+            if ($ln['slot_code'] === 'floor_finish' && $floor_wi) {
+                $wi_id = $floor_wi;
+            } else {
+                $so = $db->prepare("SELECT work_item_id FROM drab_slot_options WHERE slot_code=? AND tier_code=? AND is_default=1 LIMIT 1");
+                $so->execute(array($ln['slot_code'], $tier));
+                $srow = $so->fetch();
+                if (!$srow) {
+                    $so2 = $db->prepare("SELECT work_item_id FROM drab_slot_options WHERE slot_code=? LIMIT 1");
+                    $so2->execute(array($ln['slot_code']));
+                    $srow = $so2->fetch();
+                }
+                if (!$srow) continue;
+                $wi_id = $srow['work_item_id'];
             }
-            if (!$srow) continue;
-            $wi_id = $srow['work_item_id'];
         }
         if (!$wi_id) continue;
         $wq = $db->prepare("SELECT wi.*, u.code AS unit_code FROM drab_work_items wi JOIN drab_units u ON u.id=wi.unit_id WHERE wi.id=?");
@@ -350,19 +434,8 @@ function drab_generate_rab($db, $rab_id, $b, $dev, $allow_confirmed) {
         $pr = drab_resolve_price($db, $wi_id, $base_zone, $allow_confirmed);
         $mat = (int)round($pr[0] * (1 + $mat_pct));
         $lab = (int)round($pr[1] * (1 + $lab_pct));
-
         $disc = $wi['discipline'];
-        $key = $disc . '|' . $ln['section_group'];
-        if (!isset($sections[$key])) {
-            $sections[$key] = array(
-                'discipline' => $disc,
-                'name_en' => $ln['section_name_en'],
-                'name_id' => $ln['section_name_id'],
-                'items' => array(),
-            );
-            $secOrder[] = $key;
-        }
-        $sections[$key]['items'][] = array(
+        $baseItem = array(
             'work_item_id' => $wi_id,
             'slot_code' => $wi['spec_slot'],
             'name_en' => $wi['name_en'] . ($wi['spec_en'] ? ' — ' . $wi['spec_en'] : ''),
@@ -375,13 +448,48 @@ function drab_generate_rab($db, $rab_id, $b, $dev, $allow_confirmed) {
             'confidence' => $pr[2],
             'source' => $pr[4],
         );
+
+        // Per-storey superstructure: apportion the SAME quantity across storeys by
+        // floor-area share, so the Structure page reads Ground/1st/2nd-floor blocks
+        // while the grand total is identical to the un-split build.
+        if (!empty($ln['per_level']) && $disc === 'STR' && $multi_level && $level_sum > 0) {
+            // Apportion the line quantity across storeys by floor-area share; the
+            // largest storey absorbs the rounding remainder so the parts always sum
+            // back to exactly $qty (no stray +/-0.01, no negative quantity).
+            $bigIdx = 0; $bigArea = -1.0;
+            foreach ($levels as $idx => $lv) { if ($lv['area'] > $bigArea) { $bigArea = $lv['area']; $bigIdx = $idx; } }
+            $placed = 0.0; $parts = array();
+            foreach ($levels as $idx => $lv) {
+                if ($idx === $bigIdx) continue;
+                $q_i = round($qty * ($lv['area'] / $level_sum), 2);
+                $parts[$idx] = $q_i; $placed += $q_i;
+            }
+            $parts[$bigIdx] = round($qty - $placed, 2);
+            foreach ($levels as $idx => $lv) {
+                $q_i = isset($parts[$idx]) ? $parts[$idx] : 0;
+                if ($q_i <= 0) continue;
+                $nm = drab_storey_section_name($lv['i'], true);
+                $item = $baseItem; $item['quantity'] = $q_i;
+                $sectionAdd('STR|__LVL' . $lv['i'], 'STR', $nm[0], $nm[1], $item);
+            }
+        } elseif (!empty($ln['per_level']) && $disc === 'STR') {
+            $nm = drab_storey_section_name(1, false); // single-storey: one clear block
+            $sectionAdd('STR|__LVL1', 'STR', $nm[0], $nm[1], $baseItem);
+        } else {
+            $sectionAdd($disc . '|' . $ln['section_group'], $disc, $ln['section_name_en'], $ln['section_name_id'], $baseItem);
+        }
     }
 
-    // sort sections by discipline order, keep first-seen order within discipline
-    usort($secOrder, function($a, $b2) use ($sections, $disc_order) {
+    // sort sections by discipline order, keeping first-seen order within a discipline.
+    // PHP 7.4's usort is NOT stable and there can be >16 sections (Substructure +
+    // per-storey blocks + ARCH/MEP), so tie-break on the original index explicitly.
+    $secIndex = array();
+    foreach ($secOrder as $ix => $k) $secIndex[$k] = $ix;
+    usort($secOrder, function($a, $b2) use ($sections, $disc_order, $secIndex) {
         $da = $disc_order[$sections[$a]['discipline']];
         $dbb = $disc_order[$sections[$b2]['discipline']];
-        return $da - $dbb;
+        if ($da !== $dbb) return $da - $dbb;
+        return $secIndex[$a] - $secIndex[$b2];
     });
 
     // assign codes + insert
@@ -501,6 +609,11 @@ function drab_building_fields($in) {
     $f['has_carport']    = !empty($in['has_carport']) ? 1 : 0;
     $f['carport_area']   = isset($in['carport_area']) ? (float)$in['carport_area'] : 0;
     $f['boundary_len']   = isset($in['boundary_len']) ? (float)$in['boundary_len'] : 0;
+    // Optional floor type (only once the UX-pass migration has added the column).
+    if (drab_has_column(get_db(), 'drab_buildings', 'floor_code')) {
+        $fc = isset($in['floor_code']) ? trim($in['floor_code']) : '';
+        $f['floor_code'] = ($fc !== '') ? $fc : null;
+    }
     return $f;
 }
 function drab_get_building($db, $id) {
@@ -584,6 +697,13 @@ function drab_rab_payload($db, $rab_id, $uid) {
     $allow_split = user_can('drab_split_view', $uid);
     $allow_export = user_can('drab_export_clean', $uid);
 
+    // Which work items actually have an AHSP build-up — so the editor only shows
+    // the "how?" link where there is a real coefficient breakdown to reveal.
+    $buildupIds = array();
+    foreach ($db->query("SELECT DISTINCT work_item_id FROM drab_ahsp_components")->fetchAll() as $rb0) {
+        $buildupIds[(int)$rb0['work_item_id']] = true;
+    }
+
     $r = $db->prepare("SELECT * FROM drab_rabs WHERE id=?");
     $r->execute(array($rab_id));
     $rab = $r->fetch();
@@ -634,6 +754,7 @@ function drab_rab_payload($db, $rab_id, $uid) {
                 'rate' => $rate_out,
                 'line_material' => $lm_out, 'line_labour' => $ll_out, 'line_total' => $lt_out,
                 'is_pc_sum' => (int)$it['is_pc_sum'], 'has_takeoff' => (int)$it['has_takeoff'],
+                'has_buildup' => ($it['work_item_id'] && isset($buildupIds[(int)$it['work_item_id']])) ? 1 : 0,
                 'confidence' => $it['confidence'],
                 'confirmed_locked' => $mask_confirmed ? 1 : 0,
                 'split_locked' => (!$mask_confirmed && !$allow_split) ? 1 : 0,
@@ -756,12 +877,18 @@ function handle_regenerate() {
     $own->execute(array($building_id, $uid));
     $b = $own->fetch();
     if (!$b) json_error(403, 'forbidden');
-    // apply any updated inputs
+    // apply only the inputs the client actually sent — a bare regenerate (just a
+    // building_id) must NOT reset the stored style/size/areas to defaults.
     $fields = drab_building_fields($in);
     $sets = array(); $vals = array();
-    foreach ($fields as $k => $v) { $sets[] = "$k=?"; $vals[] = $v; }
-    $vals[] = $building_id;
-    $db->prepare("UPDATE drab_buildings SET " . implode(',', $sets) . " WHERE id=?")->execute($vals);
+    foreach ($fields as $k => $v) {
+        if (!array_key_exists($k, $in)) continue;
+        $sets[] = "$k=?"; $vals[] = $v;
+    }
+    if ($sets) {
+        $vals[] = $building_id;
+        $db->prepare("UPDATE drab_buildings SET " . implode(',', $sets) . " WHERE id=?")->execute($vals);
+    }
     $b = drab_get_building($db, $building_id);
 
     $d = $db->prepare("SELECT * FROM drab_developments WHERE id=?");
