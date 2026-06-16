@@ -3,8 +3,9 @@
 -- clearer section names.  (Follows ADR 0012; namespace drab_*.)
 --
 -- Run AFTER 2026_06_16_drab_generator.sql + 2026_06_16_drab_seed.sql.
--- Idempotent: safe to re-run. Targets MariaDB 10.3+ (uses ADD COLUMN IF NOT
--- EXISTS); on MySQL 5.7 add the columns by hand if IF NOT EXISTS is rejected.
+-- Idempotent and portable to MySQL 5.7/8.0 AND MariaDB 10.3+. (MySQL has no
+-- "ALTER TABLE ... ADD COLUMN IF NOT EXISTS", so the two new columns are added
+-- through an information_schema guard procedure instead.)
 --
 -- What it adds:
 --   1. drab_floors  — a user-pickable Floor type axis (like styles/structures/
@@ -21,13 +22,29 @@ SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- ---------------------------------------------------------------------------
--- 1. New columns
+-- 1. New columns — added via an information_schema guard so the statement is
+--    valid on plain MySQL (no ADD COLUMN IF NOT EXISTS there) and re-runnable.
 -- ---------------------------------------------------------------------------
-ALTER TABLE drab_buildings
-  ADD COLUMN IF NOT EXISTS floor_code VARCHAR(30) NULL AFTER finish_tier;
+DROP PROCEDURE IF EXISTS drab_add_column;
+DELIMITER $$
+CREATE PROCEDURE drab_add_column(IN p_table VARCHAR(64), IN p_column VARCHAR(64), IN p_ddl TEXT)
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.COLUMNS
+    WHERE table_schema = DATABASE() AND table_name = p_table AND column_name = p_column
+  ) THEN
+    SET @drab_sql = CONCAT('ALTER TABLE `', p_table, '` ADD COLUMN ', p_ddl);
+    PREPARE drab_stmt FROM @drab_sql;
+    EXECUTE drab_stmt;
+    DEALLOCATE PREPARE drab_stmt;
+  END IF;
+END$$
+DELIMITER ;
 
-ALTER TABLE drab_template_lines
-  ADD COLUMN IF NOT EXISTS per_level TINYINT(1) NOT NULL DEFAULT 0 AFTER applies_when;
+CALL drab_add_column('drab_buildings',      'floor_code', 'floor_code VARCHAR(30) NULL AFTER finish_tier');
+CALL drab_add_column('drab_template_lines', 'per_level',  'per_level TINYINT(1) NOT NULL DEFAULT 0 AFTER applies_when');
+
+DROP PROCEDURE IF EXISTS drab_add_column;
 
 -- ---------------------------------------------------------------------------
 -- 2. Floor-type lookup (the wizard's optional Floor axis)
