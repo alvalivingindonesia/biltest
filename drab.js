@@ -304,7 +304,11 @@ function drabTipInit() {
   document.addEventListener('focusout', function () { if (!_drabTipPinned) drabTipHide(); });
   document.addEventListener('click', function (e) {
     var el = drabTipTarget(e.target);
-    if (el && el.classList && el.classList.contains('drab-info')) {
+    // Pure info affordances (info dots, plain confidence dots) toggle a pinned tip
+    // on tap. The locked confidence dot is excluded — it has its own upgrade action.
+    var pinnable = el && el.classList && (el.classList.contains('drab-info')
+      || (el.classList.contains('drab-conf-dot') && !el.classList.contains('drab-conf-dot--locked')));
+    if (pinnable) {
       e.preventDefault();
       if (_drabTipPinned && _drabTipFor === el) { drabTipHide(); }
       else { _drabTipFor = el; drabTipShowFor(el); _drabTipPinned = true; }
@@ -1243,23 +1247,24 @@ function drabAreaSchedule(sch) {
 
 function drabMarkupsPanel(t) {
   var on = parseInt(t.markups_on, 10) === 1;
-  function field(label, id, val) {
-    return '<div class="drab-markup-field"><label class="rab-label">' + drabEsc(label) + '</label>'
-      + '<div class="drab-markup-input-wrap"><input type="number" class="rab-input" id="' + id + '" min="0" step="0.5" value="' + drabEsc(val) + '"></div></div>';
+  function field(label, id, val, tip) {
+    return '<div class="drab-markup-field"><label class="rab-label">' + drabEsc(label) + ' ' + drabInfoDot(tip) + '</label>'
+      + '<div class="drab-markup-input-wrap"><input type="number" class="rab-input" id="' + id + '" min="0" max="100" step="0.5" value="' + drabEsc(val) + '"></div></div>';
   }
   return ''
     + '<div class="drab-markups">'
     + '  <div class="drab-markups-head">'
-    + '    <h3 class="drab-markups-title">Markups & tax</h3>'
-    + '    <label class="drab-switch"><input type="checkbox" id="drab-mk-on"' + (on ? ' checked' : '') + '><span class="drab-switch-slider"></span></label>'
+    + '    <h3 class="drab-markups-title">Markups &amp; tax</h3>'
+    + '    <label class="drab-switch" data-drab-tip="Off = pure direct cost (like the Villa BoQs). On adds overhead, contingency and PPN. Changes save automatically.">'
+    + '<input type="checkbox" id="drab-mk-on"' + (on ? ' checked' : '') + '><span class="drab-switch-slider"></span></label>'
     + '  </div>'
     + '  <div class="drab-markups-body' + (on ? '' : ' is-off') + '" id="drab-mk-body">'
-    + field('Overhead & profit', 'drab-mk-oh', t.overhead_pct)
-    + field('Contingency', 'drab-mk-co', t.contingency_pct)
-    + field('PPN', 'drab-mk-pp', t.ppn_pct)
+    + field('Overhead &amp; profit', 'drab-mk-oh', t.overhead_pct, 'Builder overhead &amp; profit (BUK), applied to the direct cost.')
+    + field('Contingency', 'drab-mk-co', t.contingency_pct, 'Allowance for unforeseen work, applied to the direct cost.')
+    + field('PPN', 'drab-mk-pp', t.ppn_pct, 'Indonesian VAT, applied to direct + overhead + contingency.')
     + '  </div>'
     + '  <div class="drab-totals-ledger" id="drab-mk-ledger">' + drabLedger(t) + '</div>'
-    + '  <div style="margin-top:var(--space-4)"><button class="btn btn--primary btn--sm" id="drab-mk-apply">Apply</button></div>'
+    + '  <div class="drab-mk-foot"><span class="drab-mk-status" id="drab-mk-status" aria-live="polite"></span></div>'
     + '</div>';
 }
 function drabLedger(t) {
@@ -1273,29 +1278,84 @@ function drabLedger(t) {
   out += '<div class="drab-ledger-row drab-ledger-row--grand"><span>Grand total</span><span>' + drabIDR(t.grand) + '</span></div>';
   return out;
 }
+/* Markups are LIVE + auto-saved: toggling or editing a percentage updates the
+   ledger and grand total instantly (client-side preview off the known direct
+   cost), then persists via set_markups. The server stays the source of truth —
+   its returned totals reconcile the preview. No separate "Apply" step (the old
+   one was the source of the "applied but nothing happened / can't unapply"
+   confusion). */
+var _drabMkTimer = null, _drabMkSeq = 0;
+function drabMarkupCollect() {
+  var onCb = document.getElementById('drab-mk-on');
+  // Clamp 0–100 here so the live preview matches what the server stores (the
+  // server clamps too — the HTML max attribute alone is not authoritative).
+  function v(id) { var e = document.getElementById(id); return Math.max(0, Math.min(100, e ? drabNum(e.value) : 0)); }
+  return { on: onCb ? onCb.checked : false, oh: v('drab-mk-oh'), co: v('drab-mk-co'), pp: v('drab-mk-pp') };
+}
+function drabMarkupSetStatus(text, cls) {
+  var el = document.getElementById('drab-mk-status');
+  if (el) { el.textContent = text; el.className = 'drab-mk-status' + (cls ? ' ' + cls : ''); }
+}
+/* Recompute the ledger + grand from the current controls without a round-trip.
+   Mirrors drab_compute_totals() exactly; markups never change material/labour. */
+function drabMarkupPreview() {
+  var st = drabMarkupCollect();
+  var base = _drabEditor.rab.totals || {};
+  var direct = drabNum(base.direct);
+  var overhead = 0, contingency = 0, ppn = 0, grand = direct;
+  if (st.on) {
+    overhead = direct * (st.oh / 100);
+    contingency = direct * (st.co / 100);
+    var taxable = direct + overhead + contingency;
+    ppn = taxable * (st.pp / 100);
+    grand = taxable + ppn;
+  }
+  var totals = {};
+  Object.keys(base).forEach(function (k) { totals[k] = base[k]; });
+  totals.markups_on = st.on ? 1 : 0;
+  totals.overhead_pct = st.oh; totals.contingency_pct = st.co; totals.ppn_pct = st.pp;
+  totals.overhead = overhead; totals.contingency = contingency; totals.ppn = ppn; totals.grand = grand;
+  drabUpdateSummary(totals);
+}
+function drabMarkupPersist() {
+  var st = drabMarkupCollect();
+  var seq = ++_drabMkSeq; // ignore responses superseded by a newer save (out-of-order guard)
+  drabMarkupSetStatus('Saving…', 'is-saving');
+  drabPost('set_markups', {
+    rab_id: _drabEditor.rabId,
+    markups_on: st.on ? 1 : 0, overhead_pct: st.oh, contingency_pct: st.co, ppn_pct: st.pp
+  }).then(function (res) {
+    if (seq !== _drabMkSeq) return; // a later save is in flight / has landed — drop this stale result
+    if (res.json && res.json.ok) {
+      drabUpdateSummary(res.json.totals); // authoritative server totals
+      drabMarkupSetStatus('Saved', 'is-saved');
+    } else { drabMarkupSetStatus('Not saved — please retry', 'is-error'); drabToast('Could not save markups.', 'error'); }
+  }).catch(function () {
+    if (seq !== _drabMkSeq) return;
+    drabMarkupSetStatus('Not saved — please retry', 'is-error'); drabToast('Could not save markups.', 'error');
+  });
+}
+function drabMarkupQueuePersist(delay) {
+  if (_drabMkTimer) clearTimeout(_drabMkTimer);
+  _drabMkTimer = setTimeout(function () { _drabMkTimer = null; drabMarkupPersist(); }, delay || 600);
+}
 function drabBindMarkups() {
   var onCb = document.getElementById('drab-mk-on');
-  var apply = document.getElementById('drab-mk-apply');
   if (onCb) onCb.addEventListener('change', function () {
     var body = document.getElementById('drab-mk-body');
     if (body) body.classList.toggle('is-off', !onCb.checked);
+    if (_drabMkTimer) { clearTimeout(_drabMkTimer); _drabMkTimer = null; } // supersede any queued save
+    drabMarkupPreview();
+    drabMarkupPersist(); // a toggle is a deliberate action — persist at once
   });
-  if (apply) apply.addEventListener('click', function () {
-    var body = {
-      rab_id: _drabEditor.rabId,
-      markups_on: document.getElementById('drab-mk-on').checked ? 1 : 0,
-      overhead_pct: drabNum(document.getElementById('drab-mk-oh').value),
-      contingency_pct: drabNum(document.getElementById('drab-mk-co').value),
-      ppn_pct: drabNum(document.getElementById('drab-mk-pp').value)
-    };
-    apply.disabled = true;
-    drabPost('set_markups', body).then(function (res) {
-      apply.disabled = false;
-      if (res.json && res.json.ok) {
-        drabUpdateSummary(res.json.totals);
-        drabToast('Markups updated.', 'success');
-      } else { drabToast('Could not update markups.', 'error'); }
-    }).catch(function () { apply.disabled = false; drabToast('Could not update markups.', 'error'); });
+  ['drab-mk-oh', 'drab-mk-co', 'drab-mk-pp'].forEach(function (id) {
+    var inp = document.getElementById(id);
+    if (!inp) return;
+    inp.addEventListener('input', function () { drabMarkupPreview(); drabMarkupQueuePersist(600); });
+    inp.addEventListener('blur', function () {
+      if (_drabMkTimer) { clearTimeout(_drabMkTimer); _drabMkTimer = null; }
+      drabMarkupPersist();
+    });
   });
 }
 
@@ -1322,7 +1382,7 @@ function drabRenderDiscArea(combined) {
       + drabAddSectionBar(disc);
     return;
   }
-  area.innerHTML = sections.map(function (sec) { return drabSectionCard(sec, combined, caps); }).join('') + drabAddSectionBar(disc);
+  area.innerHTML = drabConfidenceLegend() + sections.map(function (sec) { return drabSectionCard(sec, combined, caps); }).join('') + drabAddSectionBar(disc);
 }
 
 function drabAddSectionBar(disc) {
@@ -1375,6 +1435,7 @@ function drabSectionCard(sec, combined, caps) {
     + '      <span id="drab-secname-' + sec.id + '">' + drabEsc(drabName(sec, lang)) + '</span>'
     + '      <button class="rdtl-btn-icon" title="Rename section" data-drab-tip="Rename this section." onclick="drabRenameSection(' + sec.id + ')">✎</button></h4>'
     + '    <div class="rdtl-section-actions">'
+    + '      ' + drabSectionConfidenceChip(sec.items)
     + '      <span class="rdtl-section-total" data-drab-tip="Section sub-total (material + labour).">' + drabIDR(sec.total) + '</span>'
     + '      <button class="rdtl-btn-icon rdtl-btn-icon--danger" title="Delete section" data-drab-tip="Delete this section and all its items." onclick="drabDeleteSection(' + sec.id + ')">✕</button>'
     + '    </div>'
@@ -1434,7 +1495,7 @@ function drabItemRow(it, sectionId, combined, caps) {
     + '  <td>' + drabEsc(it.unit_code || '') + '</td>'
     + priceCells
     + amountCell
-    + '  <td class="drab-cat-conf">' + drabConfidenceBadge(it.confidence, it.confirmed_locked) + '</td>'
+    + '  <td class="drab-cat-conf">' + drabConfidenceDot(it.confidence, it.confirmed_locked) + '</td>'
     + '  <td class="drab-cat-add">'
     + swapBtn
     + '    <button class="rdtl-btn-icon" title="Break into take-off" data-drab-tip="Split the quantity into measured take-off rows." onclick="drabShowTakeoff(' + it.id + ')">≡</button>'
@@ -1444,11 +1505,48 @@ function drabItemRow(it, sectionId, combined, caps) {
     + '</tr>';
 }
 
-function drabConfidenceBadge(conf, locked) {
-  if (parseInt(locked, 10) === 1) return '<span class="drab-badge drab-badge--locked" data-drab-tip="Confirmed contract-grade rate — upgrade to reveal the number.">Confirmed ✦</span>';
-  if (conf === 'confirmed') return '<span class="drab-badge drab-badge--confirmed" data-drab-tip="Confirmed — from a real BoQ, paid invoice or contractor agreement.">Confirmed</span>';
-  if (conf === 'derived') return '<span class="drab-badge drab-badge--indicative" data-drab-tip="Derived — calculated from a confirmed base price (e.g. retail + freight).">Derived</span>';
-  return '<span class="drab-badge drab-badge--indicative" data-drab-tip="Indicative — a regional ball-park, not yet confirmed by a real quote.">Indicative</span>';
+/* Pricing confidence shown as a compact colour dot (instead of a word on every
+   line). Hover/tap reveals the meaning; a legend + section roll-up carry the
+   labels so the table stays scannable. Locked = a Confirmed rate a free user
+   may not see — stays masked, opens the upgrade prompt. */
+var DRAB_CONF_META = {
+  confirmed:  { label: 'Confirmed',  tip: 'Confirmed — from a real BoQ, paid invoice or contractor agreement.' },
+  derived:    { label: 'Derived',    tip: 'Derived — calculated from a confirmed base price (e.g. retail + freight).' },
+  indicative: { label: 'Indicative', tip: 'Indicative — a regional ball-park, not yet confirmed by a real quote.' }
+};
+function drabConfClass(conf) { return DRAB_CONF_META[conf] ? conf : 'indicative'; }
+function drabConfidenceDot(conf, locked) {
+  if (parseInt(locked, 10) === 1) {
+    return '<span class="drab-conf-dot drab-conf-dot--locked" role="button" tabindex="0" aria-label="Confirmed rate — upgrade to reveal"'
+      + ' data-drab-tip="Confirmed contract-grade rate — upgrade to reveal the number."'
+      + ' onclick="drabShowUpgrade(\'drab_confirmed_pricing\')"'
+      + ' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();drabShowUpgrade(\'drab_confirmed_pricing\')}">✦</span>';
+  }
+  var c = drabConfClass(conf), m = DRAB_CONF_META[c];
+  return '<span class="drab-conf-dot drab-conf-dot--' + c + '" role="img" tabindex="0" aria-label="' + drabEsc(m.label) + '" data-drab-tip="' + drabEsc(m.tip) + '"></span>';
+}
+function drabConfidenceLegend() {
+  function item(c) { return '<span class="drab-conf-legend-item"><span class="drab-conf-dot drab-conf-dot--' + c + '"></span>' + drabEsc(DRAB_CONF_META[c].label) + '</span>'; }
+  return '<div class="drab-conf-legend" data-drab-tip="Every rate is tagged by how reliable it is. Confirmed comes from real Lombok build data; Indicative is a regional ball-park.">'
+    + '<span class="drab-conf-legend-label">Pricing basis:</span>'
+    + item('confirmed') + item('derived') + item('indicative') + '</div>';
+}
+/* Roll-up chip for a section header: one word for the whole block instead of a
+   badge on every line. */
+function drabSectionConfidenceChip(items) {
+  var set = {};
+  (items || []).forEach(function (it) {
+    var c = parseInt(it.confirmed_locked, 10) === 1 ? 'confirmed' : drabConfClass(it.confidence);
+    set[c] = true;
+  });
+  var keys = Object.keys(set);
+  if (keys.length === 0) return '';
+  if (keys.length === 1) {
+    var c = keys[0], m = DRAB_CONF_META[c];
+    return '<span class="drab-conf-chip drab-conf-chip--' + c + '" data-drab-tip="Every line in this section is ' + drabEsc(m.label.toLowerCase()) + '.">'
+      + '<span class="drab-conf-dot drab-conf-dot--' + c + '"></span>' + drabEsc(m.label) + '</span>';
+  }
+  return '<span class="drab-conf-chip drab-conf-chip--mixed" data-drab-tip="This section mixes confirmed and indicative rates — see the dot on each line.">Mixed pricing</span>';
 }
 
 /* ----- Editor header actions ----- */

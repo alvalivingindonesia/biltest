@@ -127,13 +127,14 @@
 }
 .drab-badge--plain::before { display: none; }
 
-/* card maturity badges (sit top-right inside choice cards) */
+/* card maturity badge as a top "eyebrow" — in normal flow so it never overlaps
+   the title (the tick keeps the top-right corner). */
 .drab-choice-card .drab-badge {
-  position: absolute;
-  top: var(--space-3);
-  right: var(--space-3);
+  position: static;
+  align-self: flex-start;
+  margin-bottom: var(--space-1);
+  max-width: calc(100% - var(--space-6));
 }
-.drab-choice-card.is-selected .drab-badge { right: calc(var(--space-3) + 28px); }
 
 /* Beta — calibrating, use with care */
 .drab-badge--beta {
@@ -1226,8 +1227,6 @@
   border-color: color-mix(in oklab, var(--color-error) 35%, var(--color-border));
 }
 
-/* pricing-confidence column in the editor item tables */
-.drab-cat-conf { text-align: left; white-space: nowrap; }
 
 /* ---------------------------------------------------------------------
    13. MOBILE RESPONSIVE
@@ -1289,6 +1288,8 @@
 
   /* Info dots are the primary way mobile users reveal help — make them tappable. */
   .drab-info { width: 22px; height: 22px; font-size: 0.82rem; }
+  /* Confidence dots are tap-to-reveal on touch — give them a comfortable target. */
+  .drab-conf-dot:not(.drab-conf-dot--locked) { width: 20px; height: 20px; }
 }
 
 @media (max-width: 520px) {
@@ -1296,3 +1297,86 @@
   .rdtl-items-table.drab-catalog-table { min-width: 660px; }
   .drab-step-head h4 { font-size: var(--text-base); }
 }
+
+/* ---------------------------------------------------------------------
+   19. PRICING-CONFIDENCE DOTS / LEGEND / SECTION ROLL-UP
+       (replaces a "Confirmed" word-badge on every single line)
+   --------------------------------------------------------------------- */
+.drab-cat-conf { text-align: center; white-space: nowrap; }
+.drab-conf-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  background: var(--color-text-faint);
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.drab-conf-dot--confirmed  { background: var(--color-success); }
+.drab-conf-dot--derived    { background: var(--color-accent); }
+.drab-conf-dot--indicative { background: var(--color-warning); }
+.drab-conf-dot--locked {
+  width: auto;
+  height: auto;
+  padding: 1px 7px;
+  border-radius: var(--radius-md);
+  background: var(--color-primary-highlight);
+  color: var(--color-primary);
+  font-size: 0.66rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.drab-conf-dot[tabindex]:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+.drab-conf-legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  background: var(--color-surface-offset);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.drab-conf-legend-label {
+  font-weight: 600;
+  color: var(--color-text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.drab-conf-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+
+.drab-conf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: var(--radius-full);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  cursor: help;
+}
+.drab-conf-chip--confirmed { color: var(--color-success-hover); background: var(--color-success-highlight); border-color: color-mix(in oklab, var(--color-success) 30%, transparent); }
+.drab-conf-chip--derived   { color: var(--color-accent-hover);  background: var(--color-accent-highlight);  border-color: color-mix(in oklab, var(--color-accent) 30%, transparent); }
+.drab-conf-chip--indicative,
+.drab-conf-chip--mixed     { color: var(--color-warning-hover); background: var(--color-warning-highlight); border-color: color-mix(in oklab, var(--color-warning) 30%, transparent); }
+
+/* markups auto-save status line (replaces the old Apply button) */
+.drab-mk-foot { margin-top: var(--space-3); min-height: 1.25em; display: flex; align-items: center; }
+.drab-mk-status { font-size: var(--text-xs); color: var(--color-text-faint); transition: color 160ms ease; }
+.drab-mk-status::before { content: ''; }
+.drab-mk-status.is-saving { color: var(--color-text-muted); }
+.drab-mk-status.is-saved  { color: var(--color-success); }
+.drab-mk-status.is-saved::before  { content: '✓ '; }
+.drab-mk-status.is-error  { color: var(--color-error); }

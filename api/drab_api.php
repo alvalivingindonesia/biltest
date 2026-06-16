@@ -1097,9 +1097,11 @@ function handle_set_markups() {
     $rab_id = (int)$in['rab_id'];
     if (!drab_owns_rab($db, $rab_id, $uid)) json_error(403, 'forbidden');
     $on = !empty($in['markups_on']) ? 1 : 0;
-    $oh = isset($in['overhead_pct']) ? (float)$in['overhead_pct'] : 0;
-    $co = isset($in['contingency_pct']) ? (float)$in['contingency_pct'] : 0;
-    $pp = isset($in['ppn_pct']) ? (float)$in['ppn_pct'] : 0;
+    // Clamp 0–100 server-side — the client max attribute is not authoritative
+    // (a direct API call or paste could otherwise persist absurd/negative rates).
+    $oh = max(0.0, min(100.0, isset($in['overhead_pct']) ? (float)$in['overhead_pct'] : 0));
+    $co = max(0.0, min(100.0, isset($in['contingency_pct']) ? (float)$in['contingency_pct'] : 0));
+    $pp = max(0.0, min(100.0, isset($in['ppn_pct']) ? (float)$in['ppn_pct'] : 0));
     $db->prepare("UPDATE drab_rabs SET markups_on=?, overhead_pct=?, contingency_pct=?, ppn_pct=? WHERE id=?")
        ->execute(array($on, $oh, $co, $pp, $rab_id));
     json_out(array('ok' => true, 'totals' => drab_compute_totals($db, $rab_id)));
