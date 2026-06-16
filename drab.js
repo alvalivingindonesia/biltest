@@ -938,8 +938,12 @@ async function renderDrabEditor(el, rabId) {
       drabT('drab.editor_desc', 'Refine every line, take off quantities, and export.'))
     + '<div class="section"><div class="container"><div id="drab-editor-mount">' + drabSpinner() + '</div></div></div>';
 
-  await drabLoadMeta().catch(function () {});
-  await drabEditorLoad();
+  // The router only appends this view to the document AFTER renderDrabEditor resolves.
+  // The editor's load+render uses document.getElementById (mount, disc-area, markups),
+  // which would see a detached tree if run synchronously here — so defer past the append.
+  setTimeout(function () {
+    drabLoadMeta().catch(function () {}).then(function () { drabEditorLoad(); });
+  }, 0);
 }
 
 async function drabEditorLoad() {
@@ -1639,7 +1643,9 @@ async function renderDrabCatalog(el) {
   btn.addEventListener('click', run);
   q.addEventListener('keydown', function (e) { if (e.key === 'Enter') run(); });
   disc.addEventListener('change', run);
-  drabCatalogSearch('', '');
+  // Defer the initial search until the router has attached this view (drabCatalogSearch
+  // resolves #drab-cat-results via document.getElementById, which is null while detached).
+  setTimeout(function () { drabCatalogSearch('', ''); }, 0);
 }
 function drabCatalogSearch(q, disc) {
   var results = document.getElementById('drab-cat-results');
