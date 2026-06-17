@@ -31,8 +31,11 @@ function drabEsc(s) {
   return d.innerHTML;
 }
 function drabAttr(s) {
-  // For values placed inside single-quoted inline onclick handlers.
-  return String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  // JS-escape for a single-quoted string, then HTML-escape so the value is also
+  // safe inside a DOUBLE-quoted on*/value attribute and cannot break out
+  // (SEC-005). Equivalent to drabOnclickArg.
+  s = String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 function drabOnclickArg(s) {
   // A free-text value placed inside a single-quoted JS string that itself sits

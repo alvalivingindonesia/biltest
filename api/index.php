@@ -23,6 +23,7 @@
 // CONFIG — loaded from private config outside public web root
 // =============================================================
 
+require_once(__DIR__ . '/_sec.php');                         // SEC-021/022/055/056
 require_once('/home/rovin629/config/biltest_config.php');
 define('DB_CHARSET', 'utf8mb4');
 
@@ -34,9 +35,11 @@ define('MAX_PAGE_SIZE', 100);
 // =============================================================
 
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Origin: *');  // GET-only public data, no credentials
 header('Access-Control-Allow-Methods: GET, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
+sec_install_json_exception_handler();      // generic 500s, no schema/path leak (SEC-022)
+sec_api_headers();
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
@@ -1409,7 +1412,8 @@ function handle_listing_counts(): void {
             'total'   => $total,
         ]);
     } catch (Exception $e) {
-        json_out(['regions' => new stdClass(), 'areas' => new stdClass(), 'places' => new stdClass(), 'total' => 0, 'debug_error' => $e->getMessage()]);
+        error_log('[biltest] places_facets: ' . $e->getMessage());
+        json_out(['regions' => new stdClass(), 'areas' => new stdClass(), 'places' => new stdClass(), 'total' => 0]);
     }
 }
 
@@ -1471,7 +1475,8 @@ function handle_listings_list(): void {
 
     json_out(paginated_response($items, $total, $page, $per_page));
     } catch (Exception $e) {
-        json_out(array('data' => array(), 'meta' => array('total' => 0, 'page' => 1, 'per_page' => 20, 'total_pages' => 0), 'debug_error' => $e->getMessage()));
+        error_log('[biltest] listings_list: ' . $e->getMessage());
+        json_out(array('data' => array(), 'meta' => array('total' => 0, 'page' => 1, 'per_page' => 20, 'total_pages' => 0)));
     }
 }
 

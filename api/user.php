@@ -26,14 +26,16 @@
  *   GET  /api/user.php?action=my_submissions
  */
 
-session_start();
+require_once(__DIR__ . '/_sec.php');                         // SEC-008/011/021-024/055/056
 require_once('/home/rovin629/config/biltest_config.php');
+sec_session_start();
+sec_install_json_exception_handler();
 
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
+// Same-origin SPA: no wildcard CORS + credentials combo (SEC-037).
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
-header('Access-Control-Allow-Credentials: true');
+header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token');
+sec_api_headers(true);
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
@@ -339,7 +341,8 @@ function handle_login(): void {
         json_error(403, 'Please verify your email address first. Check your inbox for the verification link.');
     }
 
-    // Set session
+    // Set session — rotate the id first to defeat session fixation (SEC-024).
+    sec_session_regenerate();
     $_SESSION['user_id'] = (int)$user['id'];
     $_SESSION['user_email'] = $user['email'];
     $_SESSION['user_role'] = $user['role'];
@@ -349,6 +352,7 @@ function handle_login(): void {
 
     json_out([
         'success' => true,
+        'csrf_token' => sec_csrf_token(),
         'user' => [
             'id' => (int)$user['id'],
             'email' => $user['email'],
@@ -360,7 +364,7 @@ function handle_login(): void {
 
 
 function handle_logout(): void {
-    session_destroy();
+    sec_session_destroy();   // clear $_SESSION + expire cookie + destroy (SEC-041)
     json_out(['success' => true, 'message' => 'Logged out.']);
 }
 
@@ -375,7 +379,7 @@ function handle_me(): void {
     $user = $stmt->fetch();
 
     if (!$user) {
-        session_destroy();
+        sec_session_destroy();
         json_out(['user' => null]);
     }
 
@@ -392,6 +396,9 @@ function handle_me(): void {
     $owns = $db->prepare("SELECT provider_id FROM provider_owners WHERE user_id = ?");
     $owns->execute([$uid]);
     $user['owned_providers'] = $owns->fetchAll(PDO::FETCH_COLUMN);
+
+    // CSRF token for the SPA to attach to mutating requests (SEC-008).
+    $user['csrf_token'] = sec_csrf_token();
 
     json_out(['user' => $user]);
 }
@@ -697,47 +704,56 @@ function handle_social_login(): void {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required');
     $data = get_post_data();
 
-    $provider    = trim($data['provider'] ?? '');
-    $token       = trim($data['token'] ?? '');
-    $email       = trim(strtolower($data['email'] ?? ''));
-    $name        = trim($data['name'] ?? '');
-    $provider_id = trim($data['provider_id'] ?? '');
-    $avatar_url  = trim($data['avatar_url'] ?? '');
+    $provider = trim($data['provider'] ?? '');
+    if (!in_array($provider, ['google', 'facebook'], true)) {
+        json_error(400, 'Unsupported login provider.');
+    }
 
-    if (!in_array($provider, ['google', 'facebook', 'instagram'])) json_error(400, 'Invalid provider.');
-    if (!$provider_id) json_error(400, 'provider_id required.');
-    if (!$name) json_error(400, 'name required.');
+    // SEC-001: verify the assertion with the identity provider BEFORE trusting
+    // anything. Identity (provider_id/email/name/avatar) is taken ONLY from the
+    // verified provider response — NEVER from client-supplied fields.
+    $identity = ($provider === 'google')
+        ? sec_verify_google_login($data)
+        : sec_verify_facebook_login($data);
+    if ($identity === null) {
+        json_error(401, 'Could not verify your ' . ucfirst($provider) . ' login. Please try again.');
+    }
+    $provider_id    = $identity['provider_id'];
+    $email          = $identity['email'];            // '' if the provider gave none
+    $email_verified = $identity['email_verified'];
+    $name           = $identity['name'] !== '' ? $identity['name'] : 'Member';
+    $avatar_url     = $identity['avatar_url'];
 
-    $id_col = $provider . '_id'; // google_id, facebook_id, instagram_id
-
+    $id_col = $provider . '_id'; // google_id, facebook_id
     $db = get_db();
 
-    // 1. Check by social ID
+    // 1. Existing user by VERIFIED social id.
     $stmt = $db->prepare("SELECT * FROM users WHERE `{$id_col}` = ? LIMIT 1");
     $stmt->execute([$provider_id]);
     $user = $stmt->fetch();
 
-    if (!$user && $email) {
-        // 2. Check by email — link social account to existing user
+    // 2. Link to an existing account by email ONLY when the IdP asserts the
+    //    email is verified — otherwise a provider account with an unverified,
+    //    attacker-chosen email could hijack a victim's account.
+    if (!$user && $email !== '' && $email_verified) {
         $stmt = $db->prepare("SELECT * FROM users WHERE email = ? AND is_active = 1 LIMIT 1");
         $stmt->execute([$email]);
         $user = $stmt->fetch();
-
         if ($user) {
-            // Link the social account
-            $db->prepare("UPDATE users SET `{$id_col}` = ?, auth_provider = ?, avatar_url = ? WHERE id = ?")
+            $db->prepare("UPDATE users SET `{$id_col}` = ?, auth_provider = ?, avatar_url = COALESCE(?, avatar_url) WHERE id = ?")
                ->execute([$provider_id, $provider, $avatar_url ?: null, $user['id']]);
         }
     }
 
+    // 3. Create a new account (verified flag mirrors the IdP's email_verified).
     if (!$user) {
-        // 3. Create new user
         $db->prepare(
             "INSERT INTO users (email, password_hash, display_name, is_verified, is_active, auth_provider, `{$id_col}`, avatar_url)
-             VALUES (?, NULL, ?, 1, 1, ?, ?, ?)"
+             VALUES (?, NULL, ?, ?, 1, ?, ?, ?)"
         )->execute([
             $email ?: null,
             $name,
+            $email_verified ? 1 : 0,
             $provider,
             $provider_id,
             $avatar_url ?: null,
@@ -750,7 +766,8 @@ function handle_social_login(): void {
 
     if (!$user['is_active']) json_error(403, 'This account has been deactivated.');
 
-    // Start session
+    // Start session (rotate id first — SEC-024).
+    sec_session_regenerate();
     $_SESSION['user_id']    = (int)$user['id'];
     $_SESSION['user_email'] = $user['email'] ?? '';
     $_SESSION['user_role']  = $user['role'] ?? 'user';
@@ -759,6 +776,7 @@ function handle_social_login(): void {
 
     json_out([
         'success' => true,
+        'csrf_token' => sec_csrf_token(),
         'user' => [
             'id'           => (int)$user['id'],
             'email'        => $user['email'],
@@ -767,6 +785,67 @@ function handle_social_login(): void {
             'avatar_url'   => $user['avatar_url'] ?? null,
         ],
     ]);
+}
+
+/**
+ * Verify a Google Sign-In ID token (the SPA's response.credential) via Google's
+ * tokeninfo endpoint. Returns [provider_id,email,email_verified,name,avatar_url]
+ * or null on any failure. Identity is taken only from the verified payload.
+ */
+function sec_verify_google_login(array $data): ?array {
+    $cred = trim($data['credential'] ?? ($data['token'] ?? ''));
+    if ($cred === '') return null;
+    $res = safe_fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' . urlencode($cred), ['timeout' => 8]);
+    if (!$res['ok'] || $res['status'] !== 200) return null;
+    $p = json_decode($res['body'], true);
+    if (!is_array($p) || empty($p['sub'])) return null;
+    $iss = $p['iss'] ?? '';
+    if ($iss !== 'accounts.google.com' && $iss !== 'https://accounts.google.com') return null;
+    if (!isset($p['exp']) || (int)$p['exp'] < time()) return null;
+    if (defined('GOOGLE_CLIENT_ID') && GOOGLE_CLIENT_ID !== '') {
+        if (($p['aud'] ?? '') !== GOOGLE_CLIENT_ID) return null; // bind token to our app
+    } else {
+        error_log('[biltest] social_login: GOOGLE_CLIENT_ID not set in config — Google token validated but audience not bound. Add GOOGLE_CLIENT_ID to the private config.');
+    }
+    $ev = $p['email_verified'] ?? false;
+    return [
+        'provider_id'    => (string)$p['sub'],
+        'email'          => strtolower(trim($p['email'] ?? '')),
+        'email_verified' => ($ev === true || $ev === 'true' || $ev === 1 || $ev === '1'),
+        'name'           => trim($p['name'] ?? ''),
+        'avatar_url'     => trim($p['picture'] ?? ''),
+    ];
+}
+
+/**
+ * Verify a Facebook access token via the Graph API. If FB_APP_ID/FB_APP_SECRET
+ * are configured, also confirm the token was issued for THIS app (debug_token).
+ * Returns identity or null.
+ */
+function sec_verify_facebook_login(array $data): ?array {
+    $tok = trim($data['access_token'] ?? ($data['token'] ?? ''));
+    if ($tok === '') return null;
+    if (defined('FB_APP_ID') && defined('FB_APP_SECRET') && FB_APP_ID !== '' && FB_APP_SECRET !== '') {
+        $dbg = safe_fetch('https://graph.facebook.com/debug_token?input_token=' . urlencode($tok)
+            . '&access_token=' . urlencode(FB_APP_ID . '|' . FB_APP_SECRET), ['timeout' => 8]);
+        if (!$dbg['ok'] || $dbg['status'] !== 200) return null;
+        $dj = json_decode($dbg['body'], true);
+        $d = is_array($dj) ? ($dj['data'] ?? null) : null;
+        if (!is_array($d) || empty($d['is_valid']) || ($d['app_id'] ?? '') !== FB_APP_ID) return null;
+    } else {
+        error_log('[biltest] social_login: FB_APP_ID/FB_APP_SECRET not set in config — token validated against Graph but not bound to our app. Add them to the private config.');
+    }
+    $res = safe_fetch('https://graph.facebook.com/me?fields=id,name,email&access_token=' . urlencode($tok), ['timeout' => 8]);
+    if (!$res['ok'] || $res['status'] !== 200) return null;
+    $p = json_decode($res['body'], true);
+    if (!is_array($p) || empty($p['id'])) return null;
+    return [
+        'provider_id'    => (string)$p['id'],
+        'email'          => strtolower(trim($p['email'] ?? '')),
+        'email_verified' => !empty($p['email']), // Graph returns only a confirmed email
+        'name'           => trim($p['name'] ?? ''),
+        'avatar_url'     => '',
+    ];
 }
 
 
@@ -1524,30 +1603,11 @@ function handle_check_reviews(): void {
 // =================================================================
 
 function handle_test_email(): void {
-    // Only allow if admin password is provided as a safety guard
-    $data = get_post_data();
-    $admin_pass = $data['admin_pass'] ?? ($_GET['admin_pass'] ?? '');
-    if ($admin_pass !== ADMIN_PASS) {
-        json_error(403, 'Admin password required to send test email.');
-    }
-
-    $to = $data['to'] ?? ($_GET['to'] ?? '');
-    if (!$to || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
-        json_error(400, 'Provide a valid "to" email address.');
-    }
-
-    $result = smtp_send_mail(
-        $to,
-        'Build in Lombok — SMTP Test',
-        '<html><body style="font-family:Arial,sans-serif;padding:40px;"><h2 style="color:#0c7c84;">SMTP is working!</h2><p>This test email was sent via <strong>mail.roving-i.com.au:465</strong> (SSL) from <strong>no-reply@roving-i.com.au</strong>.</p><p style="color:#999;font-size:13px;">You can remove the test_email endpoint from user.php now.</p></body></html>',
-        "SMTP is working!\n\nThis test email was sent via mail.roving-i.com.au:465 (SSL) from no-reply@roving-i.com.au.\n\nYou can remove the test_email endpoint from user.php now."
-    );
-
-    if ($result === true) {
-        json_out(array('success' => true, 'message' => 'Test email sent successfully to ' . $to));
-    } else {
-        json_out(array('success' => false, 'error' => $result), 500);
-    }
+    // SEC-025: this debug endpoint was an unauthenticated mail relay that took
+    // the admin password via the query string and echoed raw SMTP errors. It is
+    // permanently disabled. If SMTP needs testing again, do it behind a
+    // logged-in admin session with a fixed recipient and generic errors.
+    json_error(404, 'Not found.');
 }
 
 // =================================================================

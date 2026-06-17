@@ -31,18 +31,20 @@
  *   GET  ?action=check_feature&key=X
  */
 
-session_start();
+require_once(__DIR__ . '/_sec.php');                         // SEC-008/011/021-024/055/056
 require_once('/home/rovin629/config/biltest_config.php');
+sec_session_start();
+sec_install_json_exception_handler();
 
 if (isset($_GET['action']) && $_GET['action'] === 'export') {
     // export sets its own headers
 } else {
     header('Content-Type: application/json; charset=utf-8');
+    sec_api_headers(true);
 }
-header('Access-Control-Allow-Origin: *');
+// Same-origin SPA: no wildcard CORS + credentials combo (SEC-037).
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
-header('Access-Control-Allow-Credentials: true');
+header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
 // ─── DB + helpers (mirrors rab_api.php conventions) ──────────────────────────
