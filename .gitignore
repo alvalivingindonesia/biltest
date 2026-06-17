@@ -4,3 +4,10 @@
 deploy.bat
 agent/config.json
 .claude/
+
+# Secrets / local runtime — never commit (SEC-007 / SEC-033 / SEC-049)
+*.env
+.env
+worker/.env
+worker/node_modules/
+agent/node_modules/

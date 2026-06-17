@@ -2,4 +2,13 @@
 deployment:
   tasks:
     - export DEPLOYPATH=/home/rovin629/subdomains/biltest.roving-i.com.au/
-    - /bin/cp -R . $DEPLOYPATH
+    # Allow-list deploy (SEC-007 / SEC-033). Copy the tree, then strip anything
+    # the public site must not serve: VCS history, raw SQL migrations, internal
+    # docs, the worker/agent source, local DB dumps, all markdown and the deploy
+    # config. Uses only cp/rm (always present) so the deploy can't silently fail
+    # on a missing tool. The rm runs every deploy, so it also REMOVES files an
+    # earlier `cp -R .` already published (stale .git/, migrations/, etc.).
+    # uploads/ is never touched here, so user-uploaded content is preserved.
+    - /bin/cp -R . "$DEPLOYPATH"
+    - /bin/rm -rf "$DEPLOYPATH/.git" "$DEPLOYPATH/.github" "$DEPLOYPATH/migrations" "$DEPLOYPATH/docs" "$DEPLOYPATH/worker" "$DEPLOYPATH/agent" "$DEPLOYPATH/database" "$DEPLOYPATH/input data" "$DEPLOYPATH/.claude"
+    - /bin/rm -f "$DEPLOYPATH"/*.md "$DEPLOYPATH/.cpanel.yml" "$DEPLOYPATH/.gitignore" "$DEPLOYPATH/.gitattributes" "$DEPLOYPATH/deploy.bat"

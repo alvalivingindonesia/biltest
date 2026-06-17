@@ -1,0 +1,8 @@
+# Agent (quote-engine worker) source must never be web-served (SEC-033).
+# Defense-in-depth on top of the .cpanel.yml deploy exclude and root .htaccess.
+Order allow,deny
+Deny from all
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+Options -Indexes -ExecCGI

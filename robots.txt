@@ -1,6 +1,7 @@
 User-agent: *
-Disallow: /admin/
-Disallow: /api/
+Disallow:
 
-# Build in Lombok — public pages only
-Sitemap: https://buildinlombok.com/sitemap.xml
+# Sensitive areas (/admin/, /api/) are protected by real access control and
+# X-Robots-Tag: noindex headers — not by being advertised here (SEC-036).
+
+Sitemap: https://biltest.roving-i.com.au/sitemap.xml

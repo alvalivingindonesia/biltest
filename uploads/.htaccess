@@ -1,12 +1,26 @@
-# Allow image files to be served
-<FilesMatch "\.(jpg|jpeg|png|gif|webp)$">
-    Order Allow,Deny
-    Allow from all
-</FilesMatch>
+# uploads/ — default-DENY (SEC-031). User-supplied files must never execute or
+# be served as active content. Only a fixed image allow-list is reachable.
 
-# Deny everything else (especially PHP)
-<FilesMatch "\.php$">
+# 1. Deny everything by default.
+<FilesMatch ".*">
+    Order allow,deny
     Deny from all
 </FilesMatch>
 
-Options -Indexes
+# 2. Re-allow only static raster images.
+<FilesMatch "\.(jpe?g|png|gif|webp)$">
+    Order allow,deny
+    Allow from all
+</FilesMatch>
+
+# 3. Belt-and-braces: never run any handler/CGI here, even if something slips in
+#    (covers .php .phtml .phar .pht .php3/4/5/7 and SVG/HTML active content).
+Options -Indexes -ExecCGI
+<IfModule mod_php7.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+RemoveHandler .php .phtml .phar .pht .php3 .php4 .php5 .php7 .cgi .pl .py
+AddType text/plain .php .phtml .phar .pht .php3 .php4 .php5 .php7 .html .htm .svg .xml

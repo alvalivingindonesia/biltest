@@ -5,6 +5,44 @@ directory of local businesses, a RAB (cost-estimation) tool, and a paid engine t
 gathers price quotes from vendors over WhatsApp. This glossary defines the shared
 language across the directory and the quote engine.
 
+## Security — a first-class priority (NON-NEGOTIABLE)
+
+**Security is a primary product requirement for Build in Lombok, not an afterthought.**
+This site handles user accounts, authentication, payments-adjacent subscription state,
+private quote/RAB data, and an admin console with full data access. A breach would be
+existential for trust and the business.
+
+**The rule:** Every future addition or change to the website — feature, refactor, copy
+tweak, migration, dependency bump — MUST be designed and implemented through a
+cyber-security lens. Functionality, growth, speed, and convenience are **never** to be
+delivered at the expense of security. If a desired feature cannot be built securely, it
+does not ship until it can. When the GROW-FIRST philosophy (CLAUDE.md) and security
+appear to conflict, **security wins** — a hacked free tier acquires no one.
+
+**Secure-by-default baseline every change must uphold:**
+- **Server-side trust only.** Authentication, authorization (ownership + role), and all
+  freemium/premium gating are enforced on the server. The client is untrusted; never gate
+  a paid feature with only a JS flag.
+- **Parameterized SQL always.** PDO prepared statements, no string-interpolated SQL,
+  whitelist any dynamic table/column/sort identifiers.
+- **Escape all output.** `htmlspecialchars()`/`escHtml()` server-side; safe DOM APIs
+  (`textContent`, not raw `innerHTML`) for any user/API-derived data on the frontend.
+- **No secrets in the repo.** Credentials live only in the private config outside the web
+  root; nothing sensitive (config, `.git/`, raw SQL, internal docs) may be served.
+- **CSRF + session hygiene.** State-changing requests carry anti-CSRF protection;
+  sessions use HttpOnly/Secure/SameSite cookies and regenerate on privilege change.
+- **Defense in depth.** Security headers (CSP, X-Frame-Options, etc.), rate-limiting on
+  auth endpoints, validated/limited uploads, and least-privilege everywhere.
+- **Validate, then store; encode, then render.** Treat every external input (users,
+  scraped portals, the worker, the LLM extractor) as hostile.
+
+**Process:** Outstanding hardening work and the running security backlog are tracked in
+[SECURITY_AUDIT.md](SECURITY_AUDIT.md) (findings carry `SEC-NNN` ids, worked one by one
+until all are `resolved`). Before launch, all Critical/High findings must be `resolved`.
+When you introduce a new endpoint, form, file operation, third-party dependency, or admin
+action, apply the same discipline — and add a `SEC-NNN` entry for anything you cannot fix
+immediately.
+
 ## Directory
 
 **Vendor**:
