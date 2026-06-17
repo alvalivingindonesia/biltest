@@ -510,9 +510,9 @@ function formatWhatsAppNumber(phone) {
 
 function renderSocialLinks(entity) {
   const links = [];
-  if (entity.instagram_url) links.push(`<a href="${entity.instagram_url}" target="_blank" rel="noopener noreferrer" class="social-link social-link--instagram" aria-label="Instagram" title="Instagram">${iconInstagram()}</a>`);
-  if (entity.facebook_url) links.push(`<a href="${entity.facebook_url}" target="_blank" rel="noopener noreferrer" class="social-link social-link--facebook" aria-label="Facebook" title="Facebook">${iconFacebook()}</a>`);
-  if (entity.linkedin_url) links.push(`<a href="${entity.linkedin_url}" target="_blank" rel="noopener noreferrer" class="social-link social-link--linkedin" aria-label="LinkedIn" title="LinkedIn">${iconLinkedIn()}</a>`);
+  if (entity.instagram_url) links.push(`<a href="${escHtml(sanitizeUrl(entity.instagram_url))}" target="_blank" rel="noopener noreferrer" class="social-link social-link--instagram" aria-label="Instagram" title="Instagram">${iconInstagram()}</a>`);
+  if (entity.facebook_url) links.push(`<a href="${escHtml(sanitizeUrl(entity.facebook_url))}" target="_blank" rel="noopener noreferrer" class="social-link social-link--facebook" aria-label="Facebook" title="Facebook">${iconFacebook()}</a>`);
+  if (entity.linkedin_url) links.push(`<a href="${escHtml(sanitizeUrl(entity.linkedin_url))}" target="_blank" rel="noopener noreferrer" class="social-link social-link--linkedin" aria-label="LinkedIn" title="LinkedIn">${iconLinkedIn()}</a>`);
   if (links.length === 0) return '';
   return `<div class="social-links" style="display:flex;gap:var(--space-3);margin-top:var(--space-3);">${links.join('')}</div>`;
 }
@@ -1058,11 +1058,11 @@ async function renderHome(el) {
               : ((item.project_types && item.project_types.length) ? formatProjectType(item.project_types[0]) : '');
             const metaParts = [location, type].filter(Boolean);
             const meta = metaParts.join('  •  ').toUpperCase();
-            const metaHtml = meta ? '<p class="editorial-project-meta">' + meta + '</p>' : '';
+            const metaHtml = meta ? '<p class="editorial-project-meta">' + escHtml(meta) + '</p>' : '';
             return `
               <a href="${link}" class="editorial-project-card" onclick="navigate('${route}'); return false;">
                 <div class="editorial-project-img-wrap">
-                  <div class="editorial-project-img" style="background-image:url('${photo}');"></div>
+                  <div class="editorial-project-img" style="background-image:url('${escHtml(sanitizeUrl(photo))}');"></div>
                 </div>
                 <div class="editorial-project-info">
                   <h3 class="editorial-project-title">${escHtml(name)}</h3>
@@ -1322,7 +1322,7 @@ function renderProviderCard(b, index = 0) {
   const waDisp = waNum.startsWith('+62') ? '+62\u00a0' + waNum.slice(3) : waNum;
   const isLoggedIn = !!UserAuth.user;
   const waBtn  = waHref
-    ? `<a href="${waHref}" target="_blank" rel="noopener noreferrer" class="card-wa-btn" aria-label="WhatsApp ${b.name}"${isLoggedIn ? ` onclick="QuoteTracker.onWaClick(${b.id})"` : ''}>${iconWhatsApp()}<span class="card-wa-num">${waDisp}</span></a>`
+    ? `<a href="${escHtml(sanitizeUrl(waHref))}" target="_blank" rel="noopener noreferrer" class="card-wa-btn" aria-label="WhatsApp ${escHtml(b.name)}"${isLoggedIn ? ` onclick="QuoteTracker.onWaClick(${b.id})"` : ''}>${iconWhatsApp()}<span class="card-wa-num">${escHtml(waDisp)}</span></a>`
     : '';
   // "Check Status" button — logged-in users only, only when WA number exists
   const checkBtn = (waHref && isLoggedIn)
@@ -1344,28 +1344,28 @@ function renderProviderCard(b, index = 0) {
 
   const thumbImg = b.logo_url || b.profile_photo_url;
   const hasPhoto = !!thumbImg;
-  const categoryLabel = (b.categories && b.categories.length > 0) ? b.categories.map(c => formatCategoryLabel(c.key || c)).join(' · ') : formatCategoryLabel(b.category);
+  const categoryLabel = (b.categories && b.categories.length > 0) ? b.categories.map(c => escHtml(formatCategoryLabel(c.key || c))).join(' · ') : escHtml(formatCategoryLabel(b.category));
 
   const _provCard = `
     <article class="card card-animate" style="animation-delay: ${index * 50}ms" data-id="${b.id}">
       <div class="card-visual-header">
-        ${hasPhoto ? `<img src="${thumbImg}" alt="${b.name}" class="card-avatar${b.logo_url ? ' card-avatar--logo' : ''}" loading="lazy" onerror="this.style.display='none'">` : `<div class="card-avatar card-avatar--placeholder"><span>${(b.name || 'B').charAt(0).toUpperCase()}</span></div>`}
+        ${hasPhoto ? `<img src="${escHtml(sanitizeUrl(thumbImg))}" alt="${escHtml(b.name)}" class="card-avatar${b.logo_url ? ' card-avatar--logo' : ''}" loading="lazy" onerror="this.style.display='none'">` : `<div class="card-avatar card-avatar--placeholder"><span>${escHtml((b.name || 'B').charAt(0).toUpperCase())}</span></div>`}
         <div class="card-header-info">
           <span class="card-category-label">${categoryLabel}</span>
           <div class="card-header-badges">${trustedBadge}${badge}</div>
         </div>
         ${ratingInline}
       </div>
-      <h3 class="card-name"><a href="#provider/${b.slug}" onclick="navigate('provider/${b.slug}');return false;">${b.name}</a></h3>
-      <p class="card-desc">${b.short_description_en}</p>
+      <h3 class="card-name"><a href="#provider/${b.slug}" onclick="navigate('provider/${b.slug}');return false;">${escHtml(b.name)}</a></h3>
+      <p class="card-desc">${escHtml(b.short_description_en)}</p>
       <div class="card-meta-line">
-        <span class="card-meta-item">${iconMapPin()} ${formatAreaLabel(b.area)}</span>
+        <span class="card-meta-item">${iconMapPin()} ${escHtml(formatAreaLabel(b.area))}</span>
         <span class="card-meta-sep"></span>
-        <span class="card-meta-item">${langShort}</span>
+        <span class="card-meta-item">${escHtml(langShort)}</span>
         ${updatedTs ? '<span class="card-meta-sep"></span><span class="card-meta-item">' + updatedTs + '</span>' : ''}
       </div>
       <div class="card-tags-line">
-        ${b.tags.slice(0, 3).map(t => `<span class="card-tag">${t}</span>`).join('<span class="card-tag-dot">·</span>')}
+        ${b.tags.slice(0, 3).map(t => `<span class="card-tag">${escHtml(t)}</span>`).join('<span class="card-tag-dot">·</span>')}
       </div>
       <div class="card-footer">
         <button class="card-view-btn" onclick="navigate('provider/${b.slug}')">
@@ -1639,17 +1639,17 @@ async function renderProviderDetail(el, slug) {
   el.innerHTML = `
     ${isAdmin() ? `<div class="admin-detail-bar"><span class="admin-detail-bar-label">Admin</span><button class="btn btn--primary btn--sm" onclick="adminProviderDetailEdit(${b.id},'${slug}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit this listing</button></div>` : ''}
     <div class="detail-hero">
-      ${heroImg ? '<div class="detail-hero-bg" style="background-image:url(\'' + heroImg + '\');"></div>' : ''}
+      ${heroImg ? '<div class="detail-hero-bg" style="background-image:url(\'' + escHtml(sanitizeUrl(heroImg)) + '\');"></div>' : ''}
       <div class="container">
         <div class="detail-hero-inner">
-          ${b.logo_url ? '<img src="'+b.logo_url+'" alt="'+b.name+'" class="detail-hero-logo" onerror="this.style.display=\'none\'">' : (b.profile_photo_url ? '<img src="'+b.profile_photo_url+'" alt="'+b.name+'" class="detail-hero-photo" onerror="this.style.display=\'none\'">' : '')}
+          ${b.logo_url ? '<img src="'+escHtml(sanitizeUrl(b.logo_url))+'" alt="'+escHtml(b.name)+'" class="detail-hero-logo" onerror="this.style.display=\'none\'">' : (b.profile_photo_url ? '<img src="'+escHtml(sanitizeUrl(b.profile_photo_url))+'" alt="'+escHtml(b.name)+'" class="detail-hero-photo" onerror="this.style.display=\'none\'">' : '')}
           <div class="detail-hero-info">
             <div class="detail-hero-badges">
-              <span class="badge badge--light">${groupLabel}</span>
+              <span class="badge badge--light">${escHtml(groupLabel)}</span>
               ${b.is_trusted ? '<span class="badge badge--trusted-light">\u2713 Trusted</span>' : ''}
               ${b.badge ? '<span class="badge badge--light">' + renderBadge(b.badge) + '</span>' : ''}
             </div>
-            <h1 class="detail-hero-name">${b.name}</h1>
+            <h1 class="detail-hero-name">${escHtml(b.name)}</h1>
           </div>
         </div>
       </div>
@@ -1657,59 +1657,59 @@ async function renderProviderDetail(el, slug) {
     <div class="section">
       <div class="container">
         <div class="detail-subheading">
-          <p class="detail-subheading-specialty">${specialties}</p>
+          <p class="detail-subheading-specialty">${escHtml(specialties)}</p>
           <div class="detail-subheading-meta">
-            <span>${iconMapPin()} ${formatAreaLabel(b.area)}</span>
-            <span>${iconLang()} ${(b.languages || 'Bahasa').split(/[,+]+/).map(function(s){return s.trim();}).filter(Boolean).join(' \u00b7 ')}</span>
+            <span>${iconMapPin()} ${escHtml(formatAreaLabel(b.area))}</span>
+            <span>${iconLang()} ${escHtml((b.languages || 'Bahasa').split(/[,+]+/).map(function(s){return s.trim();}).filter(Boolean).join(' \u00b7 '))}</span>
           </div>
         </div>
         <div class="detail-layout">
           <div class="detail-main">
             <div class="detail-rating-row">
               ${renderGoogleRating(b.google_rating, b.google_review_count, 'detail')}
-              ${b.google_maps_url ? '<a href="'+b.google_maps_url+'" target="_blank" rel="noopener noreferrer" class="btn btn--ghost btn--sm" style="margin-left:var(--space-3);">'+iconMapPin()+' Google Maps</a>' : ''}
+              ${b.google_maps_url ? '<a href="'+escHtml(sanitizeUrl(b.google_maps_url))+'" target="_blank" rel="noopener noreferrer" class="btn btn--ghost btn--sm" style="margin-left:var(--space-3);">'+iconMapPin()+' Google Maps</a>' : ''}
             </div>
 
             <h2 class="detail-section-title">About</h2>
-            <p class="detail-description">${b.description_en}</p>
+            <p class="detail-description">${escHtml(b.description_en)}</p>
 
             <h2 class="detail-section-title">Specialties</h2>
             <div class="detail-tags mb-6">
-              ${b.tags.map(t => '<span class="tag">'+t+'</span>').join('')}
+              ${b.tags.map(t => '<span class="tag">'+escHtml(t)+'</span>').join('')}
             </div>
 
             <h2 class="detail-section-title">Contact</h2>
             <div class="info-list mb-6">
-              ${b.address ? '<div class="info-row"><span class="info-icon">'+iconMapPin()+'</span><span class="info-label">Address</span><span class="info-value">'+b.address+'</span></div>' : ''}
-              ${b.phone ? '<div class="info-row"><span class="info-icon">'+iconPhone()+'</span><span class="info-label">Phone</span><span class="info-value"><a href="tel:'+b.phone+'">'+b.phone+'</a></span></div>' : ''}
-              ${b.phone ? '<div class="info-row"><span class="info-icon" style="color:#25D366;">'+iconWhatsApp()+'</span><span class="info-label">WhatsApp</span><span class="info-value"><a href="https://wa.me/'+waNum.replace('+','')+'" target="_blank" rel="noopener noreferrer">'+waNum+'</a></span></div>' : ''}
-              ${b.website_url ? '<div class="info-row"><span class="info-icon">'+iconGlobe()+'</span><span class="info-label">Website</span><span class="info-value"><a href="'+b.website_url+'" target="_blank" rel="noopener noreferrer">Visit website '+iconExternalLink()+'</a></span></div>' : ''}
+              ${b.address ? '<div class="info-row"><span class="info-icon">'+iconMapPin()+'</span><span class="info-label">Address</span><span class="info-value">'+escHtml(b.address)+'</span></div>' : ''}
+              ${b.phone ? '<div class="info-row"><span class="info-icon">'+iconPhone()+'</span><span class="info-label">Phone</span><span class="info-value"><a href="'+escHtml(sanitizeUrl('tel:'+b.phone))+'">'+escHtml(b.phone)+'</a></span></div>' : ''}
+              ${b.phone ? '<div class="info-row"><span class="info-icon" style="color:#25D366;">'+iconWhatsApp()+'</span><span class="info-label">WhatsApp</span><span class="info-value"><a href="'+escHtml(sanitizeUrl('https://wa.me/'+waNum.replace('+','')))+'" target="_blank" rel="noopener noreferrer">'+escHtml(waNum)+'</a></span></div>' : ''}
+              ${b.website_url ? '<div class="info-row"><span class="info-icon">'+iconGlobe()+'</span><span class="info-label">Website</span><span class="info-value"><a href="'+escHtml(sanitizeUrl(b.website_url))+'" target="_blank" rel="noopener noreferrer">Visit website '+iconExternalLink()+'</a></span></div>' : ''}
             </div>
             ${renderSocialLinks(b)}
           </div>
 
           <div class="detail-sidebar">
             <div class="detail-card detail-card--actions">
-              ${b.whatsapp_number ? '<a href="https://wa.me/'+b.whatsapp_number+'" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--full btn--lg">'+iconWhatsApp()+' WhatsApp</a>' : ''}
-              ${b.phone ? '<a href="tel:'+b.phone+'" class="btn btn--ghost btn--full" style="margin-top:var(--space-2)">'+iconPhone()+' Call Now</a>' : ''}
-              ${b.website_url ? '<a href="'+b.website_url+'" target="_blank" rel="noopener noreferrer" class="btn btn--primary btn--full" style="margin-top:var(--space-2)">'+iconGlobe()+' Visit Website</a>' : ''}
-              ${isStore && b.tokopedia_url ? '<a href="'+b.tokopedia_url+'" target="_blank" rel="noopener noreferrer" class="btn btn--secondary btn--full" style="margin-top:var(--space-2)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg> Shop on Tokopedia</a>' : ''}
-              ${b.google_maps_url ? '<a href="'+b.google_maps_url+'" target="_blank" rel="noopener noreferrer" class="btn btn--ghost btn--full" style="margin-top:var(--space-2)">'+iconMapPin()+' View on Map</a>' : ''}
+              ${b.whatsapp_number ? '<a href="'+escHtml(sanitizeUrl('https://wa.me/'+b.whatsapp_number))+'" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--full btn--lg">'+iconWhatsApp()+' WhatsApp</a>' : ''}
+              ${b.phone ? '<a href="'+escHtml(sanitizeUrl('tel:'+b.phone))+'" class="btn btn--ghost btn--full" style="margin-top:var(--space-2)">'+iconPhone()+' Call Now</a>' : ''}
+              ${b.website_url ? '<a href="'+escHtml(sanitizeUrl(b.website_url))+'" target="_blank" rel="noopener noreferrer" class="btn btn--primary btn--full" style="margin-top:var(--space-2)">'+iconGlobe()+' Visit Website</a>' : ''}
+              ${isStore && b.tokopedia_url ? '<a href="'+escHtml(sanitizeUrl(b.tokopedia_url))+'" target="_blank" rel="noopener noreferrer" class="btn btn--secondary btn--full" style="margin-top:var(--space-2)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg> Shop on Tokopedia</a>' : ''}
+              ${b.google_maps_url ? '<a href="'+escHtml(sanitizeUrl(b.google_maps_url))+'" target="_blank" rel="noopener noreferrer" class="btn btn--ghost btn--full" style="margin-top:var(--space-2)">'+iconMapPin()+' View on Map</a>' : ''}
               <div style="margin-top:var(--space-3);display:flex;align-items:center;justify-content:center;gap:var(--space-2);">${renderFavBtn('provider', b.id)}<span style="font-size:var(--text-xs);color:var(--color-text-muted);">Save to favourites</span></div>
             </div>
             <div class="detail-card">
               <div class="detail-card-title">Quick Info</div>
               <div class="info-list">
-                <div class="info-row"><span class="info-label">Type</span><span class="info-value">${groupLabel}</span></div>
-                <div class="info-row"><span class="info-label">Speciality</span><span class="info-value">${specialties}</span></div>
-                <div class="info-row"><span class="info-label">Area</span><span class="info-value">${formatAreaLabel(b.area)}</span></div>
-                <div class="info-row"><span class="info-label">Languages</span><span class="info-value">${(b.languages || 'Bahasa').split(/[,+]+/).map(function(s){return s.trim();}).filter(Boolean).join(', ')}</span></div>
+                <div class="info-row"><span class="info-label">Type</span><span class="info-value">${escHtml(groupLabel)}</span></div>
+                <div class="info-row"><span class="info-label">Speciality</span><span class="info-value">${escHtml(specialties)}</span></div>
+                <div class="info-row"><span class="info-label">Area</span><span class="info-value">${escHtml(formatAreaLabel(b.area))}</span></div>
+                <div class="info-row"><span class="info-label">Languages</span><span class="info-value">${escHtml((b.languages || 'Bahasa').split(/[,+]+/).map(function(s){return s.trim();}).filter(Boolean).join(', '))}</span></div>
               </div>
             </div>
             <div class="detail-card claim-cta-card">
               <div class="detail-card-title">Is this your business?</div>
               <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin:0 0 var(--space-3) 0;">Claim this listing to update your information and manage your profile.</p>
-              <button class="btn btn--primary btn--sm" onclick="UserAuth.user ? showClaimModal(${b.id}, '${b.name.replace(/'/g, "\\'")}'): showAuthModal('login')">Claim this listing</button>
+              <button class="btn btn--primary btn--sm" onclick="UserAuth.user ? showClaimModal(${b.id}, '${escHtml(String(b.name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'"))}'): showAuthModal('login')">Claim this listing</button>
             </div>
           </div>
         </div>
@@ -1736,15 +1736,15 @@ function renderDeveloperCard(dev, index = 0) {
   // Optional second editorial detail line: leading project type.
   const type = (dev.project_types && dev.project_types.length)
     ? formatProjectType(dev.project_types[0]) : '';
-  const eyebrow = [loc, type].filter(Boolean).join('  ·  ').toUpperCase();
+  const eyebrow = escHtml([loc, type].filter(Boolean).join('  ·  ').toUpperCase());
 
   // Strip any backend-generated trailing ellipsis ("…" or "...") — the card
   // enforces its own clean two-line constraint in CSS, no truncation marks.
   const rawDesc = (dev.short_description_en || '').replace(/\s*(\.{2,}|…)\s*$/, '').trim();
   const desc = rawDesc ? escHtml(rawDesc) : '';
   const mediaInner = heroImg
-    ? `<img src="${heroImg}" alt="${name}" class="dev-card-img" loading="lazy" decoding="async" onerror="this.parentElement.classList.add('dev-card-media--empty');this.remove();">`
-    : `<span class="dev-card-media-mark">${(dev.name || 'D').charAt(0).toUpperCase()}</span>`;
+    ? `<img src="${escHtml(sanitizeUrl(heroImg))}" alt="${name}" class="dev-card-img" loading="lazy" decoding="async" onerror="this.parentElement.classList.add('dev-card-media--empty');this.remove();">`
+    : `<span class="dev-card-media-mark">${escHtml((dev.name || 'D').charAt(0).toUpperCase())}</span>`;
 
   // Secondary utilities (favourite, WhatsApp) live on the detail page only —
   // the directory feed stays quiet: image, hierarchy, single anchored CTA.
@@ -1842,15 +1842,15 @@ async function renderDeveloperDetail(el, slug) {
     ? '<div class="card-grid card-grid--2col">' + devProjects.map((p, i) => renderProjectCard(p, i)).join('') + '</div>'
     : '<div class="dev-portfolio-empty">'
         + '<p class="dev-portfolio-empty-desc">Inquire directly to receive private off-market availability, upcoming phase releases, and masterplan documentation for ' + escHtml(dev.name) + '.</p>'
-        + (dev.whatsapp_number ? '<a href="https://wa.me/' + dev.whatsapp_number + '" target="_blank" rel="noopener noreferrer" class="dev-portfolio-cta-link">Request Masterplan Presentation</a>' : '')
+        + (dev.whatsapp_number ? '<a href="' + escHtml(sanitizeUrl('https://wa.me/' + dev.whatsapp_number)) + '" target="_blank" rel="noopener noreferrer" class="dev-portfolio-cta-link">Request Masterplan Presentation</a>' : '')
       + '</div>';
 
   // Monochrome social links (no brand colours)
   const socialHtml = (dev.instagram_url || dev.facebook_url || dev.linkedin_url)
     ? '<div class="dev-social-row">'
-        + (dev.instagram_url ? '<a href="' + dev.instagram_url + '" target="_blank" rel="noopener noreferrer" class="dev-social-link" aria-label="Instagram">' + iconInstagram() + '</a>' : '')
-        + (dev.facebook_url  ? '<a href="' + dev.facebook_url  + '" target="_blank" rel="noopener noreferrer" class="dev-social-link" aria-label="Facebook">'  + iconFacebook()  + '</a>' : '')
-        + (dev.linkedin_url  ? '<a href="' + dev.linkedin_url  + '" target="_blank" rel="noopener noreferrer" class="dev-social-link" aria-label="LinkedIn">'  + iconLinkedIn()  + '</a>' : '')
+        + (dev.instagram_url ? '<a href="' + escHtml(sanitizeUrl(dev.instagram_url)) + '" target="_blank" rel="noopener noreferrer" class="dev-social-link" aria-label="Instagram">' + iconInstagram() + '</a>' : '')
+        + (dev.facebook_url  ? '<a href="' + escHtml(sanitizeUrl(dev.facebook_url))  + '" target="_blank" rel="noopener noreferrer" class="dev-social-link" aria-label="Facebook">'  + iconFacebook()  + '</a>' : '')
+        + (dev.linkedin_url  ? '<a href="' + escHtml(sanitizeUrl(dev.linkedin_url))  + '" target="_blank" rel="noopener noreferrer" class="dev-social-link" aria-label="LinkedIn">'  + iconLinkedIn()  + '</a>' : '')
       + '</div>'
     : '';
 
@@ -1859,20 +1859,20 @@ async function renderDeveloperDetail(el, slug) {
 
     <!-- CINEMATIC HERO BANNER -->
     <div class="dev-hero">
-      <div class="dev-hero-bg" ${devHeroImg ? 'style="background-image:url(\'' + devHeroImg + '\')"' : ''}></div>
+      <div class="dev-hero-bg" ${devHeroImg ? 'style="background-image:url(\'' + escHtml(sanitizeUrl(devHeroImg)) + '\')"' : ''}></div>
       <div class="dev-hero-gradient"></div>
       <div class="container dev-hero-container">
         <div class="dev-hero-content">
           <div class="dev-hero-badges">
             ${dev.is_featured ? '<span class="dev-hero-badge">\u2605 Featured</span>' : ''}
             ${dev.badge ? '<span class="dev-hero-badge">' + renderBadge(dev.badge) + '</span>' : ''}
-            ${dev.project_types.map(t => '<span class="dev-hero-badge">' + formatProjectType(t) + '</span>').join('')}
+            ${dev.project_types.map(t => '<span class="dev-hero-badge">' + escHtml(formatProjectType(t)) + '</span>').join('')}
           </div>
           <h1 class="dev-hero-name">${escHtml(dev.name)}</h1>
           <p class="dev-hero-specialty">${escHtml(devSpecialties)}</p>
           <div class="dev-hero-meta">
-            ${dev.areas_focus.map(a => '<span>' + formatAreaLabel(a) + '</span>').join('<span class="dev-hero-meta-dot">&nbsp;&middot;&nbsp;</span>')}
-            <span>${(dev.languages || 'Bahasa').split(/[,+]+/).map(function(s){return s.trim();}).filter(Boolean).join(' \u00b7 ')}</span>
+            ${dev.areas_focus.map(a => '<span>' + escHtml(formatAreaLabel(a)) + '</span>').join('<span class="dev-hero-meta-dot">&nbsp;&middot;&nbsp;</span>')}
+            <span>${escHtml((dev.languages || 'Bahasa').split(/[,+]+/).map(function(s){return s.trim();}).filter(Boolean).join(' \u00b7 '))}</span>
           </div>
         </div>
       </div>
@@ -1888,7 +1888,7 @@ async function renderDeveloperDetail(el, slug) {
             ${ratingHtml}
             <div class="dev-about">
               <h2 class="dev-section-title">About</h2>
-              <div class="dev-description">${dev.description_en || ''}</div>
+              <div class="dev-description">${escHtml(dev.description_en || '')}</div>
             </div>
             <div class="dev-focus-section">
               <h2 class="dev-section-title">Focus Areas</h2>
@@ -1903,12 +1903,12 @@ async function renderDeveloperDetail(el, slug) {
             <div class="dev-contact-card">
               <p class="dev-contact-card-title">Contact</p>
               <div class="dev-contact-list">
-                ${dev.phone      ? '<div class="dev-contact-row"><svg class="dev-contact-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.47 8a19.79 19.79 0 01-3.07-8.67A2 2 0 012.38 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.29 6.29l1.28-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg><a href="tel:' + dev.phone + '" class="dev-contact-link">' + escHtml(dev.phone) + '</a></div>' : ''}
-                ${dev.website_url   ? '<div class="dev-contact-row"><svg class="dev-contact-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg><a href="' + dev.website_url + '" target="_blank" rel="noopener noreferrer" class="dev-contact-link">Website</a></div>' : ''}
-                ${dev.google_maps_url ? '<div class="dev-contact-row"><svg class="dev-contact-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg><a href="' + dev.google_maps_url + '" target="_blank" rel="noopener noreferrer" class="dev-contact-link">View on Map</a></div>' : ''}
+                ${dev.phone      ? '<div class="dev-contact-row"><svg class="dev-contact-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.47 8a19.79 19.79 0 01-3.07-8.67A2 2 0 012.38 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.29 6.29l1.28-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg><a href="' + escHtml(sanitizeUrl('tel:' + dev.phone)) + '" class="dev-contact-link">' + escHtml(dev.phone) + '</a></div>' : ''}
+                ${dev.website_url   ? '<div class="dev-contact-row"><svg class="dev-contact-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg><a href="' + escHtml(sanitizeUrl(dev.website_url)) + '" target="_blank" rel="noopener noreferrer" class="dev-contact-link">Website</a></div>' : ''}
+                ${dev.google_maps_url ? '<div class="dev-contact-row"><svg class="dev-contact-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg><a href="' + escHtml(sanitizeUrl(dev.google_maps_url)) + '" target="_blank" rel="noopener noreferrer" class="dev-contact-link">View on Map</a></div>' : ''}
               </div>
               ${dev.min_ticket_usd ? '<div class="dev-min-invest"><span class="dev-min-invest-label">From</span><span class="dev-min-invest-value">' + formatUSD(dev.min_ticket_usd) + '</span></div>' : ''}
-              ${dev.whatsapp_number ? '<a href="https://wa.me/' + dev.whatsapp_number + '" target="_blank" rel="noopener noreferrer" class="dev-wa-btn">' + iconWhatsApp() + '<span>Inquire via WhatsApp</span></a>' : ''}
+              ${dev.whatsapp_number ? '<a href="' + escHtml(sanitizeUrl('https://wa.me/' + dev.whatsapp_number)) + '" target="_blank" rel="noopener noreferrer" class="dev-wa-btn">' + iconWhatsApp() + '<span>Inquire via WhatsApp</span></a>' : ''}
               ${socialHtml}
               <div class="dev-fav-row">${renderFavBtn('developer', dev.id)}<span class="dev-fav-label">Save to favourites</span></div>
             </div>
@@ -1961,7 +1961,7 @@ function renderListingCard(l, index) {
   var linkHref = l.source_url ? l.source_url : '#listing/' + l.slug;
   var linkTarget = l.source_url ? ' target="_blank" rel="noopener noreferrer"' : '';
   var linkOnclick = l.source_url ? '' : ' onclick="navigate(\'listing/' + l.slug + '\');return false;"';
-  var sourceTag = l.source_site ? '<span class="listing-card-source">' + l.source_site + ' <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></span>' : '';
+  var sourceTag = l.source_site ? '<span class="listing-card-source">' + escHtml(l.source_site) + ' <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></span>' : '';
 
   var adminEditBtn = isAdmin()
     ? '<button class="admin-edit-card-btn" onclick="event.preventDefault();event.stopPropagation();adminListingQuickEdit(' + l.id + ',\'' + (l.slug || '') + '\')" title="Edit listing"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit</button>'
@@ -1969,16 +1969,16 @@ function renderListingCard(l, index) {
 
   return '<div class="listing-card-wrap" data-listing-id="' + (l.id || '') + '" style="animation-delay:' + (index * 60) + 'ms">'
     + adminEditBtn
-    + '<a href="' + linkHref + '" class="listing-card card"' + linkTarget + linkOnclick + '>'
+    + '<a href="' + escHtml(sanitizeUrl(linkHref)) + '" class="listing-card card"' + linkTarget + linkOnclick + '>'
     + '<div class="listing-card-image">'
-    + (imgUrl ? '<img src="' + imgUrl + '" alt="' + (l.title || '').replace(/"/g, '&quot;') + '" loading="lazy" onload="this.classList.add(\'loaded\')">' : '<div class="listing-card-noimg"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></div>')
+    + (imgUrl ? '<img src="' + escHtml(sanitizeUrl(imgUrl)) + '" alt="' + escHtml(l.title || '') + '" loading="lazy" onload="this.classList.add(\'loaded\')">' : '<div class="listing-card-noimg"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></div>')
     + (l.is_featured ? '<span class="listing-card-featured">Featured</span>' : '')
     + '</div>'
     + '<div class="listing-card-body">'
-    + (categoryParts.length ? '<div class="listing-card-category">' + categoryParts.join(' • ') + '</div>' : '')
+    + (categoryParts.length ? '<div class="listing-card-category">' + escHtml(categoryParts.join(' • ')) + '</div>' : '')
     + '<div class="listing-card-price">' + priceStr + '</div>'
-    + '<h3 class="listing-card-title">' + (l.title || '') + '</h3>'
-    + (metaParts.length ? '<div class="listing-card-meta-line">' + metaParts.join('  •  ') + '</div>' : '')
+    + '<h3 class="listing-card-title">' + escHtml(l.title || '') + '</h3>'
+    + (metaParts.length ? '<div class="listing-card-meta-line">' + escHtml(metaParts.join('  •  ')) + '</div>' : '')
     + sourceTag
     + '</div>'
     + '</a>'
@@ -3268,26 +3268,26 @@ async function renderListingDetail(el, slug) {
             ${images.length > 0 ? (
               '<div class="listing-gallery">' +
               '<div class="listing-gallery-main">' +
-              '<img src="' + (primaryImg ? primaryImg.url : images[0].url) + '" alt="' + listing.title + '" id="gallery-main-img">' +
+              '<img src="' + escHtml(sanitizeUrl(primaryImg ? primaryImg.url : images[0].url)) + '" alt="' + escHtml(listing.title) + '" id="gallery-main-img">' +
               '</div>' +
               (images.length > 1 ?
                 '<div class="listing-gallery-thumbs">' +
                 images.map((img, idx) =>
-                  '<img src="' + img.url + '" alt="' + (img.alt_text || '') + '" class="listing-thumb ' + (idx === 0 ? 'active' : '') + '" onclick="var m=document.getElementById(\'gallery-main-img\');m.src=\'' + img.url + '\';document.querySelectorAll(\'.listing-thumb\').forEach(function(t){t.classList.remove(\'active\')});this.classList.add(\'active\');">'
+                  '<img src="' + escHtml(sanitizeUrl(img.url)) + '" alt="' + escHtml(img.alt_text || '') + '" class="listing-thumb ' + (idx === 0 ? 'active' : '') + '" onclick="var m=document.getElementById(\'gallery-main-img\');m.src=\'' + escHtml(String(sanitizeUrl(img.url)).replace(/\\/g, '\\\\').replace(/'/g, "\\'")) + '\';document.querySelectorAll(\'.listing-thumb\').forEach(function(t){t.classList.remove(\'active\')});this.classList.add(\'active\');">'
                 ).join('') +
                 '</div>'
               : '') +
               '</div>'
             ) : ''}
 
-            <h1 class="listing-detail-title" id="ldt-title">${listing.title}</h1>
+            <h1 class="listing-detail-title" id="ldt-title">${escHtml(listing.title)}</h1>
             <div class="listing-detail-price" id="ldt-price">${priceStr}</div>
 
             <div class="listing-detail-tags">
-              ${typeLabel ? '<span class="detail-tag">' + typeLabel + '</span>' : ''}
-              ${certLabel ? '<span class="detail-tag">' + certLabel + '</span>' : ''}
-              ${listing.area_label ? '<span class="detail-tag">' + listing.area_label + '</span>' : ''}
-              ${listing.zoning ? '<span class="detail-tag">' + listing.zoning + '</span>' : ''}
+              ${typeLabel ? '<span class="detail-tag">' + escHtml(typeLabel) + '</span>' : ''}
+              ${certLabel ? '<span class="detail-tag">' + escHtml(certLabel) + '</span>' : ''}
+              ${listing.area_label ? '<span class="detail-tag">' + escHtml(listing.area_label) + '</span>' : ''}
+              ${listing.zoning ? '<span class="detail-tag">' + escHtml(listing.zoning) + '</span>' : ''}
             </div>
 
             <div class="listing-detail-specs">
@@ -3296,18 +3296,18 @@ async function renderListingDetail(el, slug) {
               ${listing.bedrooms ? '<div class="spec-item"><span class="spec-label">Bedrooms</span><span class="spec-value">' + listing.bedrooms + '</span></div>' : ''}
               ${listing.bathrooms ? '<div class="spec-item"><span class="spec-label">Bathrooms</span><span class="spec-value">' + listing.bathrooms + '</span></div>' : ''}
               ${listing.year_built ? '<div class="spec-item"><span class="spec-label">Year Built</span><span class="spec-value">' + listing.year_built + '</span></div>' : ''}
-              ${listing.furnishing ? '<div class="spec-item"><span class="spec-label">Furnishing</span><span class="spec-value">' + listing.furnishing.replace(/_/g, ' ') + '</span></div>' : ''}
+              ${listing.furnishing ? '<div class="spec-item"><span class="spec-label">Furnishing</span><span class="spec-value">' + escHtml(listing.furnishing.replace(/_/g, ' ')) + '</span></div>' : ''}
             </div>
 
             <div class="listing-detail-desc" id="ldt-desc">
               <h3>Description</h3>
-              <p>${listing.short_description || ''}</p>
-              ${listing.description ? '<div class="listing-full-desc">' + listing.description.replace(/\n/g, '<br>') + '</div>' : ''}
+              <p>${escHtml(listing.short_description || '')}</p>
+              ${listing.description ? '<div class="listing-full-desc">' + escHtml(listing.description).replace(/\n/g, '<br>') + '</div>' : ''}
             </div>
 
-            ${features.length > 0 ? '<div class="listing-features"><h3>Features</h3><div class="feature-list">' + features.map(f => '<span class="feature-tag">' + f + '</span>').join('') + '</div></div>' : ''}
+            ${features.length > 0 ? '<div class="listing-features"><h3>Features</h3><div class="feature-list">' + features.map(f => '<span class="feature-tag">' + escHtml(f) + '</span>').join('') + '</div></div>' : ''}
 
-            ${listing.google_maps_url ? '<div class="listing-map-link" style="margin-top:var(--space-6)"><a href="' + listing.google_maps_url + '" target="_blank" rel="noopener noreferrer" class="btn btn--ghost btn--sm"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> View on Google Maps</a></div>' : ''}
+            ${listing.google_maps_url ? '<div class="listing-map-link" style="margin-top:var(--space-6)"><a href="' + escHtml(sanitizeUrl(listing.google_maps_url)) + '" target="_blank" rel="noopener noreferrer" class="btn btn--ghost btn--sm"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> View on Google Maps</a></div>' : ''}
           </div>
 
           <div class="listing-detail-sidebar">
@@ -3315,17 +3315,17 @@ async function renderListingDetail(el, slug) {
               '<div class="card listing-agent-card">' +
               '<h3 style="font-family:var(--font-display);margin-bottom:var(--space-3)">Listed by</h3>' +
               '<a href="#agent/' + listing.agent_slug + '" onclick="navigate(\'agent/' + listing.agent_slug + '\');return false;" class="agent-card-link">' +
-              '<div class="agent-card-name">' + listing.agent_name + '</div>' +
-              (listing.agent_agency ? '<div class="agent-card-agency">' + listing.agent_agency + '</div>' : '') +
+              '<div class="agent-card-name">' + escHtml(listing.agent_name) + '</div>' +
+              (listing.agent_agency ? '<div class="agent-card-agency">' + escHtml(listing.agent_agency) + '</div>' : '') +
               '</a>' +
-              (wa ? '<a href="https://wa.me/' + wa.replace(/[^0-9]/g, '') + '?text=' + encodeURIComponent('Hi, I\'m interested in: ' + listing.title) + '" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--full" style="margin-top:var(--space-4)">' + iconWhatsApp() + ' WhatsApp Agent</a>' : '') +
-              ((listing.contact_phone || listing.agent_phone) ? '<a href="tel:' + (listing.contact_phone || listing.agent_phone) + '" class="btn btn--ghost btn--full" style="margin-top:var(--space-2)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg> Call Agent</a>' : '') +
+              (wa ? '<a href="' + escHtml(sanitizeUrl('https://wa.me/' + wa.replace(/[^0-9]/g, '') + '?text=' + encodeURIComponent('Hi, I\'m interested in: ' + listing.title))) + '" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--full" style="margin-top:var(--space-4)">' + iconWhatsApp() + ' WhatsApp Agent</a>' : '') +
+              ((listing.contact_phone || listing.agent_phone) ? '<a href="' + escHtml(sanitizeUrl('tel:' + (listing.contact_phone || listing.agent_phone))) + '" class="btn btn--ghost btn--full" style="margin-top:var(--space-2)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg> Call Agent</a>' : '') +
               '</div>'
             ) : ''}
 
             ${renderFavBtn('listing', listing.id)}
 
-            ${listing.address ? '<div class="card" style="margin-top:var(--space-4)"><h4 style="font-size:var(--text-sm);font-weight:600;margin-bottom:var(--space-2)">Location</h4><p style="font-size:var(--text-sm);color:var(--color-text-muted)">' + listing.address + '</p></div>' : ''}
+            ${listing.address ? '<div class="card" style="margin-top:var(--space-4)"><h4 style="font-size:var(--text-sm);font-weight:600;margin-bottom:var(--space-2)">Location</h4><p style="font-size:var(--text-sm);color:var(--color-text-muted)">' + escHtml(listing.address) + '</p></div>' : ''}
           </div>
         </div>
       </div>
@@ -4117,19 +4117,19 @@ function renderAgentCard(agent, index = 0) {
     <a href="#agent/${agent.slug}" class="card agent-card" onclick="navigate('agent/${agent.slug}');return false;" style="animation-delay:${index * 60}ms">
       <div class="agent-card-avatar">
         ${agent.profile_photo_url
-          ? '<img src="' + agent.profile_photo_url + '" alt="' + agent.display_name + '" onerror="this.style.display=\'none\'">'
-          : '<div class="agent-avatar-placeholder">' + agent.display_name.charAt(0).toUpperCase() + '</div>'}
+          ? '<img src="' + escHtml(sanitizeUrl(agent.profile_photo_url)) + '" alt="' + escHtml(agent.display_name) + '" onerror="this.style.display=\'none\'">'
+          : '<div class="agent-avatar-placeholder">' + escHtml(agent.display_name.charAt(0).toUpperCase()) + '</div>'}
       </div>
       <div class="agent-card-info">
-        <h3 class="agent-card-name">${agent.display_name}</h3>
-        ${agent.agency_name ? '<div class="agent-card-agency">' + agent.agency_name + '</div>' : ''}
+        <h3 class="agent-card-name">${escHtml(agent.display_name)}</h3>
+        ${agent.agency_name ? '<div class="agent-card-agency">' + escHtml(agent.agency_name) + '</div>' : ''}
         ${agent.google_rating ? renderGoogleRating(agent.google_rating, agent.google_review_count, 'card') : ''}
         <div class="agent-card-meta">
           ${agent.listing_count ? '<span>' + agent.listing_count + ' listing' + (agent.listing_count > 1 ? 's' : '') + '</span>' : ''}
           ${agent.is_verified ? '<span class="agent-verified">Verified</span>' : ''}
           ${renderReputationBadge(agent.reputation_tier)}
         </div>
-        ${agent.bio ? '<p class="agent-card-bio">' + (agent.bio.length > 120 ? agent.bio.substring(0, 120) + '...' : agent.bio) + '</p>' : ''}
+        ${agent.bio ? '<p class="agent-card-bio">' + (agent.bio.length > 120 ? escHtml(agent.bio.substring(0, 120)) + '...' : escHtml(agent.bio)) + '</p>' : ''}
       </div>
     </a>
   `;
@@ -4230,14 +4230,14 @@ async function renderAgentDetail(el, slug) {
     <div class="detail-hero">
       <div class="container">
         <div class="detail-hero-inner">
-          ${agent.profile_photo_url ? '<img src="' + agent.profile_photo_url + '" alt="' + agent.display_name + '" class="detail-hero-photo" style="border-radius:50%;" onerror="this.style.display=\'none\'">' : '<div style="width:100px;height:100px;border-radius:50%;background:rgba(12,124,132,0.5);display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:700;color:#fff;flex-shrink:0;">' + agent.display_name.charAt(0).toUpperCase() + '</div>'}
+          ${agent.profile_photo_url ? '<img src="' + escHtml(sanitizeUrl(agent.profile_photo_url)) + '" alt="' + escHtml(agent.display_name) + '" class="detail-hero-photo" style="border-radius:50%;" onerror="this.style.display=\'none\'">' : '<div style="width:100px;height:100px;border-radius:50%;background:rgba(12,124,132,0.5);display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:700;color:#fff;flex-shrink:0;">' + escHtml(agent.display_name.charAt(0).toUpperCase()) + '</div>'}
           <div class="detail-hero-info">
             <div class="detail-hero-badges">
               ${agent.is_verified ? '<span class="badge badge--trusted-light">\u2713 Verified Agent</span>' : ''}
               ${agent.reputation_tier && agent.reputation_tier !== 'new' ? '<span class="badge badge--light">' + (agent.reputation_tier === 'top' ? 'Top Agent' : 'Established') + '</span>' : ''}
-              ${agent.agency_name ? '<span class="badge badge--light">' + agent.agency_name + '</span>' : ''}
+              ${agent.agency_name ? '<span class="badge badge--light">' + escHtml(agent.agency_name) + '</span>' : ''}
             </div>
-            <h1 class="detail-hero-name">${agent.display_name}</h1>
+            <h1 class="detail-hero-name">${escHtml(agent.display_name)}</h1>
           </div>
         </div>
       </div>
@@ -4247,25 +4247,25 @@ async function renderAgentDetail(el, slug) {
         <div class="detail-subheading">
           <p class="detail-subheading-specialty">Property Agent</p>
           <div class="detail-subheading-meta">
-            ${agent.area_label ? '<span>'+iconMapPin()+' '+agent.area_label+'</span>' : ''}
+            ${agent.area_label ? '<span>'+iconMapPin()+' '+escHtml(agent.area_label)+'</span>' : ''}
             ${agent.listing_count ? '<span>'+agent.listing_count+' listing'+(agent.listing_count > 1 ? 's' : '')+'</span>' : ''}
           </div>
         </div>
         <div class="detail-layout">
           <div class="detail-main">
             ${agent.google_rating ? '<div class="detail-rating-row">' + renderGoogleRating(agent.google_rating, agent.google_review_count, 'detail') + '</div>' : ''}
-            ${agent.bio ? '<h2 class="detail-section-title">About</h2><p class="detail-description">' + agent.bio + '</p>' : ''}
-            ${agentListings.length > 0 ? '<h2 class="detail-section-title" style="margin-bottom:var(--space-5)">Listings by ' + agent.display_name + '</h2><div class="card-grid listings-grid">' + agentListings.map((l, i) => renderListingCard(l, i)).join('') + '</div>' : '<p class="text-muted" style="color:var(--color-text-muted)">No active listings yet.</p>'}
+            ${agent.bio ? '<h2 class="detail-section-title">About</h2><p class="detail-description">' + escHtml(agent.bio) + '</p>' : ''}
+            ${agentListings.length > 0 ? '<h2 class="detail-section-title" style="margin-bottom:var(--space-5)">Listings by ' + escHtml(agent.display_name) + '</h2><div class="card-grid listings-grid">' + agentListings.map((l, i) => renderListingCard(l, i)).join('') + '</div>' : '<p class="text-muted" style="color:var(--color-text-muted)">No active listings yet.</p>'}
           </div>
           <div class="detail-sidebar">
             <div class="detail-card">
               <div class="detail-card-title">Contact</div>
               <div class="info-list mb-4">
-                ${agent.phone ? '<div class="info-row"><span class="info-icon">' + iconPhone() + '</span><span class="info-value"><a href="tel:' + agent.phone + '">' + agent.phone + '</a></span></div>' : ''}
-                ${agent.email ? '<div class="info-row"><span class="info-icon">' + iconGlobe() + '</span><span class="info-value">' + agent.email + '</span></div>' : ''}
-                ${agent.area_label ? '<div class="info-row"><span class="info-icon">' + iconMapPin() + '</span><span class="info-value">' + agent.area_label + '</span></div>' : ''}
+                ${agent.phone ? '<div class="info-row"><span class="info-icon">' + iconPhone() + '</span><span class="info-value"><a href="' + escHtml(sanitizeUrl('tel:' + agent.phone)) + '">' + escHtml(agent.phone) + '</a></span></div>' : ''}
+                ${agent.email ? '<div class="info-row"><span class="info-icon">' + iconGlobe() + '</span><span class="info-value">' + escHtml(agent.email) + '</span></div>' : ''}
+                ${agent.area_label ? '<div class="info-row"><span class="info-icon">' + iconMapPin() + '</span><span class="info-value">' + escHtml(agent.area_label) + '</span></div>' : ''}
               </div>
-              ${wa ? '<a href="https://wa.me/' + wa.replace(/[^0-9]/g, '') + '" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--full">' + iconWhatsApp() + ' WhatsApp</a>' : ''}
+              ${wa ? '<a href="' + escHtml(sanitizeUrl('https://wa.me/' + wa.replace(/[^0-9]/g, ''))) + '" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--full">' + iconWhatsApp() + ' WhatsApp</a>' : ''}
               <button onclick="checkReviewUpdates('agent', ${agent.id})" class="btn btn--ghost btn--full" style="margin-top:var(--space-2)">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                 Check for Review Updates
@@ -4307,7 +4307,7 @@ async function renderAgentSignup(el) {
         <form class="submit-form" id="agent-signup-form">
           <div class="auth-field">
             <label>Display Name *</label>
-            <input type="text" name="display_name" required value="${UserAuth.user.display_name || ''}">
+            <input type="text" name="display_name" required value="${escHtml(UserAuth.user.display_name || '')}">
           </div>
           <div class="auth-field">
             <label>Agency / Company Name</label>
@@ -4573,15 +4573,15 @@ function renderProjectCard(p, index = 0) {
     <article class="card card-animate" style="animation-delay:${index * 50}ms">
       <div class="card-top">
         <div class="card-top-left">
-          <span class="card-category-label">${formatProjectType(p.project_type)}</span>
+          <span class="card-category-label">${escHtml(formatProjectType(p.project_type))}</span>
           ${badge}
         </div>
-        <span class="card-status card-status--${p.status}">${statusLabel}</span>
+        <span class="card-status card-status--${p.status}">${escHtml(statusLabel)}</span>
       </div>
-      <h3 class="card-name"><a href="#project/${p.slug}" onclick="navigate('project/${p.slug}');return false;">${p.name}</a></h3>
-      <p class="card-desc">${p.short_description_en}</p>
+      <h3 class="card-name"><a href="#project/${p.slug}" onclick="navigate('project/${p.slug}');return false;">${escHtml(p.name)}</a></h3>
+      <p class="card-desc">${escHtml(p.short_description_en)}</p>
       <div class="card-meta-line">
-        <span class="card-meta-item">${iconMapPin()} ${formatAreaLabel(p.location_area)}</span>
+        <span class="card-meta-item">${iconMapPin()} ${escHtml(formatAreaLabel(p.location_area))}</span>
       </div>
       <div class="card-facts-row">
         <div class="card-fact">
@@ -4590,13 +4590,13 @@ function renderProjectCard(p, index = 0) {
         </div>
         <div class="card-fact">
           <span class="card-fact-label">Yield</span>
-          <span class="card-fact-value">${p.expected_yield_range}</span>
+          <span class="card-fact-value">${escHtml(p.expected_yield_range)}</span>
         </div>
       </div>
       ${dev ? `
         <div class="card-developer-line">
           <span>by</span>
-          <button onclick="navigate('developer/${dev.slug}')" class="card-developer-link">${dev.name}</button>
+          <button onclick="navigate('developer/${dev.slug}')" class="card-developer-link">${escHtml(dev.name)}</button>
           ${dev.google_rating ? `<span class="card-rating-inline card-rating-inline--sm"><span class="card-rating-star">★</span> ${dev.google_rating.toFixed(1)}</span>` : ''}
         </div>
       ` : ''}
@@ -4604,7 +4604,7 @@ function renderProjectCard(p, index = 0) {
         <button class="card-view-btn" onclick="navigate('project/${p.slug}')">
           View project ${iconArrowRight()}
         </button>
-        <div class="card-footer-right">${renderFavBtn('project', p.id)}${p.info_contact_whatsapp ? `<a href="https://wa.me/${p.info_contact_whatsapp}" target="_blank" rel="noopener noreferrer" class="card-wa-btn" aria-label="Request info">${iconWhatsApp()}</a>` : ''}</div>
+        <div class="card-footer-right">${renderFavBtn('project', p.id)}${p.info_contact_whatsapp ? `<a href="${escHtml(sanitizeUrl('https://wa.me/' + p.info_contact_whatsapp))}" target="_blank" rel="noopener noreferrer" class="card-wa-btn" aria-label="Request info">${iconWhatsApp()}</a>` : ''}</div>
       </div>
     </article>
   `;
@@ -4774,14 +4774,14 @@ async function renderProjectDetail(el, slug) {
     <div class="page-header">
       <div class="container">
         <div class="card-meta mb-3">
-          <span class="badge ${getStatusBadgeClass(p.status)}">${formatProjectStatus(p.status)}</span>
-          <span class="badge badge--project-type">${formatProjectType(p.project_type)}</span>
+          <span class="badge ${getStatusBadgeClass(p.status)}">${escHtml(formatProjectStatus(p.status))}</span>
+          <span class="badge badge--project-type">${escHtml(formatProjectType(p.project_type))}</span>
           ${p.badge ? `<span class="badge badge--new">${renderBadge(p.badge)}</span>` : ''}
         </div>
-        <h1 class="page-title">${p.name}</h1>
+        <h1 class="page-title">${escHtml(p.name)}</h1>
         <div class="card-meta">
-          <span class="meta-chip">${iconMapPin()} ${formatAreaLabel(p.location_area)}</span>
-          ${dev ? `<span class="meta-chip">by <button onclick="navigate('developer/${dev.slug}')" style="color:var(--color-primary);font-weight:600;background:none;border:none;cursor:pointer;padding:0;font-size:inherit;">${dev.name}</button></span>` : ''}
+          <span class="meta-chip">${iconMapPin()} ${escHtml(formatAreaLabel(p.location_area))}</span>
+          ${dev ? `<span class="meta-chip">by <button onclick="navigate('developer/${dev.slug}')" style="color:var(--color-primary);font-weight:600;background:none;border:none;cursor:pointer;padding:0;font-size:inherit;">${escHtml(dev.name)}</button></span>` : ''}
         </div>
       </div>
     </div>
@@ -4794,45 +4794,45 @@ async function renderProjectDetail(el, slug) {
           </div>
           <div class="key-fact">
             <div class="key-fact-label">Expected Yield</div>
-            <div class="key-fact-value" style="font-size:var(--text-base);">${p.expected_yield_range}</div>
+            <div class="key-fact-value" style="font-size:var(--text-base);">${escHtml(p.expected_yield_range)}</div>
           </div>
           <div class="key-fact">
             <div class="key-fact-label">Timeline</div>
-            <div class="key-fact-value" style="font-size:var(--text-base);">${p.timeline_summary}</div>
+            <div class="key-fact-value" style="font-size:var(--text-base);">${escHtml(p.timeline_summary)}</div>
           </div>
           <div class="key-fact">
             <div class="key-fact-label">Type</div>
-            <div class="key-fact-value" style="font-size:var(--text-base);">${formatProjectType(p.project_type)}</div>
+            <div class="key-fact-value" style="font-size:var(--text-base);">${escHtml(formatProjectType(p.project_type))}</div>
           </div>
           <div class="key-fact">
             <div class="key-fact-label">Location</div>
-            <div class="key-fact-value" style="font-size:var(--text-base);">${formatAreaLabel(p.location_area)}</div>
+            <div class="key-fact-value" style="font-size:var(--text-base);">${escHtml(formatAreaLabel(p.location_area))}</div>
           </div>
           <div class="key-fact">
             <div class="key-fact-label">Status</div>
-            <div class="key-fact-value" style="font-size:var(--text-base);">${formatProjectStatus(p.status)}</div>
+            <div class="key-fact-value" style="font-size:var(--text-base);">${escHtml(formatProjectStatus(p.status))}</div>
           </div>
         </div>
 
         <div class="detail-layout">
           <div class="detail-main">
             <h2 class="detail-section-title">About This Project</h2>
-            <p class="detail-description">${p.description_en}</p>
+            <p class="detail-description">${escHtml(p.description_en)}</p>
 
             <h2 class="detail-section-title">Tags</h2>
             <div class="detail-tags mb-6">
-              ${p.tags.map(t => `<span class="tag">${t}</span>`).join('')}
+              ${p.tags.map(t => `<span class="tag">${escHtml(t)}</span>`).join('')}
             </div>
 
             ${dev ? `
               <h2 class="detail-section-title">Developer</h2>
               <div class="card" style="max-width:480px;margin-bottom:var(--space-6);">
                 <div class="card-header">
-                  <h3 class="card-name">${dev.name}</h3>
+                  <h3 class="card-name">${escHtml(dev.name)}</h3>
                   ${dev.badge ? `<span class="badge badge--featured">${renderBadge(dev.badge)}</span>` : ''}
                 </div>
                 ${renderGoogleRating(dev.google_rating, dev.google_review_count)}
-                <p class="card-desc">${dev.short_description_en}</p>
+                <p class="card-desc">${escHtml(dev.short_description_en)}</p>
                 <div class="card-actions">
                   <button class="btn btn--secondary btn--sm" onclick="navigate('developer/${dev.slug}')">View Developer</button>
                 </div>
@@ -4844,8 +4844,8 @@ async function renderProjectDetail(el, slug) {
             <div class="detail-card">
               <div class="detail-card-title">Request Information</div>
               <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-4);max-width:none;">Get full project details, floor plans, and pricing direct from the developer.</p>
-              ${p.info_contact_whatsapp ? `<a href="https://wa.me/${p.info_contact_whatsapp}" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--full">${iconWhatsApp()} Request Info via WhatsApp</a>` : ''}
-              ${p.website_url ? `<a href="${p.website_url}" target="_blank" rel="noopener noreferrer" class="btn btn--secondary btn--full" style="margin-top:var(--space-2);">${iconGlobe()} Project Website ${iconExternalLink()}</a>` : ''}
+              ${p.info_contact_whatsapp ? `<a href="${escHtml(sanitizeUrl('https://wa.me/' + p.info_contact_whatsapp))}" target="_blank" rel="noopener noreferrer" class="btn btn--whatsapp btn--full">${iconWhatsApp()} Request Info via WhatsApp</a>` : ''}
+              ${p.website_url ? `<a href="${escHtml(sanitizeUrl(p.website_url))}" target="_blank" rel="noopener noreferrer" class="btn btn--secondary btn--full" style="margin-top:var(--space-2);">${iconGlobe()} Project Website ${iconExternalLink()}</a>` : ''}
             </div>
           </div>
         </div>
@@ -4860,12 +4860,12 @@ async function renderProjectDetail(el, slug) {
 
 function renderGuideCard(g, index = 0) {
   return `
-    <article class="guide-card card-animate" style="animation-delay:${index * 50}ms" onclick="navigate('guide/${g.slug}')" tabindex="0" role="button" aria-label="Read: ${g.title}" onkeydown="if(event.key==='Enter')navigate('guide/${g.slug}')">
-      <div class="guide-category">${g.category}</div>
-      <h3 class="guide-title">${g.title}</h3>
-      <p class="guide-excerpt">${g.excerpt}</p>
+    <article class="guide-card card-animate" style="animation-delay:${index * 50}ms" onclick="navigate('guide/${g.slug}')" tabindex="0" role="button" aria-label="Read: ${escHtml(g.title)}" onkeydown="if(event.key==='Enter')navigate('guide/${g.slug}')">
+      <div class="guide-category">${escHtml(g.category)}</div>
+      <h3 class="guide-title">${escHtml(g.title)}</h3>
+      <p class="guide-excerpt">${escHtml(g.excerpt)}</p>
       <div class="guide-meta">
-        <span>${g.read_time}</span>
+        <span>${escHtml(g.read_time)}</span>
         <span style="margin-left:auto;color:var(--color-primary);font-weight:500;display:flex;align-items:center;gap:var(--space-1);">Read ${iconArrowRight()}</span>
       </div>
     </article>
@@ -4912,8 +4912,8 @@ async function renderGuideDetail(el, slug) {
   el.innerHTML = `
     <div class="page-header">
       <div class="container">
-        <div class="guide-category mb-3">${g.category} · ${g.read_time}</div>
-        <h1 class="page-title">${g.title}</h1>
+        <div class="guide-category mb-3">${escHtml(g.category)} · ${escHtml(g.read_time)}</div>
+        <h1 class="page-title">${escHtml(g.title)}</h1>
       </div>
     </div>
     <div class="section">
@@ -4928,8 +4928,8 @@ async function renderGuideDetail(el, slug) {
               <div style="display:flex;flex-direction:column;gap:var(--space-3);">
                 ${otherGuides.map(og => `
                   <button onclick="navigate('guide/${og.slug}')" style="text-align:left;padding:var(--space-3);border-radius:var(--radius-md);background:var(--color-surface-offset);border:1px solid var(--color-border);cursor:pointer;transition:background var(--transition-interactive);" onmouseover="this.style.background='var(--color-surface-dynamic)'" onmouseout="this.style.background='var(--color-surface-offset)'">
-                    <div style="font-size:var(--text-xs);color:var(--color-primary);font-weight:600;margin-bottom:var(--space-1);">${og.category}</div>
-                    <div style="font-size:var(--text-sm);font-family:var(--font-display);color:var(--color-text);line-height:1.3;">${og.title}</div>
+                    <div style="font-size:var(--text-xs);color:var(--color-primary);font-weight:600;margin-bottom:var(--space-1);">${escHtml(og.category)}</div>
+                    <div style="font-size:var(--text-sm);font-family:var(--font-display);color:var(--color-text);line-height:1.3;">${escHtml(og.title)}</div>
                   </button>
                 `).join('')}
               </div>
@@ -5084,11 +5084,11 @@ const UserAuth = (() => {
       const wrap = document.createElement('div');
       wrap.className = 'user-menu-wrap';
       wrap.innerHTML = `
-        <button class="user-avatar-btn" aria-label="User menu">${initials}</button>
+        <button class="user-avatar-btn" aria-label="User menu">${escHtml(initials)}</button>
         <div class="user-dropdown" id="user-dropdown">
           <div class="user-dropdown-header">
-            <div class="user-dropdown-name">${currentUser.display_name}</div>
-            <div class="user-dropdown-email">${currentUser.email}</div>
+            <div class="user-dropdown-name">${escHtml(currentUser.display_name)}</div>
+            <div class="user-dropdown-email">${escHtml(currentUser.email)}</div>
           </div>
           <button class="user-dropdown-item" onclick="navigate('account');document.getElementById('user-dropdown').classList.remove('open');">My Account</button>
           <button class="user-dropdown-item" onclick="navigate('account?tab=favorites');document.getElementById('user-dropdown').classList.remove('open');">My Favorites</button>
@@ -5553,7 +5553,7 @@ function renderGoogleReviewBtn(google_maps_url) {
   if (!google_maps_url) return '';
   // Google review URL: append /review to the maps URL or use direct link
   const reviewUrl = google_maps_url;
-  return `<a href="${reviewUrl}" target="_blank" rel="noopener noreferrer" class="review-google-btn">
+  return `<a href="${escHtml(sanitizeUrl(reviewUrl))}" target="_blank" rel="noopener noreferrer" class="review-google-btn">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>
     Write a Review on Google
   </a>`;
@@ -5979,10 +5979,31 @@ function updatePresetSidebar(p) {
   if (ratesEl) ratesEl.innerHTML = buildRatesList(p);
 }
 
+// Escape for BOTH HTML text and double/single-quoted attribute contexts.
+// The old textContent→innerHTML trick left " and ' unescaped, allowing
+// attribute breakout (SEC-002/003/005/015/017). Encode all five characters.
 function escHtml(s) {
-  var d = document.createElement('div');
-  d.textContent = s;
-  return d.innerHTML;
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Return a URL only if its scheme is safe to put in an href/src, else ''.
+// Blocks javascript:, data:, vbscript:, file: etc. (SEC-002/003/016/017).
+// Relative URLs (no scheme) are allowed; pair with escHtml() in attributes.
+function sanitizeUrl(u) {
+  if (u == null) return '';
+  var s = String(u).trim();
+  if (s === '') return '';
+  var probe = s.replace(/[\0\t\n\r\f\v ]/g, '').toLowerCase();
+  if (/^[a-z][a-z0-9+.\-]*:/.test(probe)) {
+    if (!/^(https?:|tel:|mailto:)/.test(probe)) return '';
+  }
+  return s;
 }
 
 async function runRABCalculation(el, form, presets) {
@@ -7515,8 +7536,8 @@ async function renderAccount(el, params = {}) {
         favEl.innerHTML = favs.map(f => {
           const route = f.entity_type === 'provider' ? 'provider' : f.entity_type === 'developer' ? 'developer' : 'project';
           return `<div class="fav-list-item">
-            <span class="fav-type">${f.entity_type}</span>
-            <a href="#${route}/${f.entity_slug}" onclick="navigate('${route}/${f.entity_slug}');return false;" style="flex:1;font-weight:500">${f.entity_name || 'Unknown'}</a>
+            <span class="fav-type">${escHtml(f.entity_type)}</span>
+            <a href="#${route}/${f.entity_slug}" onclick="navigate('${route}/${f.entity_slug}');return false;" style="flex:1;font-weight:500">${escHtml(f.entity_name || 'Unknown')}</a>
             <button class="fav-btn favorited" onclick="UserAuth.toggleFavorite('${f.entity_type}', ${f.entity_id});this.closest('.fav-list-item').remove();" title="Remove">${iconHeartFilled()}</button>
           </div>`;
         }).join('');
@@ -7536,11 +7557,11 @@ async function renderAccount(el, params = {}) {
         clEl.innerHTML = claims.map(c => `
           <div class="card" style="margin-bottom:var(--space-3)">
             <div style="display:flex;justify-content:space-between;align-items:center">
-              <strong>${c.provider_name}</strong>
-              <span class="claim-status claim-status--${c.status}">${c.status}</span>
+              <strong>${escHtml(c.provider_name)}</strong>
+              <span class="claim-status claim-status--${c.status}">${escHtml(c.status)}</span>
             </div>
-            <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin-top:var(--space-1)">Submitted: ${new Date(c.created_at).toLocaleDateString()} &middot; Role: ${c.business_role}</p>
-            ${c.admin_notes ? `<p style="font-size:var(--text-xs);margin-top:var(--space-1)"><strong>Admin:</strong> ${c.admin_notes}</p>` : ''}
+            <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin-top:var(--space-1)">Submitted: ${new Date(c.created_at).toLocaleDateString()} &middot; Role: ${escHtml(c.business_role)}</p>
+            ${c.admin_notes ? `<p style="font-size:var(--text-xs);margin-top:var(--space-1)"><strong>Admin:</strong> ${escHtml(c.admin_notes)}</p>` : ''}
           </div>
         `).join('');
       }
@@ -7559,11 +7580,11 @@ async function renderAccount(el, params = {}) {
         subEl.innerHTML = subs.map(s => `
           <div class="card" style="margin-bottom:var(--space-3)">
             <div style="display:flex;justify-content:space-between;align-items:center">
-              <strong>${s.business_name}</strong>
-              <span class="claim-status claim-status--${s.status}">${s.status}</span>
+              <strong>${escHtml(s.business_name)}</strong>
+              <span class="claim-status claim-status--${s.status}">${escHtml(s.status)}</span>
             </div>
             <p style="font-size:var(--text-xs);color:var(--color-text-muted);margin-top:var(--space-1)">Submitted: ${new Date(s.created_at).toLocaleDateString()}</p>
-            ${s.admin_notes ? `<p style="font-size:var(--text-xs);margin-top:var(--space-1)"><strong>Admin:</strong> ${s.admin_notes}</p>` : ''}
+            ${s.admin_notes ? `<p style="font-size:var(--text-xs);margin-top:var(--space-1)"><strong>Admin:</strong> ${escHtml(s.admin_notes)}</p>` : ''}
           </div>
         `).join('');
       }
@@ -7770,7 +7791,7 @@ function showClaimModal(providerId, providerName) {
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
       <h2>Claim This Listing</h2>
-      <p class="auth-subtitle">Prove you own or manage <strong>${providerName}</strong> to take control of this listing.</p>
+      <p class="auth-subtitle">Prove you own or manage <strong>${escHtml(providerName)}</strong> to take control of this listing.</p>
       <div class="auth-error" id="claim-error"></div>
       <div class="auth-success" id="claim-success"></div>
       <form class="auth-form" id="claim-form">
@@ -7874,7 +7895,7 @@ async function renderSearch(el, params = {}) {
     var nav = 'guide/' + item.slug;
     var meta = [];
     if (item.category)  meta.push(escHtml(item.category));
-    if (item.read_time) meta.push(item.read_time + ' min read');
+    if (item.read_time) meta.push(escHtml(item.read_time) + ' min read');
     return '<article class="card card-animate search-card-guide" style="animation-delay:' + ((index || 0) * 50) + 'ms">'
       + '<div class="card-header-info" style="margin-bottom:var(--space-2);">'
       + '<span class="card-category-label">' + escHtml(t('palette.type.guide', 'Guide')) + '</span>'
@@ -7908,13 +7929,13 @@ async function renderSearch(el, params = {}) {
     // Avatar / photo
     var thumbImg = item.profile_photo_url || item.logo_url || '';
     var avatarHtml = thumbImg
-      ? '<img src="' + thumbImg + '" alt="' + escHtml(item.name) + '" class="card-avatar' + (item.logo_url && !item.profile_photo_url ? ' card-avatar--logo' : '') + '" loading="lazy" onerror="this.style.display=\'none\'">'
-      : '<div class="card-avatar card-avatar--placeholder"><span>' + (item.name || 'B').charAt(0).toUpperCase() + '</span></div>';
+      ? '<img src="' + escHtml(sanitizeUrl(thumbImg)) + '" alt="' + escHtml(item.name) + '" class="card-avatar' + (item.logo_url && !item.profile_photo_url ? ' card-avatar--logo' : '') + '" loading="lazy" onerror="this.style.display=\'none\'">'
+      : '<div class="card-avatar card-avatar--placeholder"><span>' + escHtml((item.name || 'B').charAt(0).toUpperCase()) + '</span></div>';
 
     // Category label: use actual categories if available, else type label
-    var categoryLabel = cfg.label;
+    var categoryLabel = escHtml(cfg.label);
     if (item.categories && item.categories.length > 0) {
-      categoryLabel = item.categories.map(function(c) { return formatCategoryLabel(c.key || c); }).join(' · ');
+      categoryLabel = item.categories.map(function(c) { return escHtml(formatCategoryLabel(c.key || c)); }).join(' · ');
     }
 
     // Badges
@@ -7935,9 +7956,9 @@ async function renderSearch(el, params = {}) {
     var langShort = langParts.length ? langParts.join(' \u00b7 ') : '';
     var metaHtml = (areaLabel || langShort)
       ? '<div class="card-meta-line">'
-        + (areaLabel ? '<span class="card-meta-item">' + iconMapPin() + ' ' + areaLabel + '</span>' : '')
+        + (areaLabel ? '<span class="card-meta-item">' + iconMapPin() + ' ' + escHtml(areaLabel) + '</span>' : '')
         + (areaLabel && langShort ? '<span class="card-meta-sep"></span>' : '')
-        + (langShort ? '<span class="card-meta-item">' + langShort + '</span>' : '')
+        + (langShort ? '<span class="card-meta-item">' + escHtml(langShort) + '</span>' : '')
         + '</div>'
       : '';
 
@@ -7954,7 +7975,7 @@ async function renderSearch(el, params = {}) {
     var waNum = formatWhatsAppNumber(rawWa);
     var waHref = waNum ? 'https://wa.me/' + waNum.replace(/[^0-9]/g, '') : '';
     var waBtn = waHref
-      ? '<a href="' + waHref + '" target="_blank" rel="noopener noreferrer" class="card-wa-btn" aria-label="WhatsApp ' + escHtml(item.name) + '">' + iconWhatsApp() + '</a>'
+      ? '<a href="' + escHtml(sanitizeUrl(waHref)) + '" target="_blank" rel="noopener noreferrer" class="card-wa-btn" aria-label="WhatsApp ' + escHtml(item.name) + '">' + iconWhatsApp() + '</a>'
       : '';
 
     // Fav button
@@ -8242,9 +8263,9 @@ function showQuoteUpgrade(tier) {
     + '<li>Messy Bahasa replies translated &amp; structured for you</li>'
     + '<li>A live price-comparison dashboard</li>'
     + '</ul>'
-    + '<p class="q-upsell-note">Included with <strong>' + tierName + '</strong>.</p>'
+    + '<p class="q-upsell-note">Included with <strong>' + escHtml(tierName) + '</strong>.</p>'
     + '<div class="q-upsell-actions">'
-    + '<button class="btn btn--primary" onclick="navigate(\'account?tab=subscription\');document.getElementById(\'q-upsell\').remove()">Upgrade to ' + tierName + '</button>'
+    + '<button class="btn btn--primary" onclick="navigate(\'account?tab=subscription\');document.getElementById(\'q-upsell\').remove()">Upgrade to ' + escHtml(tierName) + '</button>'
     + '<button class="btn btn--ghost" onclick="document.getElementById(\'q-upsell\').remove()">Keep sending manually</button>'
     + '</div>'
     + '<p class="q-upsell-foot">Or keep using the free manual WhatsApp buttons &mdash; they always work.</p>'
@@ -8574,16 +8595,16 @@ async function renderGetQuotes(el, params = {}) {
       return '<div class="gq-store-row' + (contacted ? ' gq-store-row--contacted' : '') + '" data-id="' + b.id + '">'
         + '<div class="gq-store-avatar">'
         + (thumb
-          ? '<img src="' + thumb + '" alt="' + escHtml(b.name) + '" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">'
-            + '<div class="gq-store-initials" style="display:none">' + (b.name || 'S').charAt(0).toUpperCase() + '</div>'
-          : '<div class="gq-store-initials">' + (b.name || 'S').charAt(0).toUpperCase() + '</div>'
+          ? '<img src="' + escHtml(sanitizeUrl(thumb)) + '" alt="' + escHtml(b.name) + '" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">'
+            + '<div class="gq-store-initials" style="display:none">' + escHtml((b.name || 'S').charAt(0).toUpperCase()) + '</div>'
+          : '<div class="gq-store-initials">' + escHtml((b.name || 'S').charAt(0).toUpperCase()) + '</div>'
         )
         + '</div>'
         + '<div class="gq-store-info">'
         + '<div class="gq-store-name">' + trustedBadge
         + '<a href="#provider/' + b.slug + '" onclick="navigate(\'provider/' + b.slug + '\');return false;">' + escHtml(b.name) + '</a>'
         + '</div>'
-        + '<div class="gq-store-meta">' + iconMapPin() + ' ' + formatAreaLabel(b.area) + (catLabel ? ' \u00b7 ' + catLabel : '') + '</div>'
+        + '<div class="gq-store-meta">' + iconMapPin() + ' ' + escHtml(formatAreaLabel(b.area)) + (catLabel ? ' \u00b7 ' + escHtml(catLabel) : '') + '</div>'
         + '<div class="gq-store-rating">' + ratingHtml + '</div>'
         + '</div>'
         + '<div class="gq-store-actions">'
@@ -9509,7 +9530,7 @@ var CommandPalette = (function() {
     if (type === 'guide') {
       var parts = [];
       if (it.category)  parts.push(escHtml(it.category));
-      if (it.read_time) parts.push(it.read_time + ' ' + escHtml(t('palette.read_time_min', 'min read')));
+      if (it.read_time) parts.push(escHtml(it.read_time) + ' ' + escHtml(t('palette.read_time_min', 'min read')));
       return parts.join(' · ');
     }
     var parts = [];
@@ -9525,7 +9546,7 @@ var CommandPalette = (function() {
 
   function buildThumb(it) {
     var img = it.profile_photo_url || it.logo_url || '';
-    if (img) return '<img src="' + escHtml(img) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">';
+    if (img) return '<img src="' + escHtml(sanitizeUrl(img)) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">';
     var letter = (it.name || '?').charAt(0).toUpperCase();
     return '<span class="cmd-row-thumb-letter">' + escHtml(letter) + '</span>';
   }
