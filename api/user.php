@@ -41,6 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
     exit;
 }
+sec_require_same_origin();   // reject cross-site state-changing requests (SEC-008)
 
 require_once(__DIR__ . '/smtp_mailer.php');
 
@@ -252,6 +253,13 @@ function handle_register(): void {
     if (strlen($password) < 8) json_error(400, 'Password must be at least 8 characters.');
     if (!$display_name || strlen($display_name) < 2) json_error(400, 'Display name required (min 2 characters).');
 
+    // Rate-limit sign-ups (SEC-012) + reject the most common/guessable passwords (SEC-051).
+    if (!sec_rate_ok('register_ip', sec_client_ip(), 8, 3600)) json_error(429, 'Too many sign-up attempts. Please try again later.');
+    $weak = ['password','12345678','123456789','qwerty123','password1','11111111','iloveyou','abc12345','12341234','baseball'];
+    if (in_array(strtolower($password), $weak, true) || strtolower($password) === $email) {
+        json_error(400, 'Please choose a less common password.');
+    }
+
     $db = get_db();
 
     // Check duplicate
@@ -325,6 +333,10 @@ function handle_login(): void {
     $password = $data['password'] ?? '';
 
     if (!$email || !$password) json_error(400, 'Email and password required.');
+
+    // Brute-force throttle (SEC-012): per-IP and per-account.
+    if (!sec_rate_ok('login_ip', sec_client_ip(), 15, 900)) json_error(429, 'Too many attempts. Please wait a few minutes and try again.');
+    if (!sec_rate_ok('login_email', $email, 8, 900)) json_error(429, 'Too many attempts for this account. Please wait a few minutes.');
 
     $db = get_db();
     $stmt = $db->prepare("SELECT id, email, password_hash, display_name, is_verified, is_active, role FROM users WHERE email = ?");
@@ -430,6 +442,13 @@ function handle_forgot_password(): void {
 
     if (!$email) json_error(400, 'Email required.');
 
+    // Throttle reset-email sends (SEC-012) to curb mail-bombing / quota burn.
+    if (!sec_rate_ok('forgot_ip', sec_client_ip(), 10, 3600)
+        || !sec_rate_ok('forgot_email', $email, 3, 900)) {
+        // Same generic body as success to avoid revealing throttle state / existence.
+        json_out(['success' => true, 'message' => 'If that email exists, a reset link has been sent.']);
+    }
+
     $db = get_db();
     $stmt = $db->prepare("SELECT id, email, display_name FROM users WHERE email = ? AND is_active = 1");
     $stmt->execute([$email]);
@@ -454,6 +473,7 @@ function handle_reset_password(): void {
     $token = $data['token'] ?? '';
     $password = $data['password'] ?? '';
 
+    if (!sec_rate_ok('reset_ip', sec_client_ip(), 20, 3600)) json_error(429, 'Too many attempts. Please try again later.');
     if (!$token) json_error(400, 'Reset token required.');
     if (strlen($password) < 8) json_error(400, 'Password must be at least 8 characters.');
 
@@ -708,6 +728,7 @@ function handle_social_login(): void {
     if (!in_array($provider, ['google', 'facebook'], true)) {
         json_error(400, 'Unsupported login provider.');
     }
+    if (!sec_rate_ok('social_ip', sec_client_ip(), 30, 900)) json_error(429, 'Too many attempts. Please wait a few minutes.');
 
     // SEC-001: verify the assertion with the identity provider BEFORE trusting
     // anything. Identity (provider_id/email/name/avatar) is taken ONLY from the

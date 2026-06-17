@@ -260,3 +260,88 @@ function safe_fetch(string $url, array $opt = []): array {
     }
     return $fail('too_many_redirects');
 }
+
+// ── Admin auth (SEC-013) ────────────────────────────────────────────────────
+// Constant-time checks. Prefer a bcrypt ADMIN_PASS_HASH in the private config;
+// fall back to a constant-time compare of the legacy plaintext ADMIN_PASS so
+// existing admin logins keep working until the hash is set (no `===`).
+function sec_admin_user_ok($candidate): bool {
+    return defined('ADMIN_USER') && hash_equals((string)ADMIN_USER, (string)$candidate);
+}
+function sec_admin_password_ok($candidate): bool {
+    if (defined('ADMIN_PASS_HASH') && ADMIN_PASS_HASH !== '') {
+        return password_verify((string)$candidate, (string)ADMIN_PASS_HASH);
+    }
+    if (defined('ADMIN_PASS')) {
+        return hash_equals((string)ADMIN_PASS, (string)$candidate);
+    }
+    return false;
+}
+
+// ── Best-effort rate limiting (SEC-012 / SEC-039) ───────────────────────────
+// File-based fixed-window counter. Fails OPEN on storage errors so it can never
+// lock out everyone, but throttles the common brute-force / abuse case.
+function sec_rate_dir(): string {
+    $d = sys_get_temp_dir() . '/biltest_rl';
+    if (!is_dir($d)) @mkdir($d, 0700, true);
+    return $d;
+}
+// Returns true if the request is WITHIN the limit (allow), false if exceeded.
+function sec_rate_ok(string $bucket, string $id, int $limit, int $window): bool {
+    $key  = preg_replace('/[^a-zA-Z0-9_.-]/', '_', $bucket . '_' . $id);
+    $file = sec_rate_dir() . '/' . substr(hash('sha256', $key), 0, 40) . '.json';
+    $now  = time();
+    $fh = @fopen($file, 'c+');
+    if (!$fh) return true; // fail open
+    @flock($fh, LOCK_EX);
+    $start = $now; $count = 0;
+    $raw = stream_get_contents($fh);
+    if ($raw) {
+        $d = json_decode($raw, true);
+        if (is_array($d)) { $start = (int)($d['start'] ?? $now); $count = (int)($d['count'] ?? 0); }
+    }
+    if ($now - $start >= $window) { $start = $now; $count = 0; } // window rolled over
+    $count++;
+    $allowed = $count <= $limit;
+    rewind($fh); ftruncate($fh, 0);
+    fwrite($fh, json_encode(['start' => $start, 'count' => $count]));
+    @flock($fh, LOCK_UN); fclose($fh);
+    return $allowed;
+}
+function sec_client_ip(): string {
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+    return is_string($ip) ? $ip : '0.0.0.0';
+}
+
+// ── Same-origin enforcement for state-changing requests (SEC-008) ───────────
+// Primary CSRF defenses are the SameSite session cookie (sec_session_start) and
+// this Origin/Referer check. The classic cross-site auto-POST always carries a
+// foreign Origin and is rejected; the same-origin SPA passes. Non-browser
+// callers (the Node worker) send neither header and are allowed here — they are
+// authenticated by their own key, not the session cookie.
+function sec_request_origin_ok(): bool {
+    $m = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+    if ($m === 'GET' || $m === 'HEAD' || $m === 'OPTIONS') return true;
+    $host = (string)($_SERVER['HTTP_HOST'] ?? '');
+    $origin = (string)($_SERVER['HTTP_ORIGIN'] ?? '');
+    if ($origin !== '') {
+        $oh = parse_url($origin, PHP_URL_HOST);
+        return is_string($oh) && strcasecmp($oh, $host) === 0;
+    }
+    $ref = (string)($_SERVER['HTTP_REFERER'] ?? '');
+    if ($ref !== '') {
+        $rh = parse_url($ref, PHP_URL_HOST);
+        return is_string($rh) && strcasecmp($rh, $host) === 0;
+    }
+    return true; // no Origin/Referer present — SameSite cookie still applies
+}
+function sec_require_same_origin(?callable $on_fail = null): void {
+    if (sec_request_origin_ok()) return;
+    if ($on_fail) { $on_fail(); return; }
+    if (!headers_sent()) {
+        http_response_code(403);
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    echo json_encode(['error' => 'csrf_failed']);
+    exit;
+}

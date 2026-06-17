@@ -35,6 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
     exit;
 }
+sec_require_same_origin();   // reject cross-site state-changing requests (SEC-008)
 
 // ─── DB ──────────────────────────────────────────────────────────
 function get_db() {

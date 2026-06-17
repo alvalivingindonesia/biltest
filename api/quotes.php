@@ -29,6 +29,7 @@ header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token');
 sec_api_headers(true);
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
+sec_require_same_origin();   // reject cross-site state-changing requests (SEC-008)
 
 // ─── DB / helpers (house conventions) ────────────────────────────
 function get_db() {

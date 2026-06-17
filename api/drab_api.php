@@ -46,6 +46,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'export') {
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
+sec_require_same_origin();   // reject cross-site state-changing requests (SEC-008)
 
 // ─── DB + helpers (mirrors rab_api.php conventions) ──────────────────────────
 function get_db() {
