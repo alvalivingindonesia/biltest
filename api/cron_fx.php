@@ -63,6 +63,14 @@ $eur_to = array(
 foreach ($eur_to as $c => $v) {
     if ($v <= 0) { echo "Bad rate for {$c} — keeping last known rates.\n"; exit; }
 }
+// SEC-047: reject implausible feed values before they corrupt every conversion.
+$bands = array('IDR' => array(10000, 25000), 'USD' => array(0.7, 1.6), 'AUD' => array(1.2, 2.2));
+foreach ($bands as $c => $b) {
+    if ($eur_to[$c] < $b[0] || $eur_to[$c] > $b[1]) {
+        echo "EUR->{$c} rate {$eur_to[$c]} outside sane band — keeping last known rates.\n";
+        exit;
+    }
+}
 
 // ---- Write all 12 pairs ----
 try {
@@ -80,6 +88,7 @@ $updated = 0;
 $upd = $pdo->prepare("UPDATE currency_rates SET rate = ? WHERE from_currency = ? AND to_currency = ?");
 $ins = $pdo->prepare("INSERT INTO currency_rates (from_currency, to_currency, rate) VALUES (?, ?, ?)");
 
+$pdo->beginTransaction();   // SEC-047: all 12 pairs update atomically (no mixed set)
 foreach ($currencies as $from) {
     foreach ($currencies as $to) {
         if ($from === $to) continue;
@@ -98,5 +107,7 @@ foreach ($currencies as $from) {
         $updated++;
     }
 }
+
+$pdo->commit();
 
 echo "OK — {$updated} pairs refreshed (date " . (isset($data['date']) ? $data['date'] : '?') . ", USD→IDR " . round($eur_to['IDR'] / $eur_to['USD']) . ").\n";

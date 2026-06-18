@@ -1343,13 +1343,21 @@ function drab_build_export_model($rab, $lang, $clean) {
     }
     return array('title'=>$title, 'sheets'=>$sheets);
 }
+// SEC-044: neutralise spreadsheet formula triggers in any user-controlled cell.
+function drab_csv_cell($v) {
+    $s = (string)$v;
+    if ($s !== '' && preg_match('/^[=+\-@\t\r]/', $s)) $s = "'" . $s;
+    return $s;
+}
 function drab_export_csv($data, $fname) {
+    $fname = preg_replace('/[^A-Za-z0-9_.-]+/', '_', (string)$fname);   // no header injection
+    if ($fname === '') $fname = 'rab';
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="'.$fname.'.csv"');
     $out = fopen('php://output', 'w');
     foreach ($data['sheets'] as $sh) {
-        fputcsv($out, array('=== '.$sh['title'].' ==='));
-        foreach ($sh['rows'] as $r) fputcsv($out, $r);
+        fputcsv($out, array(drab_csv_cell('=== '.$sh['title'].' ===')));
+        foreach ($sh['rows'] as $r) fputcsv($out, array_map('drab_csv_cell', $r));
         fputcsv($out, array(''));
     }
     fclose($out); exit;

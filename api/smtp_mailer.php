@@ -32,6 +32,15 @@ function smtp_send_mail($to_email, $subject, $html_body, $text_body)
     $from_email = defined('SMTP_FROM_EMAIL') ? SMTP_FROM_EMAIL : $user;
     $from_name  = defined('SMTP_FROM_NAME') ? SMTP_FROM_NAME : 'Build in Lombok';
 
+    // SEC-050: strip CR/LF/NUL from address + subject fields so a future caller
+    // passing user-influenced values can't inject SMTP commands or extra headers
+    // (Bcc, Content-Type, body). Defense-in-depth — current callers validate too.
+    $strip = function ($s) { return str_replace(array("\r", "\n", "\0"), '', (string)$s); };
+    $to_email   = $strip($to_email);
+    $from_email = $strip($from_email);
+    $from_name  = $strip($from_name);
+    $subject    = $strip($subject);
+
     if (empty($user) || empty($pass)) {
         return 'SMTP credentials not configured in biltest_config.php';
     }
