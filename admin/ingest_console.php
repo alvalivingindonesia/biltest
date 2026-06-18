@@ -12,18 +12,23 @@
  * Place at: /admin/ingest_console.php  (not linked; direct URL only)
  */
 
-session_start();
+require_once(__DIR__ . '/../api/_sec.php');
 require_once('/home/rovin629/config/biltest_config.php');
 require_once(__DIR__ . '/../api/listing_canonical.php');
+
+sec_session_start('Strict');
 
 // ─── auth ────────────────────────────────────────────────────────────
 $auth_error = '';
 if (isset($_POST['login'])) {
-    if (($_POST['username'] ?? '') === ADMIN_USER && ($_POST['password'] ?? '') === ADMIN_PASS) {
+    if (!sec_rate_ok('admin_login', sec_client_ip(), 12, 900)) {
+        $auth_error = 'Too many attempts. Try again later.';
+    } elseif (sec_admin_user_ok($_POST['username'] ?? '') && sec_admin_password_ok($_POST['password'] ?? '')) {
+        sec_session_regenerate();
         $_SESSION['admin_auth'] = true;
     } else { $auth_error = 'Invalid credentials.'; }
 }
-if (isset($_GET['logout'])) { session_destroy(); header('Location: ingest_console.php'); exit; }
+if (isset($_GET['logout'])) { sec_session_destroy(); header('Location: ingest_console.php'); exit; }
 if (empty($_SESSION['admin_auth'])) {
     echo '<!doctype html><meta charset="utf-8"><form method="post" style="font-family:sans-serif;max-width:320px;margin:80px auto">';
     echo '<h2>Ingest console</h2>';
@@ -53,6 +58,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['do'])) {
     $do = $_POST['do'];
     $ajax = !empty($_POST['ajax']);
     $ic_json = function($a) { header('Content-Type: application/json; charset=utf-8'); echo json_encode($a, JSON_UNESCAPED_UNICODE); exit; };
+    // CSRF: reject cross-site state-changing requests (SEC-008).
+    if (!sec_request_origin_ok()) {
+        if ($ajax) { http_response_code(403); $ic_json(array('error' => 'csrf_failed')); }
+        http_response_code(403); echo 'Forbidden (CSRF).'; exit;
+    }
+    // Valid area_key whitelist for integrity checks (SEC-048).
+    $valid_area_keys = $db->query("SELECT `key` FROM areas")->fetchAll(PDO::FETCH_COLUMN);
     try {
         if ($do === 'review_resolve') {
             $rid = (int)$_POST['review_id'];
@@ -64,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['do'])) {
                     $detail = json_decode($item['detail'], true) ?: array();
                     if ($item['kind'] === 'unmapped_area' || $item['kind'] === 'area_flip') {
                         $area = trim($_POST['area_key'] ?? '');
-                        if ($area !== '') {
+                        if ($area !== '' && in_array($area, $valid_area_keys, true)) {
                             // learn the alias from the first candidate, then set the listing
                             $cand = '';
                             if (!empty($detail['candidates'][0])) $cand = $detail['candidates'][0];
@@ -132,7 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['do'])) {
         elseif ($do === 'alias_add') {
             $norm = lc_normalize_area_text($_POST['alias_text'] ?? '');
             $ak = trim($_POST['area_key'] ?? '');
-            if ($norm !== '' && $ak !== '') {
+            if ($norm !== '' && $ak !== '' && in_array($ak, $valid_area_keys, true)) {
                 $db->prepare("INSERT INTO area_aliases (alias_text, area_key) VALUES (?, ?) ON DUPLICATE KEY UPDATE area_key=VALUES(area_key)")->execute(array($norm, $ak));
                 $flash = "Alias '$norm' → $ak saved.";
             }
@@ -147,13 +159,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['do'])) {
             $ak = trim($_POST['area_key'] ?? '');
             $pk = trim($_POST['place_key'] ?? '');
             $norm = lc_normalize_area_text($place);
-            if ($norm !== '' && $ak !== '') {
+            $area_ok = $norm !== '' && $ak !== '' && in_array($ak, $valid_area_keys, true);
+            if ($area_ok) {
                 $db->prepare("INSERT INTO area_aliases (alias_text, area_key, place_key) VALUES (?,?,?) ON DUPLICATE KEY UPDATE area_key=VALUES(area_key), place_key=VALUES(place_key)")
                    ->execute(array($norm, $ak, $pk !== '' ? $pk : null));
                 $db->prepare("DELETE FROM unmapped_places WHERE place_text=?")->execute(array(mb_strtolower($place, 'UTF-8')));
                 $flash = "Mapped '$norm' → $ak" . ($pk !== '' ? " / $pk" : "") . ". Re-run reextract to apply to listings.";
             } else { $flash = "Pick an area."; }
-            if ($ajax) $ic_json(array('ok' => $norm !== '' && $ak !== '', 'place' => $place));
+            if ($ajax) $ic_json(array('ok' => $area_ok, 'place' => $place));
         }
         elseif ($do === 'unmapped_dismiss') {
             $db->prepare("DELETE FROM unmapped_places WHERE place_text=?")->execute(array(mb_strtolower(trim($_POST['place_text'] ?? ''), 'UTF-8')));
@@ -206,7 +219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['do'])) {
             $db->prepare("UPDATE listings SET locked_fields=? WHERE id=?")->execute(array($fields ?: null, $lid));
             $flash = "Locked fields for listing #$lid: " . ($fields ?: 'none');
         }
-    } catch (Exception $e) { $flash = 'Error: ' . $e->getMessage(); }
+    } catch (Exception $e) { error_log($e->getMessage()); $flash = 'Error: operation failed.'; }
 }
 
 $tab = $_GET['tab'] ?? 'review';

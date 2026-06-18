@@ -5,7 +5,8 @@
  * human-intervention queue (ambiguous routing / disputes / parse failures).
  * Access: /admin/quotes.php  (shares console.php's admin session)
  */
-session_start();
+require_once(__DIR__ . '/../api/_sec.php');
+sec_session_start('Strict');
 require_once('/home/rovin629/config/biltest_config.php');
 if (empty($_SESSION['admin_auth'])) { header('Location: console.php'); exit; }
 
@@ -33,6 +34,12 @@ function normalize_label($s) {
 
 $msg = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!sec_request_origin_ok()) {
+        http_response_code(403);
+        header('Content-Type: text/plain; charset=utf-8');
+        echo 'Request rejected (cross-site).';
+        exit;
+    }
     $db = db();
     $act = $_POST['action'] ?? '';
     try {
@@ -70,7 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $msg = 'Chat marked resolved.';
             }
         }
-    } catch (Exception $e) { $msg = 'Error: ' . $e->getMessage(); }
+    } catch (Exception $e) { error_log($e->getMessage()); $msg = 'An error occurred. Please try again.'; }
 }
 
 $db = db();

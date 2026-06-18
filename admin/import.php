@@ -9,7 +9,11 @@
  *           Protected by session-based password. robots.txt blocks /admin/.
  */
 
-session_start();
+// Shared security bootstrap — MUST be first: forces display_errors off +
+// log_errors on (SEC-055) before the config require_once can leak a path.
+require_once(__DIR__ . '/../api/_sec.php');
+
+sec_session_start('Strict');
 
 // ─── CONFIG — loaded from private config outside public web root ─────
 require_once('/home/rovin629/config/biltest_config.php');
@@ -20,14 +24,18 @@ $auth_error = '';
 if (isset($_POST['login'])) {
     $u = $_POST['username'] ?? '';
     $p = $_POST['password'] ?? '';
-    if ($u === ADMIN_USER && $p === ADMIN_PASS) {
+    // Brute-force throttle (SEC-012): 12 attempts / 15 min per IP.
+    if (!sec_rate_ok('admin_login', sec_client_ip(), 12, 900)) {
+        $auth_error = 'Too many attempts. Please try again later.';
+    } elseif (sec_admin_user_ok($u) && sec_admin_password_ok($p)) {
+        sec_session_regenerate(); // prevent session fixation (SEC-024)
         $_SESSION['admin_auth'] = true;
     } else {
         $auth_error = 'Invalid credentials.';
     }
 }
 if (isset($_GET['logout'])) {
-    session_destroy();
+    sec_session_destroy();
     header('Location: import.php');
     exit;
 }
@@ -638,22 +646,13 @@ function scrape_website(string $url): array {
         $url = 'https://' . $url;
     }
 
-    $curl_opts = [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_MAXREDIRS => 3,
-        CURLOPT_TIMEOUT => 8,
-        CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        CURLOPT_HTTPHEADER => ['Accept: text/html,application/xhtml+xml', 'Accept-Language: en-US,en;q=0.9,id;q=0.8'],
-    ];
+    // SSRF-safe fetch (SEC-010 / SEC-053): scheme/port allow-list, private-IP
+    // block, TLS verified, redirects re-validated, response size capped.
+    $fetch_opts = ['timeout' => 8, 'max_redirects' => 3];
 
-    $ch = curl_init();
-    curl_setopt_array($ch, [CURLOPT_URL => $url] + $curl_opts);
-    $html = curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
+    $resp = safe_fetch($url, $fetch_opts);
+    $html = $resp['ok'] ? $resp['body'] : false;
+    $http_code = (int)$resp['status'];
 
     if ($html === false || $http_code >= 400 || strlen($html) < 200) {
         return $result;
@@ -737,11 +736,9 @@ function scrape_website(string $url): array {
         $parsed_url = parse_url($url);
         $base = ($parsed_url['scheme'] ?? 'https') . '://' . ($parsed_url['host'] ?? '');
         foreach (['/about', '/about-us', '/tentang-kami'] as $about_path) {
-            $ch2 = curl_init();
-            curl_setopt_array($ch2, [CURLOPT_URL => $base . $about_path] + $curl_opts);
-            $about_html = curl_exec($ch2);
-            $about_code = curl_getinfo($ch2, CURLINFO_HTTP_CODE);
-            curl_close($ch2);
+            $about_resp = safe_fetch($base . $about_path, $fetch_opts);
+            $about_html = $about_resp['ok'] ? $about_resp['body'] : '';
+            $about_code = (int)$about_resp['status'];
             if ($about_html && $about_code < 400 && strlen($about_html) > 500) {
                 // Extract paragraphs from about page
                 $cleaned = preg_replace('/<(script|style|nav|header|footer)[^>]*>.*?<\/\1>/si', '', $about_html);
@@ -1268,6 +1265,11 @@ function parse_gmaps_place_html(string $html): ?array {
 $save_message = '';
 $save_errors = [];
 if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
+    // CSRF: reject cross-site POSTs before any write (SEC-008).
+    if (!sec_request_origin_ok()) {
+        http_response_code(403);
+        exit('Request rejected (cross-site).');
+    }
     try {
         $db = get_db();
         $db->beginTransaction();
@@ -1301,27 +1303,35 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
             $address = trim($item['address'] ?? '');
             $lat = $item['latitude'] ?: null;
             $lng = $item['longitude'] ?: null;
-            $is_featured = !empty($item['is_featured']) ? 1 : 0;
-            $is_trusted = !empty($item['is_trusted']) ? 1 : 0;
-            $is_verified = !empty($item['is_verified']) ? 1 : 0;
+            // SEC-027: never trust client-supplied trust/credibility flags. These
+            // are set only via a separate audited admin control, never from the
+            // import item payload. Import never stamps a row as featured/trusted/
+            // verified; existing values are preserved on UPDATE (column omitted).
+            $is_featured = 0;
+            $is_trusted = 0;
+            $is_verified = 0;
+            // SEC-027: only take the UPDATE-by-existing_id branch when the operator
+            // explicitly confirmed overwrite; otherwise treat as a new insert.
+            $overwrite_ok = !empty($item['existing_id']) && !empty($item['overwrite']) && (string)$item['overwrite'] === '1';
 
             // ── AGENT SAVE ──────────────────────────────
             if ($item_type === 'agent') {
-                if (!empty($item['existing_id'])) {
-                    // Record already exists — always UPDATE
+                if ($overwrite_ok) {
+                    // Existing record + explicit overwrite confirmation — UPDATE.
+                    // is_verified is intentionally NOT written here (SEC-027).
                     $upd = $db->prepare(
                         "UPDATE agents SET display_name=?, slug=?, agency_name=?, bio=?,
                             google_maps_url=?, google_rating=?, google_review_count=?,
                             phone=?, whatsapp_number=?, website_url=?, email=?,
                             areas_served=?, languages=?, profile_photo_url=?,
-                            is_verified=?, updated_at=CURRENT_TIMESTAMP
+                            updated_at=CURRENT_TIMESTAMP
                          WHERE id=?"
                     );
                     $upd->execute([
                         $name, $slug, $short_desc, $description,
                         $gmaps_url, $rating, $review_count,
                         $phone, $whatsapp, $website, '',
-                        $area, $languages, $profile_photo, $is_verified,
+                        $area, $languages, $profile_photo,
                         (int)$item['existing_id'],
                     ]);
                     $updated_counts['agent']++;
@@ -1368,15 +1378,16 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
             } elseif ($item_type === 'developer') {
                 $is_featured_dev = $is_featured;
 
-                if (!empty($item['existing_id'])) {
-                    // Record already exists — always UPDATE
+                if ($overwrite_ok) {
+                    // Existing record + explicit overwrite confirmation — UPDATE.
+                    // is_featured is intentionally NOT written here (SEC-027).
                     $upd = $db->prepare(
                         "UPDATE developers SET name=?, short_description=?, description=?,
                             google_maps_url=?, google_rating=?, google_review_count=?,
                             phone=?, whatsapp_number=?, website_url=?,
                             instagram_url=?, facebook_url=?, tiktok_url=?, youtube_url=?, linkedin_url=?,
                             profile_photo_url=?, profile_description=?,
-                            languages=?, is_featured=?, updated_at=CURRENT_TIMESTAMP
+                            languages=?, updated_at=CURRENT_TIMESTAMP
                          WHERE id=?"
                     );
                     $upd->execute([
@@ -1385,7 +1396,7 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                         $phone, $whatsapp, $website,
                         $instagram, $facebook, $tiktok, $youtube, $linkedin,
                         $profile_photo, $profile_desc,
-                        $languages, $is_featured_dev, (int)$item['existing_id'],
+                        $languages, (int)$item['existing_id'],
                     ]);
                     $del_area = $db->prepare("DELETE FROM developer_areas WHERE developer_id = ?");
                     $del_area->execute([(int)$item['existing_id']]);
@@ -1455,8 +1466,9 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                     continue;
                 }
 
-                if (!empty($item['existing_id'])) {
-                    // Record already exists — always UPDATE
+                if ($overwrite_ok) {
+                    // Existing record + explicit overwrite confirmation — UPDATE.
+                    // is_featured / is_trusted are intentionally NOT written (SEC-027).
                     $ex_id = (int)$item['existing_id'];
                     $upd = $db->prepare(
                         "UPDATE providers SET name=?, group_key=?, category_key=?, area_key=?,
@@ -1465,7 +1477,7 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                             phone=?, whatsapp_number=?, website_url=?,
                             instagram_url=?, facebook_url=?, tiktok_url=?, youtube_url=?, linkedin_url=?,
                             profile_photo_url=?, profile_description=?,
-                            languages=?, is_featured=?, is_trusted=?, updated_at=CURRENT_TIMESTAMP
+                            languages=?, updated_at=CURRENT_TIMESTAMP
                          WHERE id=?"
                     );
                     $upd->execute([
@@ -1475,7 +1487,7 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
                         $phone, $whatsapp, $website,
                         $instagram, $facebook, $tiktok, $youtube, $linkedin,
                         $profile_photo, $profile_desc,
-                        $languages, $is_featured, $is_trusted, $ex_id,
+                        $languages, $ex_id,
                     ]);
                     $db->prepare("DELETE FROM provider_categories WHERE provider_id=?")->execute([$ex_id]);
                     $cat_ins = $db->prepare("INSERT IGNORE INTO provider_categories (provider_id, category_key) VALUES (?, ?)");
@@ -1549,7 +1561,9 @@ if (isset($_POST['save_to_db']) && !empty($_POST['items'])) {
         $save_message = "Successfully " . (implode(', ', $parts) ?: "processed items") . ".";
     } catch (Exception $e) {
         if (isset($db) && $db->inTransaction()) $db->rollBack();
-        $save_message = "Database error: " . $e->getMessage();
+        // SEC-023: log the real error; show a generic message to the browser.
+        error_log('import.php save error: ' . $e->getMessage());
+        $save_message = "Database error: could not save items. Please try again.";
     }
 }
 
@@ -1559,17 +1573,29 @@ $parsed = null;
 $parse_stats = null;
 $parse_input_error = '';
 if (isset($_POST['parse'])) {
+  // CSRF: reject cross-site POSTs before parsing / outbound scraping (SEC-008).
+  if (!sec_request_origin_ok()) {
+      http_response_code(403);
+      exit('Request rejected (cross-site).');
+  }
   try {
     // Accept EITHER an uploaded HTML file OR pasted page source.
     $html = '';
-    if (isset($_FILES['gmaps_file']) && $_FILES['gmaps_file']['error'] === UPLOAD_ERR_OK && $_FILES['gmaps_file']['size'] > 0) {
+    // Cap uploaded HTML size before reading into memory (SEC-052): reject > 8 MB.
+    if (isset($_FILES['gmaps_file']) && $_FILES['gmaps_file']['error'] === UPLOAD_ERR_OK
+            && $_FILES['gmaps_file']['size'] > 0 && $_FILES['gmaps_file']['size'] <= 8 * 1024 * 1024) {
         $html = file_get_contents($_FILES['gmaps_file']['tmp_name']);
+    } elseif (isset($_FILES['gmaps_file']) && $_FILES['gmaps_file']['error'] === UPLOAD_ERR_OK
+            && $_FILES['gmaps_file']['size'] > 8 * 1024 * 1024) {
+        $parse_input_error = 'File too large (max 8 MB). Please upload a smaller Google Maps HTML file.';
     } elseif (!empty($_POST['gmaps_paste'])) {
         $html = (string)$_POST['gmaps_paste'];
     }
 
     if ($html === '') {
-        $parse_input_error = 'Please upload a Google Maps HTML file or paste the page source.';
+        if ($parse_input_error === '') {
+            $parse_input_error = 'Please upload a Google Maps HTML file or paste the page source.';
+        }
     } else {
         // Extract search query from the HTML title (search-results pages).
         // Single place pages have a generic "Google Maps" title — handled below.
@@ -1776,11 +1802,11 @@ if (isset($_POST['parse'])) {
         ];
     }
   } catch (\Throwable $e) {
-      // Surface the real reason instead of a blank 500 (shared hosting hides errors).
+      // SEC-023: log the real reason; show a generic message to the browser
+      // (do not leak getMessage / file / line).
       $parsed = null;
       $parse_stats = null;
-      $parse_input_error = 'Parse failed: ' . $e->getMessage()
-          . ' [' . basename($e->getFile()) . ':' . $e->getLine() . ']';
+      $parse_input_error = 'Parse failed. Please check the input and try again.';
       error_log('import.php parse error: ' . $e);
   }
 }
@@ -1919,7 +1945,7 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
             <div class="form-group">
                 <label>Website Scan</label>
                 <label style="font-size:0.85rem;font-weight:400;text-transform:none;letter-spacing:0;cursor:pointer;display:flex;align-items:center;gap:4px;">
-                    <input type="checkbox" name="scan_websites" value="1" checked style="width:16px;height:16px;"> Scan websites for socials & info
+                    <input type="checkbox" name="scan_websites" value="1" style="width:16px;height:16px;"> Scan websites for socials & info
                 </label>
             </div>
             <div class="form-group">

@@ -19,18 +19,22 @@
  * Place at: /admin/recanonicalize_listings.php  (not linked; direct URL only)
  */
 
-session_start();
+require_once(__DIR__ . '/../api/_sec.php');
 require_once('/home/rovin629/config/biltest_config.php');
 require_once(__DIR__ . '/../api/listing_canonical.php');
+sec_session_start('Strict');
 
 // ─── auth ────────────────────────────────────────────────────────────
 $auth_error = '';
 if (isset($_POST['login'])) {
-    if (($_POST['username'] ?? '') === ADMIN_USER && ($_POST['password'] ?? '') === ADMIN_PASS) {
+    if (!sec_rate_ok('admin_login', sec_client_ip(), 12, 900)) {
+        $auth_error = 'Too many attempts. Please wait a few minutes and try again.';
+    } elseif (sec_admin_user_ok($_POST['username'] ?? '') && sec_admin_password_ok($_POST['password'] ?? '')) {
+        sec_session_regenerate();
         $_SESSION['admin_auth'] = true;
     } else { $auth_error = 'Invalid credentials.'; }
 }
-if (isset($_GET['logout'])) { session_destroy(); header('Location: recanonicalize_listings.php'); exit; }
+if (isset($_GET['logout'])) { sec_session_destroy(); header('Location: recanonicalize_listings.php'); exit; }
 if (empty($_SESSION['admin_auth'])) {
     echo '<!doctype html><meta charset="utf-8"><title>Login</title>';
     echo '<form method="post" style="font-family:sans-serif;max-width:320px;margin:80px auto">';
@@ -60,10 +64,16 @@ $db = get_db();
 // (and loc[id] for area conflicts so we can learn the alias). Only checked rows
 // are written.
 if (($_POST['do'] ?? '') === 'bulk_apply') {
+    if (!sec_request_origin_ok()) { http_response_code(403); echo 'CSRF check failed.'; exit; }
     $ids    = isset($_POST['ids'])   && is_array($_POST['ids'])   ? $_POST['ids']   : array();
     $areaM  = isset($_POST['area'])  && is_array($_POST['area'])  ? $_POST['area']  : array();
     $priceM = isset($_POST['price']) && is_array($_POST['price']) ? $_POST['price'] : array();
     $locM   = isset($_POST['loc'])   && is_array($_POST['loc'])   ? $_POST['loc']   : array();
+
+    // SEC-048: only accept area keys that exist in the areas table — a bogus key
+    // would drop the listing from area-filtered search and poison learned aliases.
+    $valid_area_keys = array();
+    foreach ($db->query("SELECT `key` FROM areas")->fetchAll() as $ak) $valid_area_keys[(string)$ak['key']] = true;
 
     $upd_psqm  = $db->prepare(
         "UPDATE listings SET price_idr_per_sqm = CASE WHEN listing_type_key = 'land' AND land_size_sqm > 0 AND land_size_sqm < 50000000
@@ -82,6 +92,7 @@ if (($_POST['do'] ?? '') === 'bulk_apply') {
             if ($p > 0) { $sets[] = 'price_idr = ?'; $vals[] = $p; }
         }
         $area = isset($areaM[$lid]) ? trim((string)$areaM[$lid]) : '';
+        if ($area !== '' && !isset($valid_area_keys[$area])) $area = ''; // SEC-048: reject unknown area_key
         if ($area !== '') { $sets[] = 'area_key = ?'; $vals[] = $area; }
         $sets[] = 'price_review_flag = 0';
         $sets[] = 'updated_at = NOW()';
@@ -103,6 +114,9 @@ if (($_POST['do'] ?? '') === 'bulk_apply') {
 
 // ─── per-row actions (Save / Accept) — POST, then redirect (PRG) ─────────
 if (($_POST['do'] ?? '') === 'row_action') {
+    if (!sec_request_origin_ok()) { http_response_code(403); echo 'CSRF check failed.'; exit; }
+    $valid_area_keys = array();
+    foreach ($db->query("SELECT `key` FROM areas")->fetchAll() as $ak) $valid_area_keys[(string)$ak['key']] = true;
     $lid = (int)($_POST['listing_id'] ?? 0);
     $act = $_POST['act'] ?? '';
     if ($lid > 0) {
@@ -114,6 +128,7 @@ if (($_POST['do'] ?? '') === 'row_action') {
             $praw = preg_replace('/\D+/', '', (string)($_POST['price_idr'] ?? ''));
             if ($praw !== '') { $sets[] = 'price_idr = ?'; $vals[] = (int)$praw; }
             $area = trim((string)($_POST['area_key'] ?? ''));
+            if ($area !== '' && !isset($valid_area_keys[$area])) $area = ''; // SEC-048: reject unknown area_key
             if ($area !== '') { $sets[] = 'area_key = ?'; $vals[] = $area; }
             $sets[] = 'price_review_flag = 0';
             $sets[] = 'updated_at = NOW()';
@@ -140,7 +155,14 @@ if (($_POST['do'] ?? '') === 'row_action') {
     exit;
 }
 
-$apply = isset($_GET['apply']) && $_GET['apply'] === '1';
+// SEC-018: the bulk apply mutates the entire listings table, so it must NOT run
+// on a GET (CSRF-trivial via <img>/prefetch). Require a same-origin POST that
+// carries apply=1; a GET only ever renders the read-only dry-run.
+$apply = false;
+if (($_POST['do'] ?? '') === 'apply_bulk' && ($_POST['apply'] ?? '') === '1') {
+    if (!sec_request_origin_ok()) { http_response_code(403); echo 'CSRF check failed.'; exit; }
+    $apply = true;
+}
 
 // Lookups for the inline controls.
 $areas = $db->query("SELECT `key`, label FROM areas ORDER BY label")->fetchAll();
@@ -350,7 +372,11 @@ $price_input = function($f) use ($fmt) {
   <div class="banner dry"><strong>DRY RUN.</strong> The Confident/Area-corrected/Tags sections only write when you hit
   <em>Apply bulk changes</em>. The <strong>Verify</strong>, <strong>Review</strong> and <strong>Area conflict</strong>
   sections are interactive: tick rows and press <em>Apply checked</em> (those write immediately). &nbsp;
-  <a class="btn" href="?apply=1" onclick="return confirm('Apply all bulk price/area/tag changes below?')">Apply bulk changes</a></div>
+  <form method="post" style="display:inline" onsubmit="return confirm('Apply all bulk price/area/tag changes below?')">
+    <input type="hidden" name="do" value="apply_bulk">
+    <input type="hidden" name="apply" value="1">
+    <button type="submit" class="btn" style="border:0;cursor:pointer">Apply bulk changes</button>
+  </form></div>
 <?php endif; ?>
 
 <p>

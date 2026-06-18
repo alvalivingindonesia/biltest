@@ -12,18 +12,25 @@
  * Place at: /admin/modified_listings.php  (linked from the ingest console)
  */
 
-session_start();
+require_once(__DIR__ . '/../api/_sec.php');
 require_once('/home/rovin629/config/biltest_config.php');
 require_once(__DIR__ . '/../api/listing_canonical.php');
+
+sec_session_start('Strict');
 
 // ─── auth ────────────────────────────────────────────────────────────
 $auth_error = '';
 if (isset($_POST['login'])) {
-    if (($_POST['username'] ?? '') === ADMIN_USER && ($_POST['password'] ?? '') === ADMIN_PASS) {
+    $u = $_POST['username'] ?? '';
+    $p = $_POST['password'] ?? '';
+    if (!sec_rate_ok('admin_login', sec_client_ip(), 12, 900)) {
+        $auth_error = 'Too many attempts. Please try again later.';
+    } elseif (sec_admin_user_ok($u) && sec_admin_password_ok($p)) {
+        sec_session_regenerate();
         $_SESSION['admin_auth'] = true;
     } else { $auth_error = 'Invalid credentials.'; }
 }
-if (isset($_GET['logout'])) { session_destroy(); header('Location: modified_listings.php'); exit; }
+if (isset($_GET['logout'])) { sec_session_destroy(); header('Location: modified_listings.php'); exit; }
 if (empty($_SESSION['admin_auth'])) {
     echo '<!doctype html><meta charset="utf-8"><title>Login</title>';
     echo '<form method="post" style="font-family:sans-serif;max-width:320px;margin:80px auto">';
@@ -92,6 +99,10 @@ function json_resp($a) { header('Content-Type: application/json; charset=utf-8')
 if (($_POST['do'] ?? '') === 'edit') {
     $id = (int)($_POST['listing_id'] ?? 0);
     $ajax = !empty($_POST['ajax']);
+    if (!sec_request_origin_ok()) {
+        if ($ajax) { http_response_code(403); json_resp(array('error' => 'csrf_failed')); }
+        http_response_code(403); echo 'CSRF check failed.'; exit;
+    }
     $changed = array();
     if ($id > 0) {
         $cur = $db->prepare("SELECT * FROM listings WHERE id = ?"); $cur->execute(array($id)); $row = $cur->fetch();
@@ -122,6 +133,10 @@ if (($_POST['do'] ?? '') === 'edit') {
 if (($_POST['do'] ?? '') === 'revert') {
     $rid = (int)($_POST['revision_id'] ?? 0);
     $ajax = !empty($_POST['ajax']);
+    if (!sec_request_origin_ok()) {
+        if ($ajax) { http_response_code(403); json_resp(array('error' => 'csrf_failed')); }
+        http_response_code(403); echo 'CSRF check failed.'; exit;
+    }
     $allow = array_keys($EDITABLE);
     $allow[] = 'price_label'; $allow[] = 'certificate_type_key';
     $rev = $db->prepare("SELECT * FROM listing_revisions WHERE id = ?"); $rev->execute(array($rid)); $r = $rev->fetch();

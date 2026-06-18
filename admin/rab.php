@@ -5,21 +5,25 @@
  * materials, units, item templates, calculator presets.
  * Access: /admin/rab.php (not linked from any public menu)
  */
-session_start();
+require_once(__DIR__ . '/../api/_sec.php');
 require_once('/home/rovin629/config/biltest_config.php');
+sec_session_start('Strict');
 
 // ─── AUTH ────────────────────────────────────────────────────────────
 $auth_error = '';
 if (isset($_POST['login'])) {
     $u = $_POST['username'] ?? '';
     $p = $_POST['password'] ?? '';
-    if ($u === ADMIN_USER && $p === ADMIN_PASS) {
+    if (!sec_rate_ok('admin_login', sec_client_ip(), 12, 900)) {
+        $auth_error = 'Too many attempts. Please try again later.';
+    } elseif (sec_admin_user_ok($u) && sec_admin_password_ok($p)) {
+        sec_session_regenerate();
         $_SESSION['admin_auth'] = true;
     } else {
         $auth_error = 'Invalid credentials.';
     }
 }
-if (isset($_GET['logout'])) { session_destroy(); header('Location: rab.php'); exit; }
+if (isset($_GET['logout'])) { sec_session_destroy(); header('Location: rab.php'); exit; }
 if (empty($_SESSION['admin_auth'])) { show_login($auth_error); exit; }
 
 // ─── DB ──────────────────────────────────────────────────────────────
@@ -88,6 +92,18 @@ if ($section === 'materials' && $action === 'mat_ajax') {
 
 // ─── HANDLE POST ACTIONS ─────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // CSRF: reject cross-site state-changing requests (SEC-008)
+    if (!sec_request_origin_ok()) {
+        if ($section === 'build_templates' && $action === 'bt_ajax') {
+            header('Content-Type: application/json; charset=utf-8');
+            http_response_code(403);
+            echo json_encode(['error' => 'csrf_failed']);
+            exit;
+        }
+        http_response_code(403);
+        echo 'Request rejected (CSRF check failed).';
+        exit;
+    }
     $db = get_db();
     try {
 
@@ -102,6 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $category     = trim($_POST['category'] ?? '');
             $is_composite = isset($_POST['is_composite']) ? 1 : 0;
             $tier         = trim($_POST['tier'] ?? '');
+            if (!in_array($tier, ['economy', 'standard', 'premium'], true)) { $tier = ''; }
             $group_type   = trim($_POST['group_type'] ?? '');
 
             if ($id) {
@@ -308,6 +325,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $code         = trim($_POST['code'] ?? '');
             $description  = trim($_POST['description'] ?? '');
             $default_tier = trim($_POST['default_tier'] ?? 'standard');
+            if (!in_array($default_tier, ['economy', 'standard', 'premium'], true)) { $default_tier = 'standard'; }
             $is_active    = isset($_POST['is_active']) ? 1 : 0;
             $sort_order   = (int)($_POST['sort_order'] ?? 0);
 
@@ -405,7 +423,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
     } catch (Exception $e) {
-        $msg = 'Error: ' . $e->getMessage();
+        error_log($e->getMessage());
+        $msg = 'Error: An unexpected error occurred. Please try again.';
     }
 }
 
@@ -821,7 +840,7 @@ elseif ($section === 'materials' && $action === 'list'):
         <td><code style="color:#94a3b8;font-size:12px"><?= htmlspecialchars($r['unit_code'] ?? '—') ?></code></td>
         <td class="idr" style="text-align:right"><?= fmt_idr($r['default_rate']) ?></td>
         <td><?= !empty($r['category']) ? htmlspecialchars($r['category']) : '<span style="color:#475569">—</span>' ?></td>
-        <td><?= !empty($r['tier']) ? '<span class="badge" style="background:'.$tc.'20;color:'.$tc.';border:1px solid '.$tc.'40">'.ucfirst($r['tier']).'</span>' : '<span style="color:#475569">—</span>' ?></td>
+        <td><?= !empty($r['tier']) ? '<span class="badge" style="background:'.$tc.'20;color:'.$tc.';border:1px solid '.$tc.'40">'.htmlspecialchars(ucfirst($r['tier'])).'</span>' : '<span style="color:#475569">—</span>' ?></td>
         <td style="font-size:12px;color:#94a3b8"><?= !empty($r['group_type']) ? htmlspecialchars($r['group_type']) : '<span style="color:#475569">—</span>' ?></td>
         <td><?= $r['is_composite'] ? '<span class="badge b-blue">Composite</span>' : '<span class="badge" style="background:#1e293b;color:#64748b;border:1px solid rgba(255,255,255,.1)">Simple</span>' ?></td>
         <td>
@@ -1528,7 +1547,7 @@ elseif ($section === 'build_templates' && $action === 'list'):
             $tier_colors = array('economy' => '#22c55e', 'standard' => '#3b82f6', 'premium' => '#a855f7');
             $tc = isset($tier_colors[$r['default_tier']]) ? $tier_colors[$r['default_tier']] : '#64748b';
             ?>
-            <span class="badge" style="background:<?= $tc ?>20;color:<?= $tc ?>;border:1px solid <?= $tc ?>40"><?= ucfirst($r['default_tier']) ?></span>
+            <span class="badge" style="background:<?= $tc ?>20;color:<?= $tc ?>;border:1px solid <?= $tc ?>40"><?= htmlspecialchars(ucfirst($r['default_tier'])) ?></span>
         </td>
         <td style="color:#64748b"><?= $r['sort_order'] ?></td>
         <td>

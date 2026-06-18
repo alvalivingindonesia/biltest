@@ -4,21 +4,25 @@
  * Rencana Anggaran Biaya: projects, RAB editor, calculator, summary, export.
  * Access: /admin/rab_tool.php
  */
-session_start();
+require_once(__DIR__ . '/../api/_sec.php');
 require_once('/home/rovin629/config/biltest_config.php');
+sec_session_start('Strict');
 
 // ─── AUTH ─────────────────────────────────────────────────────────────
 $auth_error = '';
 if (isset($_POST['login'])) {
     $u = $_POST['username'] ?? '';
     $p = $_POST['password'] ?? '';
-    if ($u === ADMIN_USER && $p === ADMIN_PASS) {
+    if (!sec_rate_ok('admin_login', sec_client_ip(), 12, 900)) {
+        $auth_error = 'Too many attempts. Please try again later.';
+    } elseif (sec_admin_user_ok($u) && sec_admin_password_ok($p)) {
+        sec_session_regenerate();
         $_SESSION['admin_auth'] = true;
     } else {
         $auth_error = 'Invalid credentials.';
     }
 }
-if (isset($_GET['logout'])) { session_destroy(); header('Location: rab_tool.php'); exit; }
+if (isset($_GET['logout'])) { sec_session_destroy(); header('Location: rab_tool.php'); exit; }
 if (empty($_SESSION['admin_auth'])) { show_login($auth_error); exit; }
 
 // ─── DB ──────────────────────────────────────────────────────────────
@@ -46,6 +50,22 @@ function fmt_idr($val): string {
 
 function he($s): string {
     return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+}
+
+// SEC-004: escape a value for use inside an inline single-quoted JS string.
+// addslashes() FIRST (escape the apostrophe), then htmlspecialchars() so the
+// HTML attribute decode cannot reintroduce a string-breaking quote.
+function jsq($s): string {
+    return htmlspecialchars(addslashes((string)$s), ENT_QUOTES, 'UTF-8');
+}
+
+// SEC-044: neutralise spreadsheet-formula trigger characters in export cells.
+function xls_cell($s): string {
+    $s = (string)$s;
+    if ($s !== '' && preg_match('/^[=+\-@\t\r]/', $s)) {
+        $s = "'" . $s;
+    }
+    return he($s);
 }
 
 // ─── RECALCULATE RAB TOTALS ───────────────────────────────────────────
@@ -315,7 +335,7 @@ if ($action === 'export_excel' && $id > 0) {
 
         // Title block
         echo '<tr><td colspan="7" class="title" style="border:none;">RENCANA ANGGARAN BIAYA (RAB)</td></tr>';
-        echo '<tr><td colspan="7" class="subtitle" style="border:none;">Proyek: ' . he($proj_name) . ' — v' . $rab_row['version'] . '</td></tr>';
+        echo '<tr><td colspan="7" class="subtitle" style="border:none;">Proyek: ' . xls_cell($proj_name) . ' — v' . $rab_row['version'] . '</td></tr>';
         echo '<tr><td colspan="7" class="subtitle" style="border:none;">Tanggal: ' . date('d/m/Y') . '</td></tr>';
         if ($rab_row['gross_floor_area_m2']) {
             echo '<tr><td colspan="7" class="subtitle" style="border:none;">Luas Bangunan: ' . number_format((float)$rab_row['gross_floor_area_m2'], 2, ',', '.') . ' m²</td></tr>';
@@ -347,7 +367,7 @@ if ($action === 'export_excel' && $id > 0) {
             $sects = $sects_q->fetchAll();
             if (!$sects) continue;
 
-            echo '<tr><td colspan="7" class="disc-header">' . he($disc['name']) . '</td></tr>';
+            echo '<tr><td colspan="7" class="disc-header">' . xls_cell($disc['name']) . '</td></tr>';
             $disc_total = 0;
             $sect_alpha = 'A';
 
@@ -356,7 +376,7 @@ if ($action === 'export_excel' && $id > 0) {
                 $items_q->execute([$sect['id']]);
                 $sitems = $items_q->fetchAll();
 
-                echo '<tr class="sect-header"><td>' . $sect_alpha . '</td><td colspan="5">' . he($sect['name']) . '</td><td></td></tr>';
+                echo '<tr class="sect-header"><td>' . $sect_alpha . '</td><td colspan="5">' . xls_cell($sect['name']) . '</td><td></td></tr>';
                 $sect_alpha++;
 
                 $sect_total = 0;
@@ -367,8 +387,8 @@ if ($action === 'export_excel' && $id > 0) {
                     $sect_total += $total;
                     echo '<tr>';
                     echo '<td>' . $item_no . '</td>';
-                    echo '<td>' . he($it['name']) . '</td>';
-                    echo '<td>' . he($it['unit_code']) . '</td>';
+                    echo '<td>' . xls_cell($it['name']) . '</td>';
+                    echo '<td>' . xls_cell($it['unit_code']) . '</td>';
                     echo '<td class="num">' . number_format((float)$it['quantity'], 3, ',', '.') . '</td>';
                     echo '<td class="num">' . fmt_idr($it['rate']) . '</td>';
                     echo '<td class="num">' . fmt_idr($total) . '</td>';
@@ -377,9 +397,9 @@ if ($action === 'export_excel' && $id > 0) {
                     $row_num++;
                 }
                 $disc_total += $sect_total;
-                echo '<tr class="subtotal"><td colspan="5" style="text-align:right;">Subtotal ' . he($sect['name']) . '</td><td class="num">' . fmt_idr($sect_total) . '</td><td></td></tr>';
+                echo '<tr class="subtotal"><td colspan="5" style="text-align:right;">Subtotal ' . xls_cell($sect['name']) . '</td><td class="num">' . fmt_idr($sect_total) . '</td><td></td></tr>';
             }
-            echo '<tr class="subtotal" style="background:#0c2040;"><td colspan="5" style="text-align:right;">Total ' . he($disc['name']) . '</td><td class="num">' . fmt_idr($disc_total) . '</td><td></td></tr>';
+            echo '<tr class="subtotal" style="background:#0c2040;"><td colspan="5" style="text-align:right;">Total ' . xls_cell($disc['name']) . '</td><td class="num">' . fmt_idr($disc_total) . '</td><td></td></tr>';
             echo '<tr><td colspan="7" style="border:none;">&nbsp;</td></tr>';
         }
 
@@ -396,6 +416,11 @@ if ($action === 'export_excel' && $id > 0) {
 $ajaxActions = ['save_item','delete_item','save_section','delete_section','recalculate','get_sections','update_area'];
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action && in_array($action, $ajaxActions)) {
     header('Content-Type: application/json; charset=utf-8');
+    if (!sec_request_origin_ok()) {
+        http_response_code(403);
+        echo json_encode(['ok' => false, 'error' => 'csrf_failed', 'msg' => 'Request blocked.']);
+        exit;
+    }
     $db = get_db();
     $result = ['ok' => false, 'msg' => ''];
 
@@ -540,7 +565,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action && in_array($action, $ajaxA
         }
 
     } catch (Exception $e) {
-        $result['msg'] = 'Error: ' . $e->getMessage();
+        error_log('[rab_tool] ' . $e->getMessage());
+        $result['msg'] = 'A server error occurred.';
     }
 
     echo json_encode($result);
@@ -551,6 +577,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action && in_array($action, $ajaxA
 $db = get_db();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!sec_request_origin_ok()) {
+        $msg = 'Error: request blocked (invalid origin).';
+    } else {
     try {
         // ── Create/Edit Project ──
         if ($action === 'save_project') {
@@ -754,7 +783,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
     } catch (Exception $e) {
-        $msg = 'Error: ' . $e->getMessage();
+        error_log('[rab_tool] ' . $e->getMessage());
+        $msg = 'Error: a server error occurred.';
+    }
     }
 }
 
@@ -1015,7 +1046,7 @@ if ($view === 'projects'):
             GROUP BY p.id
             ORDER BY p.updated_at DESC
         ")->fetchAll();
-    } catch (Exception $e) { $msg = 'DB error: ' . $e->getMessage(); }
+    } catch (Exception $e) { error_log('[rab_tool] ' . $e->getMessage()); $msg = 'DB error: a server error occurred.'; }
 ?>
 
 <div class="page-header">
@@ -1059,7 +1090,7 @@ if ($view === 'projects'):
     <td>
         <div class="actions">
             <a href="rab_tool.php?v=project&id=<?= $proj['id'] ?>" class="btn btn-o btn-xs">View</a>
-            <button class="btn btn-o btn-xs" onclick="openEditProject(<?= $proj['id'] ?>, '<?= addslashes(he($proj['name'])) ?>', '<?= addslashes(he($proj['location'] ?? '')) ?>', '<?= addslashes(he($proj['description'] ?? '')) ?>', '<?= $proj['gross_floor_area_m2'] ?? '' ?>', '<?= $proj['status'] ?>')">Edit</button>
+            <button class="btn btn-o btn-xs" onclick="openEditProject(<?= $proj['id'] ?>, '<?= jsq($proj['name']) ?>', '<?= jsq($proj['location'] ?? '') ?>', '<?= jsq($proj['description'] ?? '') ?>', '<?= $proj['gross_floor_area_m2'] ?? '' ?>', '<?= $proj['status'] ?>')">Edit</button>
             <form method="POST" style="display:inline" onsubmit="return confirm('Delete project and ALL its RABs?')">
                 <input type="hidden" name="action" value="delete_project">
                 <input type="hidden" name="proj_id" value="<?= $proj['id'] ?>">
@@ -1149,7 +1180,7 @@ elseif ($view === 'project' && $id > 0):
             $rq->execute([$id]);
             $rabs = $rq->fetchAll();
         }
-    } catch (Exception $e) { $msg = 'Error: ' . $e->getMessage(); }
+    } catch (Exception $e) { error_log('[rab_tool] ' . $e->getMessage()); $msg = 'Error: a server error occurred.'; }
 
     if (!$proj): ?>
 <div class="card"><p style="color:#f87171">Project not found.</p><a href="rab_tool.php?v=projects" class="back-link">← Projects</a></div>
@@ -1169,7 +1200,7 @@ elseif ($view === 'project' && $id > 0):
         </div>
     </div>
     <div style="display:flex;gap:8px">
-        <button class="btn btn-o" onclick="openEditProject(<?= $proj['id'] ?>, '<?= addslashes(he($proj['name'])) ?>', '<?= addslashes(he($proj['location'] ?? '')) ?>', '<?= addslashes(he($proj['description'] ?? '')) ?>', '<?= $proj['gross_floor_area_m2'] ?? '' ?>', '<?= $proj['status'] ?>')">Edit Project</button>
+        <button class="btn btn-o" onclick="openEditProject(<?= $proj['id'] ?>, '<?= jsq($proj['name']) ?>', '<?= jsq($proj['location'] ?? '') ?>', '<?= jsq($proj['description'] ?? '') ?>', '<?= $proj['gross_floor_area_m2'] ?? '' ?>', '<?= $proj['status'] ?>')">Edit Project</button>
         <button class="btn btn-p" onclick="openModal('modal-new-rab')">+ New RAB Version</button>
     </div>
 </div>
@@ -1339,7 +1370,7 @@ elseif ($view === 'rab' && $id > 0):
             $totals_row = $tq->fetch();
 
         }
-    } catch (Exception $e) { $msg = 'Error: ' . $e->getMessage(); }
+    } catch (Exception $e) { error_log('[rab_tool] ' . $e->getMessage()); $msg = 'Error: a server error occurred.'; }
 
     if (!$rab_row): ?>
 <div class="card"><p style="color:#f87171">RAB not found.</p><a href="rab_tool.php?v=projects" class="back-link">← Projects</a></div>
@@ -1418,8 +1449,8 @@ elseif ($view === 'rab' && $id > 0):
             <span class="section-title"><?= he($sect['name']) ?></span>
             <span class="idr" style="font-size:13px;color:#5eead4;margin-right:10px" id="sect-total-<?= $sect['id'] ?>"><?= fmt_idr($sect_total) ?></span>
             <div class="actions" onclick="event.stopPropagation()">
-                <button class="btn btn-o btn-xs" onclick="renameSection(<?= $sect['id'] ?>, '<?= addslashes(he($sect['name'])) ?>')">Rename</button>
-                <button class="btn btn-r btn-xs" onclick="deleteSection(<?= $sect['id'] ?>, '<?= addslashes(he($sect['name'])) ?>')">Delete</button>
+                <button class="btn btn-o btn-xs" onclick="renameSection(<?= $sect['id'] ?>, '<?= jsq($sect['name']) ?>')">Rename</button>
+                <button class="btn btn-r btn-xs" onclick="deleteSection(<?= $sect['id'] ?>, '<?= jsq($sect['name']) ?>')">Delete</button>
             </div>
             <span class="section-toggle" id="sect-toggle-<?= $sect['id'] ?>">&#9660;</span>
         </div>
@@ -1445,7 +1476,7 @@ elseif ($view === 'rab' && $id > 0):
                 <td class="num" id="item-total-<?= $it['id'] ?>"><?= fmt_idr((float)$it['quantity'] * (float)$it['rate']) ?></td>
                 <td>
                     <div class="actions">
-                        <button class="btn btn-o btn-xs" onclick="editItem(<?= $it['id'] ?>, <?= $sect['id'] ?>, '<?= addslashes(he($it['name'])) ?>', <?= $it['unit_id'] ?>, <?= $it['quantity'] ?>, <?= $it['rate'] ?>)">Edit</button>
+                        <button class="btn btn-o btn-xs" onclick="editItem(<?= $it['id'] ?>, <?= $sect['id'] ?>, '<?= jsq($it['name']) ?>', <?= $it['unit_id'] ?>, <?= $it['quantity'] ?>, <?= $it['rate'] ?>)">Edit</button>
                         <button class="btn btn-r btn-xs" onclick="deleteItem(<?= $it['id'] ?>)">Del</button>
                     </div>
                 </td>
@@ -1456,7 +1487,7 @@ elseif ($view === 'rab' && $id > 0):
 
             <!-- Add Item Area -->
             <div class="add-item-area" id="add-area-<?= $sect['id'] ?>">
-                <button class="btn btn-p btn-sm" onclick="showAddItem(<?= $sect['id'] ?>, <?= $disc['id'] ?>, '<?= addslashes(he($sect['name'])) ?>')">+ Add Item</button>
+                <button class="btn btn-p btn-sm" onclick="showAddItem(<?= $sect['id'] ?>, <?= $disc['id'] ?>, '<?= jsq($sect['name']) ?>')">+ Add Item</button>
                 <div id="add-form-<?= $sect['id'] ?>" style="display:none;margin-top:10px">
                     <div class="item-edit-form">
                         <!-- Material Picker (context-aware) -->
@@ -1842,7 +1873,7 @@ elseif ($view === 'summary' && $id > 0):
                 $disc_sections[$disc['code']] = ['disc' => $disc, 'sections' => $sects];
             }
         }
-    } catch (Exception $e) { $msg = 'Error: ' . $e->getMessage(); }
+    } catch (Exception $e) { error_log('[rab_tool] ' . $e->getMessage()); $msg = 'Error: a server error occurred.'; }
 
     if (!$rab_row): ?>
 <div class="card"><p style="color:#f87171">RAB not found.</p><a href="rab_tool.php?v=projects" class="back-link">← Projects</a></div>
@@ -2186,7 +2217,8 @@ function loadMaterials(sectId) {
                 for (var g = 0; g < data.group_types.length; g++) {
                     var gt = data.group_types[g];
                     var selAttr = (gt === prev) ? ' selected' : '';
-                    groupSel.innerHTML += '<option value="' + gt + '"' + selAttr + '>' + gt + '</option>';
+                    var gtEsc = escHtml(gt);
+                    groupSel.innerHTML += '<option value="' + gtEsc + '"' + selAttr + '>' + gtEsc + '</option>';
                 }
                 groupSel._loaded = true;
             }
@@ -2195,14 +2227,15 @@ function loadMaterials(sectId) {
             if (data.materials) {
                 for (var m = 0; m < data.materials.length; m++) {
                     var mat = data.materials[m];
-                    var tierLabel = mat.tier ? ' [' + mat.tier.charAt(0).toUpperCase() + mat.tier.slice(1) + ']' : '';
-                    var priceLabel = mat.default_rate ? ' \u2014 ' + fmtIdr(mat.default_rate) + '/' + (mat.unit_code || '') : '';
-                    var groupLabel = mat.group_type ? ' (' + mat.group_type + ')' : '';
-                    matSel.innerHTML += '<option value="' + mat.id + '"' +
-                        ' data-rate="' + mat.default_rate + '"' +
-                        ' data-name="' + mat.name.replace(/"/g, '&quot;') + '"' +
-                        ' data-unit="' + (mat.unit_id || '') + '"' +
-                        '>' + mat.name + tierLabel + priceLabel + groupLabel + '</option>';
+                    var matNameEsc = escHtml(mat.name || '');
+                    var tierLabel = mat.tier ? ' [' + escHtml(mat.tier.charAt(0).toUpperCase() + mat.tier.slice(1)) + ']' : '';
+                    var priceLabel = mat.default_rate ? ' \u2014 ' + fmtIdr(mat.default_rate) + '/' + escHtml(mat.unit_code || '') : '';
+                    var groupLabel = mat.group_type ? ' (' + escHtml(mat.group_type) + ')' : '';
+                    matSel.innerHTML += '<option value="' + escHtml(String(mat.id)) + '"' +
+                        ' data-rate="' + escHtml(String(mat.default_rate)) + '"' +
+                        ' data-name="' + matNameEsc + '"' +
+                        ' data-unit="' + escHtml(String(mat.unit_id || '')) + '"' +
+                        '>' + matNameEsc + tierLabel + priceLabel + groupLabel + '</option>';
                 }
             }
         } catch (e) { /* ignore parse errors */ }

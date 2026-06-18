@@ -2,9 +2,10 @@
 /**
  * Build in Lombok — Admin: Enrichment Tool (AJAX endpoint)
  */
+require_once(__DIR__ . '/../api/_sec.php');
 error_reporting(0);
 ini_set('display_errors', '0');
-session_start();
+sec_session_start('Strict');
 require_once('/home/rovin629/config/biltest_config.php');
 
 header('Content-Type: application/json');
@@ -91,7 +92,8 @@ if ($action === 'find_missing') {
 
         echo json_encode(array('entities' => $entities, 'total' => count($entities)));
     } catch (Exception $ex) {
-        echo json_encode(array('error' => 'DB error: ' . $ex->getMessage()));
+        error_log('[google_enrich] find_missing: ' . $ex->getMessage());
+        echo json_encode(array('error' => 'DB error'));
     }
     exit;
 }
@@ -100,6 +102,12 @@ if ($action === 'find_missing') {
 // ACTION: quick_save
 // ═══════════════════════════════════════════════════════════════
 if ($action === 'quick_save') {
+    // CSRF: reject cross-site state-changing requests (SEC-008)
+    if (!sec_request_origin_ok()) {
+        http_response_code(403);
+        echo json_encode(array('error' => 'csrf_failed'));
+        exit;
+    }
     try {
         $entity_type = isset($input['entity_type']) ? $input['entity_type'] : '';
         $entity_id   = isset($input['entity_id'])   ? (int)$input['entity_id'] : 0;
@@ -121,10 +129,21 @@ if ($action === 'quick_save') {
         $params = array();
         $saved_fields = array();
         foreach ($fields as $col => $val) {
+            if (!is_string($val)) continue;
             $val = trim($val);
             if ($val === '') continue;
             if (!preg_match('/^[a-z_]+$/', $col)) continue;
             if (!table_has_col($db, $table, $col)) continue;
+            // SEC-016: validate any URL field before storing — require an
+            // http/https scheme (sec_url() rejects javascript:/data: etc.) and
+            // cap length; skip the field entirely if it doesn't validate.
+            if (substr($col, -4) === '_url') {
+                $val = sec_url($val);
+                $scheme = $val !== '' ? strtolower((string)parse_url($val, PHP_URL_SCHEME)) : '';
+                if ($val === '' || ($scheme !== 'http' && $scheme !== 'https') || strlen($val) > 2048) {
+                    continue;
+                }
+            }
             $updates[] = "`{$col}` = ?";
             $params[] = $val;
             $saved_fields[] = $col;
@@ -140,7 +159,8 @@ if ($action === 'quick_save') {
 
         echo json_encode(array('ok' => true, 'saved' => count($updates), 'fields' => $saved_fields));
     } catch (Exception $ex) {
-        echo json_encode(array('error' => 'DB error: ' . $ex->getMessage()));
+        error_log('[google_enrich] quick_save: ' . $ex->getMessage());
+        echo json_encode(array('error' => 'DB error'));
     }
     exit;
 }

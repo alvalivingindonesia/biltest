@@ -9,14 +9,23 @@
  * POST JSON: { "url": "https://...", "existing": { "description": "...", "profile_photo_url": "...", ... } }
  * Returns JSON: { "found": { "description": "...", "logo_url": "...", ... }, "log": [...] }
  */
-session_start();
+require_once(__DIR__ . '/../api/_sec.php');
+sec_session_start('Strict');
 require_once('/home/rovin629/config/biltest_config.php');
 
 header('Content-Type: application/json');
+sec_install_json_exception_handler();
 
 // Auth check
 if (empty($_SESSION['admin_auth'])) {
     echo json_encode(['error' => 'Not authenticated']);
+    exit;
+}
+
+// CSRF: this is a state-changing JSON endpoint (it performs outbound fetches).
+if (!sec_request_origin_ok()) {
+    http_response_code(403);
+    echo json_encode(['error' => 'csrf_failed']);
     exit;
 }
 
@@ -37,23 +46,14 @@ if (!preg_match('#^https?://#i', $url)) {
 $log = [];
 $found = [];
 
-$curl_opts = [
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_FOLLOWLOCATION => true,
-    CURLOPT_MAXREDIRS => 3,
-    CURLOPT_TIMEOUT => 10,
-    CURLOPT_CONNECTTIMEOUT => 6,
-    CURLOPT_SSL_VERIFYPEER => false,
-    CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    CURLOPT_HTTPHEADER => ['Accept: text/html,application/xhtml+xml', 'Accept-Language: en-US,en;q=0.9,id;q=0.8'],
-];
+// User-Agent passed to the SSRF-safe fetcher (which enforces scheme/IP/port
+// allow-list, keeps TLS verification on, and re-validates each redirect hop).
+$fetch_ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 // ── Fetch main page ──
-$ch = curl_init();
-curl_setopt_array($ch, [CURLOPT_URL => $url] + $curl_opts);
-$html = curl_exec($ch);
-$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
+$main_res = safe_fetch($url, ['user_agent' => $fetch_ua, 'max_redirects' => 3, 'timeout' => 10]);
+$html = $main_res['ok'] ? $main_res['body'] : false;
+$http_code = (int)$main_res['status'];
 
 if ($html === false || $http_code >= 400 || strlen($html) < 200) {
     echo json_encode(['error' => 'Could not fetch website (HTTP ' . $http_code . ')', 'found' => [], 'log' => ['Failed to fetch main page']]);
@@ -174,11 +174,9 @@ $base = ($parsed_url['scheme'] ?? 'https') . '://' . ($parsed_url['host'] ?? '')
 if (strlen($about_text) < 50) {
     $about_paths = ['/about', '/about-us', '/about.html', '/tentang-kami', '/company', '/our-story'];
     foreach ($about_paths as $about_path) {
-        $ch2 = curl_init();
-        curl_setopt_array($ch2, [CURLOPT_URL => $base . $about_path] + $curl_opts);
-        $about_html = curl_exec($ch2);
-        $about_code = curl_getinfo($ch2, CURLINFO_HTTP_CODE);
-        curl_close($ch2);
+        $about_res = safe_fetch($base . $about_path, ['user_agent' => $fetch_ua, 'max_redirects' => 3, 'timeout' => 10]);
+        $about_html = $about_res['ok'] ? $about_res['body'] : false;
+        $about_code = (int)$about_res['status'];
         if ($about_html && $about_code < 400 && strlen($about_html) > 500) {
             $log[] = 'Fetched ' . $about_path . ' page (' . strlen($about_html) . ' bytes)';
             // Clean out scripts/styles/nav/footer

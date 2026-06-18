@@ -4,21 +4,25 @@
  * Lightweight CRUD for all site data.
  * Access: /admin/console.php (not linked from any menu)
  */
-session_start();
+require_once(__DIR__ . '/../api/_sec.php');
 require_once('/home/rovin629/config/biltest_config.php');
+sec_session_start('Strict');
 
 // ─── AUTH ────────────────────────────────────────────────────────────
 $auth_error = '';
 if (isset($_POST['login'])) {
     $u = $_POST['username'] ?? '';
     $p = $_POST['password'] ?? '';
-    if ($u === ADMIN_USER && $p === ADMIN_PASS) {
+    if (!sec_rate_ok('admin_login', sec_client_ip(), 12, 900)) {
+        $auth_error = 'Too many attempts. Please try again later.';
+    } elseif (sec_admin_user_ok($u) && sec_admin_password_ok($p)) {
+        sec_session_regenerate();
         $_SESSION['admin_auth'] = true;
     } else {
         $auth_error = 'Invalid credentials.';
     }
 }
-if (isset($_GET['logout'])) { session_destroy(); header('Location: console.php'); exit; }
+if (isset($_GET['logout'])) { sec_session_destroy(); header('Location: console.php'); exit; }
 if (empty($_SESSION['admin_auth'])) { show_login($auth_error); exit; }
 
 // ─── AJAX API ────────────────────────────────────────────────────────
@@ -61,6 +65,11 @@ function convert_listing_prices($db_conn, &$fields, &$vals) {
 // return JSON when called with ?ajax=1
 if (isset($_GET['ajax']) && $_GET['ajax'] === '1' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json; charset=utf-8');
+    if (!sec_request_origin_ok()) {
+        http_response_code(403);
+        echo json_encode(array('error' => 'csrf_failed'));
+        exit;
+    }
     $db_ajax = new PDO('mysql:host='.DB_HOST.';dbname='.DB_NAME.';charset=utf8mb4', DB_USER, DB_PASS, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
@@ -290,7 +299,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === '1' && $_SERVER['REQUEST_METHOD'] 
                 break;
         }
     } catch (Exception $e) {
-        $aj_result = array('ok' => false, 'msg' => 'Error: ' . $e->getMessage());
+        error_log('[biltest console ajax] ' . $e->getMessage());
+        $aj_result = array('ok' => false, 'msg' => 'A server error occurred.');
     }
     echo json_encode($aj_result);
     exit;
@@ -323,7 +333,12 @@ $id      = (int)($_GET['id'] ?? 0);
 $msg     = '';
 
 // ─── HANDLE POST ACTIONS ─────────────────────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['login'])) {
+    if (!sec_request_origin_ok()) {
+        http_response_code(403);
+        echo 'Request rejected (cross-site request blocked).';
+        exit;
+    }
     // Join language checkboxes into comma-separated string
     if (isset($_POST['languages']) && is_array($_POST['languages'])) {
         $_POST['languages'] = implode(', ', $_POST['languages']);
@@ -768,8 +783,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         elseif ($section === 'users' && $action === 'set_password') {
             $uid = (int)$_POST['user_id'];
             $new_pass = $_POST['new_password'] ?? '';
+            $common_passwords = array(
+                'password','password1','password123','12345678','123456789','1234567890',
+                'qwerty','qwerty123','111111','123123','abc12345','letmein','iloveyou',
+                'admin','admin123','welcome','welcome1','monkey','dragon','football',
+                'passw0rd','password!','changeme','sunshine','princess','baseball','000000'
+            );
             if (strlen($new_pass) < 8) {
                 $msg = 'Password must be at least 8 characters.';
+            } elseif (in_array(strtolower($new_pass), $common_passwords, true)) {
+                $msg = 'Password is too common. Please choose a stronger password.';
             } else {
                 $hash = password_hash($new_pass, PASSWORD_DEFAULT);
                 $db->prepare("UPDATE users SET password_hash=?, reset_token=NULL, reset_expires=NULL WHERE id=?")->execute(array($hash, $uid));
@@ -957,7 +980,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header("Location: console.php?s=feature_access&msg=" . urlencode($msg)); exit;
         }
     } catch (Exception $e) {
-        $msg = 'Error: ' . $e->getMessage();
+        error_log('[biltest console] ' . $e->getMessage());
+        $msg = 'Error: A server error occurred.';
     }
     // PRG redirect after non-delete POST
     if ($action === 'save' && $msg && strpos($msg, 'Error') === false) {
@@ -2581,8 +2605,9 @@ elseif ($section === 'listings'):
             <?php endif; ?>
         </td>
         <td>
-            <?php if (!empty($lst['source_url'])): ?>
-            <a href="<?= htmlspecialchars($lst['source_url']) ?>" target="_blank" rel="noopener" style="color:#0c7c84;text-decoration:none;font-weight:500"><?= htmlspecialchars(mb_strimwidth($lst['title'] ?? '-', 0, 45, '...')) ?></a>
+            <?php $src_url = sec_url($lst['source_url'] ?? ''); ?>
+            <?php if ($src_url !== ''): ?>
+            <a href="<?= htmlspecialchars($src_url) ?>" target="_blank" rel="noopener" style="color:#0c7c84;text-decoration:none;font-weight:500"><?= htmlspecialchars(mb_strimwidth($lst['title'] ?? '-', 0, 45, '...')) ?></a>
             <?php else: ?>
             <span style="font-weight:500"><?= htmlspecialchars(mb_strimwidth($lst['title'] ?? '-', 0, 45, '...')) ?></span>
             <?php endif; ?>
@@ -3447,8 +3472,9 @@ function ajaxListingEdit(id) {
             var shortTitle = titleText.length > 50 ? titleText.substring(0, 47) + '...' : titleText;
             var typeText = r.listing_type || r.listing_type_key || '-';
             var dateText = r.created_at ? r.created_at.substring(0, 10) : '';
-            if (r.source_url) {
-                cells[1].innerHTML = '<a href="' + escHtml(r.source_url) + '" target="_blank" rel="noopener" style="color:#0c7c84;text-decoration:none;font-weight:500">' + escHtml(shortTitle) + '</a>'
+            var safeSourceUrl = sanitizeUrl(r.source_url);
+            if (safeSourceUrl) {
+                cells[1].innerHTML = '<a href="' + escHtml(safeSourceUrl) + '" target="_blank" rel="noopener" style="color:#0c7c84;text-decoration:none;font-weight:500">' + escHtml(shortTitle) + '</a>'
                     + '<div style="font-size:11px;color:#94a3b8;margin-top:1px">#' + id + ' \u00b7 ' + escHtml(typeText) + ' \u00b7 ' + dateText + '</div>';
             } else {
                 cells[1].innerHTML = '<span style="font-weight:500">' + escHtml(shortTitle) + '</span>'
@@ -3528,12 +3554,28 @@ function lstPriceConvert(el) {
     }
 }
 
-/* Helper: escape HTML entities */
+/* Helper: escape HTML entities (incl. quotes so it is attribute-safe) */
 function escHtml(s) {
     if (!s) return '';
-    var d = document.createElement('div');
-    d.appendChild(document.createTextNode(s));
-    return d.innerHTML;
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/* Helper: return url only if its scheme is safe for an href, else '' */
+function sanitizeUrl(u) {
+    if (!u) return '';
+    u = String(u).trim();
+    if (u === '') return '';
+    var m = u.match(/^([a-z][a-z0-9+.\-]*):/i);
+    if (m) {
+        var scheme = m[1].toLowerCase();
+        if (scheme !== 'http' && scheme !== 'https' && scheme !== 'tel' && scheme !== 'mailto') return '';
+    }
+    return u;
 }
 
 /* Helper: format number with thousands separator */

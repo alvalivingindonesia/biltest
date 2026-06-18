@@ -9,23 +9,28 @@
  * SECURITY: Not linked from any menu. Access via direct URL only.
  */
 
-session_start();
+require_once(__DIR__ . '/../api/_sec.php'); // display_errors off + log_errors on (SEC-055); session/CSRF/auth helpers
 require_once('/home/rovin629/config/biltest_config.php');
 require_once(__DIR__ . '/../api/listing_canonical.php'); // shared per-are/area rules (ADR 0006/0007)
+
+sec_session_start('Strict'); // HttpOnly/Secure/SameSite=Strict session cookie (SEC-011)
 
 // ─── AUTH CHECK ──────────────────────────────────────────────────────
 $auth_error = '';
 if (isset($_POST['login'])) {
     $u = isset($_POST['username']) ? $_POST['username'] : '';
     $p = isset($_POST['password']) ? $_POST['password'] : '';
-    if ($u === ADMIN_USER && $p === ADMIN_PASS) {
+    if (!sec_rate_ok('admin_login', sec_client_ip(), 12, 900)) {
+        $auth_error = 'Too many attempts. Please try again later.'; // brute-force throttle (SEC-012)
+    } elseif (sec_admin_user_ok($u) && sec_admin_password_ok($p)) { // constant-time admin creds (SEC-013)
+        sec_session_regenerate(); // prevent session fixation (SEC-024)
         $_SESSION['admin_auth'] = true;
     } else {
         $auth_error = 'Invalid credentials.';
     }
 }
 if (isset($_GET['logout'])) {
-    session_destroy();
+    sec_session_destroy(); // clear $_SESSION + expire cookie (SEC-041)
     header('Location: scrape_listings.php');
     exit;
 }
@@ -889,7 +894,7 @@ function insert_listing($db, $data, $agent_id) {
                      ?, ?, ?, ?, ?, ?,
                      ?, ?, ?,
                      ?, ?, ?,
-                     0, 1, 'rumah123', ?, ?, NOW(),
+                     0, 0, 'rumah123', ?, ?, NOW(),
                      ?)"
         );
 
@@ -925,7 +930,8 @@ function insert_listing($db, $data, $agent_id) {
         if (strpos($e->getMessage(), 'Duplicate') !== false) {
             return 'duplicate';
         }
-        return 'error: ' . $e->getMessage();
+        error_log('scrape_listings insert error: ' . $e->getMessage()); // SEC-023: log, do not return raw exception text
+        return 'error: database error';
     }
 }
 
@@ -936,6 +942,7 @@ function insert_listing($db, $data, $agent_id) {
 
 if (isset($_POST['action']) && $_POST['action'] === 'import_paste') {
     header('Content-Type: application/json');
+    if (!sec_request_origin_ok()) { http_response_code(403); echo json_encode(array('error' => 'csrf_failed')); exit; } // SEC-008
 
     $source = isset($_POST['html_source']) ? $_POST['html_source'] : '';
     $max_listings = max(1, min(2000, intval(isset($_POST['max_listings']) ? $_POST['max_listings'] : 30)));
@@ -1076,6 +1083,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_paste') {
 
 if (isset($_POST['action']) && $_POST['action'] === 'clear_rumah123') {
     header('Content-Type: application/json');
+    if (!sec_request_origin_ok()) { http_response_code(403); echo json_encode(array('error' => 'csrf_failed')); exit; } // SEC-008
     $db = get_db();
     $stmt = $db->prepare("DELETE FROM listings WHERE source_site = 'rumah123'");
     $stmt->execute();
@@ -1105,6 +1113,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'get_counts') {
 
 if (isset($_POST['action']) && $_POST['action'] === 'import_dotproperty') {
     header('Content-Type: application/json');
+    if (!sec_request_origin_ok()) { http_response_code(403); echo json_encode(array('error' => 'csrf_failed')); exit; } // SEC-008
 
     $source = isset($_POST['html_source']) ? $_POST['html_source'] : '';
     $max_listings = max(1, min(2000, intval(isset($_POST['max_listings']) ? $_POST['max_listings'] : 30)));
@@ -1298,7 +1307,7 @@ function insert_dotproperty_listing($db, $data, $agent_id) {
                      ?, ?, ?, ?, ?, ?,
                      ?, ?, ?,
                      ?, ?, ?,
-                     0, 1, 'dotproperty', ?, ?, NOW(),
+                     0, 0, 'dotproperty', ?, ?, NOW(),
                      ?)"
         );
 
@@ -1334,7 +1343,8 @@ function insert_dotproperty_listing($db, $data, $agent_id) {
         if (strpos($e->getMessage(), 'Duplicate') !== false) {
             return 'duplicate';
         }
-        return 'error: ' . $e->getMessage();
+        error_log('scrape_listings insert error: ' . $e->getMessage()); // SEC-023: log, do not return raw exception text
+        return 'error: database error';
     }
 }
 
@@ -1506,6 +1516,7 @@ function parse_olx_price($price_text) {
 
 if (isset($_POST['action']) && $_POST['action'] === 'clear_dotproperty') {
     header('Content-Type: application/json');
+    if (!sec_request_origin_ok()) { http_response_code(403); echo json_encode(array('error' => 'csrf_failed')); exit; } // SEC-008
     $db = get_db();
     $stmt = $db->prepare("DELETE FROM listings WHERE source_site = 'dotproperty'");
     $stmt->execute();
@@ -1536,6 +1547,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'get_dotproperty_counts') {
 
 if (isset($_POST['action']) && $_POST['action'] === 'import_olx') {
     header('Content-Type: application/json');
+    if (!sec_request_origin_ok()) { http_response_code(403); echo json_encode(array('error' => 'csrf_failed')); exit; } // SEC-008
 
     $source = isset($_POST['html_source']) ? $_POST['html_source'] : '';
     $max_listings = max(1, min(2000, intval(isset($_POST['max_listings']) ? $_POST['max_listings'] : 30)));
@@ -1697,7 +1709,7 @@ function insert_olx_listing($db, $data, $agent_id) {
                      ?, ?, ?, ?, ?, ?,
                      ?, ?, ?,
                      ?, ?, ?,
-                     0, 1, 'olx', ?, ?, NOW(),
+                     0, 0, 'olx', ?, ?, NOW(),
                      ?)"
         );
 
@@ -1733,7 +1745,8 @@ function insert_olx_listing($db, $data, $agent_id) {
         if (strpos($e->getMessage(), 'Duplicate') !== false) {
             return 'duplicate';
         }
-        return 'error: ' . $e->getMessage();
+        error_log('scrape_listings insert error: ' . $e->getMessage()); // SEC-023: log, do not return raw exception text
+        return 'error: database error';
     }
 }
 
@@ -2222,7 +2235,7 @@ function insert_lamudi_listing($db, $data, $agent_id) {
                      ?, ?, ?, ?, ?, ?, ?,
                      ?, ?, ?,
                      ?, ?, ?,
-                     0, 1, 'lamudi', ?, ?, NOW(),
+                     0, 0, 'lamudi', ?, ?, NOW(),
                      ?)"
         );
 
@@ -2259,7 +2272,8 @@ function insert_lamudi_listing($db, $data, $agent_id) {
         if (strpos($e->getMessage(), 'Duplicate') !== false) {
             return 'duplicate';
         }
-        return 'error: ' . $e->getMessage();
+        error_log('scrape_listings insert error: ' . $e->getMessage()); // SEC-023: log, do not return raw exception text
+        return 'error: database error';
     }
 }
 
@@ -2270,6 +2284,7 @@ function insert_lamudi_listing($db, $data, $agent_id) {
 
 if (isset($_POST['action']) && $_POST['action'] === 'import_lamudi') {
     header('Content-Type: application/json');
+    if (!sec_request_origin_ok()) { http_response_code(403); echo json_encode(array('error' => 'csrf_failed')); exit; } // SEC-008
 
     $source = isset($_POST['html_source']) ? $_POST['html_source'] : '';
     $max_listings = max(1, min(200, intval(isset($_POST['max_listings']) ? $_POST['max_listings'] : 30)));
@@ -2396,6 +2411,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'import_lamudi') {
 
 if (isset($_POST['action']) && $_POST['action'] === 'clear_lamudi') {
     header('Content-Type: application/json');
+    if (!sec_request_origin_ok()) { http_response_code(403); echo json_encode(array('error' => 'csrf_failed')); exit; } // SEC-008
     $db = get_db();
     $stmt = $db->prepare("DELETE FROM listings WHERE source_site = 'lamudi'");
     $stmt->execute();
@@ -2423,6 +2439,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'get_lamudi_counts') {
 
 if (isset($_POST['action']) && $_POST['action'] === 'clear_olx') {
     header('Content-Type: application/json');
+    if (!sec_request_origin_ok()) { http_response_code(403); echo json_encode(array('error' => 'csrf_failed')); exit; } // SEC-008
     $db = get_db();
     $stmt = $db->prepare("DELETE FROM listings WHERE source_site = 'olx'");
     $stmt->execute();
@@ -2921,6 +2938,16 @@ var importRunning = false;
 
 /* Helpers */
 function $(id) { return document.getElementById(id); }
+
+/* SEC-015: full HTML-escape for any scraped/error text before innerHTML insertion */
+function escHtml(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
 
 function showToast(msg, isError) {
     var t = $('toast');
@@ -3504,12 +3531,12 @@ function doLamudiImport() {
             for (var i = 0; i < res.results.length; i++) {
                 var r = res.results[i];
                 html += '<div class="result-item">'
-                    + '<span class="badge ' + badgeClass(r.status) + '">' + r.status + '</span> '
-                    + '<strong>' + (r.title || '-').substring(0, 50) + '</strong>'
-                    + (r.price ? ' &middot; ' + r.price : '')
-                    + (r.size ? ' &middot; ' + r.size : '')
-                    + (r.location ? ' &middot; ' + r.location : '')
-                    + ' <span style="color:#94a3b8;font-size:.75rem">' + r.msg + '</span>'
+                    + '<span class="badge ' + badgeClass(r.status) + '">' + escHtml(r.status) + '</span> '
+                    + '<strong>' + escHtml((r.title || '-').substring(0, 50)) + '</strong>'
+                    + (r.price ? ' &middot; ' + escHtml(r.price) : '')
+                    + (r.size ? ' &middot; ' + escHtml(r.size) : '')
+                    + (r.location ? ' &middot; ' + escHtml(r.location) : '')
+                    + ' <span style="color:#94a3b8;font-size:.75rem">' + escHtml(r.msg) + '</span>'
                     + '</div>';
             }
             $('lamudiResultList').innerHTML = html;
