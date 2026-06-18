@@ -70,6 +70,19 @@ function require_auth() {
     return $uid;
 }
 
+// SEC-006 / SEC-014: the classic Detailed-RAB project endpoints have no owner
+// column (rab_projects lacks user_id), so they are an IDOR + premium leak. The
+// tool is a frozen backup superseded by the drab_* generator, so its
+// project/RAB management is restricted to admins. The free calculator endpoints
+// (presets/calculate/estimates/feature/units/templates) stay open to all.
+function require_admin() {
+    $uid = require_auth();
+    if ((isset($_SESSION['user_role']) ? $_SESSION['user_role'] : '') !== 'admin') {
+        json_error(403, 'This tool is no longer available.');
+    }
+    return $uid;
+}
+
 function get_post_data() {
     $ct = isset($_SERVER['CONTENT_TYPE']) ? $_SERVER['CONTENT_TYPE'] : '';
     if (stripos($ct, 'application/json') !== false) {
@@ -134,6 +147,15 @@ function fmt_idr($val) {
 
 // ─── ROUTING ─────────────────────────────────────────────────────
 $action = isset($_GET['action']) ? $_GET['action'] : '';
+
+// Classic Detailed-RAB project/RAB management is admin-only (SEC-006/SEC-014).
+$classic_admin_actions = array(
+    'projects', 'save_project', 'delete_project', 'project_detail',
+    'create_rab', 'clone_rab', 'delete_rab', 'rab_detail', 'get_sections',
+    'save_item', 'delete_item', 'save_section', 'delete_section',
+    'update_area', 'recalculate', 'export_excel',
+);
+if (in_array($action, $classic_admin_actions, true)) { require_admin(); }
 
 switch ($action) {
     case 'presets':         handle_presets(); break;
@@ -280,6 +302,12 @@ function handle_calculate() {
     ));
     $run_id = (int)$db->lastInsertId();
 
+    // Remember which runs THIS session created so a guest can re-open its own
+    // result without exposing other people's runs by guessable id (SEC-026).
+    if (!isset($_SESSION['rab_my_runs']) || !is_array($_SESSION['rab_my_runs'])) $_SESSION['rab_my_runs'] = array();
+    $_SESSION['rab_my_runs'][] = $run_id;
+    if (count($_SESSION['rab_my_runs']) > 50) $_SESSION['rab_my_runs'] = array_slice($_SESSION['rab_my_runs'], -50);
+
     json_out(array(
         'success' => true,
         'run_id' => $run_id,
@@ -413,10 +441,14 @@ function handle_estimate() {
     $run = $stmt->fetch();
     if (!$run) { json_error(404, 'Estimate not found.'); }
 
-    // If saved and belongs to a user, check ownership
+    // SEC-026: always scope to the owner. A run is viewable only by the user who
+    // owns it, or — for an anonymous run — by the session that created it. Return
+    // 404 (not 403) so ids cannot be probed for existence.
     $uid = get_current_user_id();
-    if ($run['is_saved'] && $run['user_id'] && $uid !== (int)$run['user_id']) {
-        json_error(403, 'Access denied.');
+    $owns = $run['user_id'] && $uid && $uid === (int)$run['user_id'];
+    $mine_in_session = in_array((int)$id, isset($_SESSION['rab_my_runs']) && is_array($_SESSION['rab_my_runs']) ? $_SESSION['rab_my_runs'] : array(), true);
+    if (!$owns && !$mine_in_session) {
+        json_error(404, 'Estimate not found.');
     }
 
     $ql_map = array('low' => 'Economy', 'mid' => 'Architectural', 'high' => 'Premium');

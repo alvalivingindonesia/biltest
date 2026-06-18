@@ -1141,7 +1141,12 @@ function handle_save_rab_meta() {
 // AHSP transparency
 // ============================================================================
 function handle_ahsp() {
-    require_auth();
+    $uid = require_auth();
+    // SEC-014: the coefficient build-up exposes base prices + the derived rate
+    // (the premium Confirmed price book). Gate it like handle_catalog().
+    if (!user_can('drab_confirmed_pricing', $uid)) {
+        json_out(array('error' => 'upgrade_required', 'feature' => 'drab_confirmed_pricing'), 403);
+    }
     $db = get_db();
     $wi = (int)$_GET['work_item_id'];
     $zone = isset($_GET['zone']) && $_GET['zone'] === 'south' ? 'south' : 'mataram';
