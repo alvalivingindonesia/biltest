@@ -20,6 +20,7 @@ if (!$is_cli) {
     header('Content-Type: text/plain; charset=utf-8');
 }
 
+require_once(__DIR__ . '/_sec.php');                         // safe_fetch + error hardening
 require_once('/home/rovin629/config/biltest_config.php');
 
 // Web access requires a ?key= parameter matching REVIEW_CRON_KEY
@@ -102,14 +103,19 @@ function fetch_rating_from_places_api(string $place_id, string $api_key): ?array
  * Returns ['rating' => float, 'user_ratings_total' => int] or null.
  */
 function fetch_rating_from_html(string $maps_url): ?array {
-    $ctx = stream_context_create([
-        'http' => [
-            'timeout'     => 15,
-            'user_agent'  => 'Mozilla/5.0 (compatible; BuildInLombok/1.0)',
-            'ignore_errors' => true,
-        ],
-    ]);
-    $html = @file_get_contents($maps_url, false, $ctx);
+    // SEC-010 / SEC-020: only fetch genuine Google hosts — no file:// (private
+    // config LFI), no SSRF to internal IPs, and no attacker-hosted page forging
+    // a 5.0 rating — and go through the SSRF-safe fetcher (TLS verified,
+    // redirects re-validated).
+    $host = strtolower((string)parse_url($maps_url, PHP_URL_HOST));
+    $is_google = false;
+    foreach (array('google.com', 'google.co.id', 'goo.gl', 'g.page') as $g) {
+        if ($host === $g || ($host !== '' && substr($host, -(strlen($g) + 1)) === '.' . $g)) { $is_google = true; break; }
+    }
+    if (!$is_google) return null;
+    $res = safe_fetch($maps_url, array('timeout' => 15, 'max_bytes' => 3 * 1024 * 1024));
+    if (!$res['ok'] || $res['status'] >= 400) return null;
+    $html = $res['body'];
     if (!$html) return null;
 
     // e.g. "4.5 stars" or ratingValue":4.5
@@ -198,8 +204,9 @@ foreach ($entity_configs as $cfg) {
             continue;
         }
 
-        $new_rating = $result['rating'];
-        $new_count  = $result['user_ratings_total'];
+        // SEC-020: clamp to sane bounds regardless of source.
+        $new_rating = max(0, min(5, (float)$result['rating']));
+        $new_count  = max(0, min(100000, (int)$result['user_ratings_total']));
         $old_rating = $entity['google_rating'];
         $old_count  = $entity['google_review_count'];
 

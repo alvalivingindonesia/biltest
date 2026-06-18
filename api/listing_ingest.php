@@ -20,6 +20,7 @@
  *   post_liveness  -> report gone / failed / present for a listing
  */
 
+require_once(__DIR__ . '/_sec.php');                         // error hardening (SEC-055)
 require_once('/home/rovin629/config/biltest_config.php');
 require_once(__DIR__ . '/listing_canonical.php');
 
@@ -82,8 +83,9 @@ function require_worker_auth() {
 }
 
 set_exception_handler(function ($e) {
+    error_log('[biltest] listing_ingest: ' . $e->getMessage());
     if (!headers_sent()) http_response_code(500);
-    echo json_encode(array('error' => 'server_error', 'detail' => $e->getMessage()), JSON_UNESCAPED_UNICODE);
+    echo json_encode(array('error' => 'server_error'), JSON_UNESCAPED_UNICODE);  // no detail leak (SEC-023)
 });
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') json_error(405, 'POST required.');

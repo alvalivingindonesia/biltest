@@ -206,7 +206,8 @@ try {
         default:                    json_error(400, 'Unknown action');
     }
 } catch (Exception $e) {
-    json_error(500, 'server_error: ' . $e->getMessage());
+    error_log('[biltest] drab_api: ' . $e->getMessage());
+    json_error(500, 'server_error');   // no schema/message leak (SEC-023)
 }
 
 // ============================================================================

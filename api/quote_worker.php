@@ -101,8 +101,9 @@ function to_amount($v) {
 
 // Any uncaught DB/logic error -> JSON 500 (the agent parses JSON, not HTML).
 set_exception_handler(function ($e) {
+    error_log('[biltest] quote_worker: ' . $e->getMessage());
     if (!headers_sent()) { http_response_code(500); }
-    echo json_encode(array('error' => 'server_error', 'detail' => $e->getMessage()), JSON_UNESCAPED_UNICODE);
+    echo json_encode(array('error' => 'server_error'), JSON_UNESCAPED_UNICODE);  // no detail leak (SEC-023)
 });
 
 // ─── Routing (POST only, authenticated) ──────────────────────────
