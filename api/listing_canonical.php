@@ -364,17 +364,23 @@ function lc_enforce_min_price_floor($db, $total_idr, $size_sqm, $is_land = true)
 }
 
 /**
- * Decide the listing type from the listing's EXPLICIT category and STRUCTURE —
- * never from marketing prose. (The old logic substring-matched "villa" over the
- * title, so "Tanah view villa", "cocok untuk villa", etc. all became villas.)
+ * Decide the listing type from the listing's EXPLICIT category + title WORD ORDER
+ * — never from a stray "villa" mention. (The old logic substring-matched "villa"
+ * over the title, so "Tanah view villa" became a villa.)
  *   • $hint  — the portal's stated category / LLM structured field / stored type
  *              (Tanah, Rumah, Villa, Apartemen, Ruko…): what the listing declares.
- *   • building size / bedrooms — a plot has neither; a villa/house has a building.
- * Rule: with NO building and NO bedrooms it is LAND, whatever the text says. A
- * built type is only assigned when there is building evidence to back it.
+ *   • title word order — a real villa LEADS with "Villa…"; a plot whose blurb just
+ *     name-drops a villa LEADS with "Tanah…". Whichever word comes first wins.
+ *   • building size / bedrooms — corroboration, NOT a gate (we rarely captured a
+ *     villa's building size, so absence of one must not demote a real villa).
+ *
+ * An explicit built category (villa/house/…) is trusted UNLESS the title leads
+ * with a land word and there's no building evidence — that's the prose-villa we
+ * want to demote to land.
  */
 function lc_listing_type($hint, $title, $building_sqm = null, $bedrooms = null) {
     $h = mb_strtolower(trim((string)$hint), 'UTF-8');
+    $t = ' ' . mb_strtolower((string)$title, 'UTF-8') . ' ';   // pad → cheap word-boundary
     $has_building = ((int)$building_sqm > 0) || ((int)$bedrooms > 0);
 
     $hint_type = '';
@@ -392,15 +398,30 @@ function lc_listing_type($hint, $title, $building_sqm = null, $bedrooms = null) 
         }
     }
 
-    // No building evidence → land, regardless of any "villa" mention in the text.
-    if (!$has_building) return 'land';
+    // Earliest land word vs earliest built word in the title — word order is the
+    // signal. "Tanah view villa" → land leads; "Villa + tanah luas" → villa leads.
+    $first = function ($t, $words) {
+        $best = PHP_INT_MAX;
+        foreach ($words as $w) { $p = mb_strpos($t, $w); if ($p !== false && $p < $best) $best = $p; }
+        return $best;
+    };
+    $pos_land  = $first($t, array(' tanah', ' kavling', ' kapling', ' kebun', ' lahan'));
+    $pos_built = $first($t, array(' villa', ' vila', ' rumah', ' house', ' apartemen', ' ruko'));
+    $title_leads_land = ($pos_land < $pos_built);
 
-    if ($hint_type === 'villa')      return 'villa';
-    if ($hint_type === 'apartment')  return 'apartment';
-    if ($hint_type === 'commercial') return 'commercial';
-    if ($hint_type === 'house')      return 'house';
-    if ($hint_type === 'land')       return 'land';   // explicit land that happens to list a structure
-    return 'house';                                    // built but uncategorised → house
+    $built = in_array($hint_type, array('villa', 'house', 'apartment', 'commercial'), true);
+    if ($built) {
+        // Trust the explicit built category — demote to land only for a plot whose
+        // title leads with a land word AND that has no building evidence.
+        if ($title_leads_land && !$has_building) return 'land';
+        return $hint_type;
+    }
+
+    // Hint says land, or no category at all.
+    if ($hint_type === 'land') return 'land';
+    if ($has_building) return 'house';      // building present but uncategorised → house
+    if ($title_leads_land) return 'land';
+    return 'land';                           // no category, no building → plot (the common case)
 }
 
 /** A change big enough to be suspicious rather than a normal price move. */

@@ -146,6 +146,31 @@ if (($_POST['do'] ?? '') === 'apply') {
     $flash = "Applied $n fix(es).";
 }
 
+// ─── undo: restore listing types this tool changed (admin_fix) ───────
+if (($_POST['do'] ?? '') === 'undo_type') {
+    if (!sec_request_origin_ok()) { http_response_code(403); echo 'CSRF check failed.'; exit; }
+    $revs = $db->query(
+        "SELECT id, listing_id, old_value, new_value FROM listing_revisions
+          WHERE field = 'listing_type_key' AND source = 'admin_fix'
+          ORDER BY id DESC")->fetchAll();
+    $seen = array(); $n = 0;
+    $cur = $db->prepare("SELECT listing_type_key FROM listings WHERE id = ?");
+    foreach ($revs as $rv) {
+        $lid = (int)$rv['listing_id'];
+        if (isset($seen[$lid])) continue;           // most-recent admin_fix per listing only
+        $seen[$lid] = true;
+        if ($rv['old_value'] === null || $rv['old_value'] === $rv['new_value']) continue;
+        $cur->execute(array($lid));
+        $cv = $cur->fetchColumn();
+        if ($cv !== $rv['new_value']) continue;     // value changed since — don't clobber a later edit
+        $db->prepare("UPDATE listings SET listing_type_key = ?, updated_at = NOW() WHERE id = ?")
+           ->execute(array($rv['old_value'], $lid));
+        lc_record_revision($db, $lid, 'listing_type_key', $rv['new_value'], $rv['old_value'], 'admin_undo');
+        $n++;
+    }
+    $flash = "Reverted $n listing type(s) to their pre-fix value.";
+}
+
 // ─── preview ────────────────────────────────────────────────────────
 $rows = $db->query($SQL)->fetchAll();
 $cands = array();
@@ -181,6 +206,20 @@ foreach ($rows as $row) {
 </header>
 <main>
 <?php if ($flash): ?><div class="flash"><?= esc($flash) ?></div><?php endif; ?>
+
+<?php
+  $undoable = 0;
+  try { $undoable = (int)$db->query("SELECT COUNT(DISTINCT listing_id) FROM listing_revisions WHERE field='listing_type_key' AND source='admin_fix'")->fetchColumn(); } catch (Exception $e) {}
+?>
+<?php if ($undoable > 0): ?>
+ <div style="background:#fff7e6;border:1px solid #ffd591;padding:10px 14px;border-radius:6px;margin-bottom:14px">
+  This tool previously changed the <strong>type</strong> of <strong><?= $undoable ?></strong> listing(s).
+  <form method="post" style="display:inline;margin-left:8px">
+   <input type="hidden" name="do" value="undo_type">
+   <button onclick="return confirm('Revert all <?= $undoable ?> type changes this tool made back to their original value?')">↶ Undo all type changes</button>
+  </form>
+ </div>
+<?php endif; ?>
 
 <p class="muted">Dry-run preview. <strong><?= count($cands) ?></strong> listing(s) would change —
  <span class="pill"><?= $nType ?></span> type, <span class="pill"><?= $nPrice ?></span> price.
