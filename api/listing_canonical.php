@@ -304,6 +304,105 @@ function lc_to_idr($db, $amount, $currency) {
     return (int)round($amount * (float)$rate);
 }
 
+/** Canonical IDR -> USD via currency_rates. Falls back to a sane default rate
+ *  so the price-floor guard still works if the FX table is empty/unseeded. */
+function lc_idr_to_usd($db, $idr) {
+    $idr = (float)$idr;
+    if ($idr <= 0) return 0.0;
+    $rate = 0.0;
+    try {
+        $st = $db->prepare("SELECT rate FROM currency_rates WHERE from_currency='USD' AND to_currency='IDR' LIMIT 1");
+        $st->execute();
+        $rate = (float)$st->fetchColumn();
+    } catch (Exception $e) { $rate = 0.0; }
+    if ($rate <= 0) $rate = 16000.0;   // conservative fallback (≈ IDR per USD)
+    return $idr / $rate;
+}
+
+/**
+ * Final price-floor guard. A real property's TOTAL price is never below
+ * ~USD $10,000 — if it is, the stored number is almost certainly a unit price:
+ *   • < $10,000  → a per-ARE price stored as the total (rescale: amount × are)
+ *   • < $100     → a per-M²  price stored as the total (rescale: amount × m²)
+ * Land is rescaled by its size; a built property (or land with no trustworthy
+ * size) can't be rescaled, so we null the price + flag it (Price on Request)
+ * rather than show an absurd sub-$10k figure.
+ *
+ * Returns NULL when no change is needed (already ≥ $10k), else
+ *   array(price_idr, price_idr_per_sqm, flagged, basis, note).
+ */
+function lc_enforce_min_price_floor($db, $total_idr, $size_sqm, $is_land = true) {
+    if ($total_idr === null) return null;
+    $total_idr = (int)$total_idr;
+    if ($total_idr <= 0) return null;
+
+    $usd = lc_idr_to_usd($db, $total_idr);
+    if ($usd >= 10000) return null;                       // plausible total — leave it
+
+    $size_ok = lc_trustworthy_size_sqm($size_sqm);
+    if (!$is_land || !$size_ok) {
+        // Can't rescale (built total, or no land size) — don't show a wrong price.
+        return array('price_idr' => null, 'price_idr_per_sqm' => null, 'flagged' => 1,
+                     'basis' => 'floor_unfixable',
+                     'note'  => 'total below $10k and not rescalable — Price on Request');
+    }
+
+    $S = (int)$size_sqm;
+    if ($usd < 100) { $fixed = (int)round($total_idr * $S);            $basis = 'per_sqm'; }
+    else            { $fixed = (int)round($total_idr * ($S / 100.0));  $basis = 'per_are'; }
+
+    // The rescaled total must itself be sane.
+    if ($fixed > LC_TOTAL_HARD_MAX || lc_idr_to_usd($db, $fixed) < 1000) {
+        return array('price_idr' => null, 'price_idr_per_sqm' => null, 'flagged' => 1,
+                     'basis' => 'floor_implausible',
+                     'note'  => 'rescaled price implausible — review');
+    }
+    return array('price_idr' => $fixed,
+                 'price_idr_per_sqm' => (int)round($fixed / $S),
+                 'flagged' => 0, 'basis' => $basis,
+                 'note' => 'rescaled from sub-$10k total (' . $basis . ' × size)');
+}
+
+/**
+ * Decide the listing type from the listing's EXPLICIT category and STRUCTURE —
+ * never from marketing prose. (The old logic substring-matched "villa" over the
+ * title, so "Tanah view villa", "cocok untuk villa", etc. all became villas.)
+ *   • $hint  — the portal's stated category / LLM structured field / stored type
+ *              (Tanah, Rumah, Villa, Apartemen, Ruko…): what the listing declares.
+ *   • building size / bedrooms — a plot has neither; a villa/house has a building.
+ * Rule: with NO building and NO bedrooms it is LAND, whatever the text says. A
+ * built type is only assigned when there is building evidence to back it.
+ */
+function lc_listing_type($hint, $title, $building_sqm = null, $bedrooms = null) {
+    $h = mb_strtolower(trim((string)$hint), 'UTF-8');
+    $has_building = ((int)$building_sqm > 0) || ((int)$bedrooms > 0);
+
+    $hint_type = '';
+    if ($h !== '') {
+        if (strpos($h, 'tanah') !== false || strpos($h, 'land') !== false || strpos($h, 'kavling') !== false || strpos($h, 'kapling') !== false || strpos($h, 'kebun') !== false) {
+            $hint_type = 'land';
+        } elseif (strpos($h, 'villa') !== false || strpos($h, 'vila') !== false) {
+            $hint_type = 'villa';
+        } elseif (strpos($h, 'rumah') !== false || strpos($h, 'house') !== false) {
+            $hint_type = 'house';
+        } elseif (strpos($h, 'apart') !== false) {
+            $hint_type = 'apartment';
+        } elseif (strpos($h, 'ruko') !== false || strpos($h, 'gudang') !== false || strpos($h, 'komersial') !== false || strpos($h, 'commercial') !== false) {
+            $hint_type = 'commercial';
+        }
+    }
+
+    // No building evidence → land, regardless of any "villa" mention in the text.
+    if (!$has_building) return 'land';
+
+    if ($hint_type === 'villa')      return 'villa';
+    if ($hint_type === 'apartment')  return 'apartment';
+    if ($hint_type === 'commercial') return 'commercial';
+    if ($hint_type === 'house')      return 'house';
+    if ($hint_type === 'land')       return 'land';   // explicit land that happens to list a structure
+    return 'house';                                    // built but uncategorised → house
+}
+
 /** A change big enough to be suspicious rather than a normal price move. */
 function lc_is_price_surprise($old_idr, $new_idr) {
     $old = (int)$old_idr; $new = (int)$new_idr;

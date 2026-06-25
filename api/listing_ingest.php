@@ -476,7 +476,7 @@ function handle_post_listing() {
     $desc       = isset($d['description']) ? trim((string)$d['description']) : '';
     $short      = $desc !== '' ? mb_substr($desc, 0, 200) : $title;
     $cert       = ingest_detect_certificate(isset($d['certificate_text']) ? $d['certificate_text'] : ($desc . ' ' . $title));
-    $ltype      = ingest_listing_type(isset($d['listing_type']) ? $d['listing_type'] : '', $title);
+    $ltype      = lc_listing_type(isset($d['listing_type']) ? $d['listing_type'] : '', $title, $build_sqm, $beds);
     $photos     = isset($d['photos']) && is_array($d['photos']) ? array_values(array_filter($d['photos'])) : array();
     $source_url = isset($d['source_url']) ? trim((string)$d['source_url']) : '';
 
@@ -506,6 +506,19 @@ function handle_post_listing() {
             $price['price_idr_per_sqm'] = ($is_land && lc_trustworthy_size_sqm($land_sqm)) ? (int)round($alt['total'] / (int)$land_sqm) : null;
             $price['price_label'] = 'Total';
             $price['flagged'] = 0;
+        }
+    }
+
+    // Final floor: a real property total is never below ~$10k USD. If it is, the
+    // stored figure is almost certainly a per-are (or, under $100, per-m²) price —
+    // rescale land by its size; null+flag anything that can't be rescaled.
+    if ($price['price_idr'] !== null) {
+        $floor = lc_enforce_min_price_floor($db, $price['price_idr'], $land_sqm, $is_land);
+        if ($floor !== null) {
+            $price['price_idr'] = $floor['price_idr'];
+            $price['price_idr_per_sqm'] = $floor['price_idr_per_sqm'];
+            $price['flagged'] = $floor['flagged'];
+            if ($floor['price_idr'] !== null) $price['price_label'] = 'Total';
         }
     }
 
@@ -795,12 +808,5 @@ function ingest_detect_certificate($text) {
     if (strpos($t, 'adat') !== false) return 'adat';
     return null;
 }
-function ingest_listing_type($hint, $title) {
-    $t = mb_strtolower($hint . ' ' . $title, 'UTF-8');
-    if (strpos($t, 'villa') !== false) return 'villa';
-    if (strpos($t, 'rumah') !== false || strpos($t, 'house') !== false) return 'house';
-    if (strpos($t, 'apart') !== false) return 'apartment';
-    if (strpos($t, 'ruko') !== false || strpos($t, 'komersial') !== false || strpos($t, 'commercial') !== false) return 'commercial';
-    if (strpos($t, 'tanah') !== false || strpos($t, 'land') !== false) return 'land';
-    return 'land';
-}
+// Listing type is decided by lc_listing_type() in the shared canonical include
+// (explicit category + building evidence, never marketing prose).

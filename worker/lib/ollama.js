@@ -162,6 +162,12 @@ Rules:
   58100; "LT 6.000 m²" → 6000).
 - location: the property's real Area/Place, ignoring landmark references.
 - certificate: SHM / HGB / AJB / leasehold / empty.
+- listing_type: use the listing's EXPLICIT category (Tanah=land, Rumah=house,
+  Villa=villa, Apartemen=apartment, Ruko/Gudang=commercial). VACANT LAND is
+  "land" even when it mentions a villa, "villa view", or land "for/cocok untuk
+  villa" — never call a plot a villa from such phrases. Only choose villa/house
+  when the listing actually has a building (a building size or bedrooms); with no
+  building and no bedrooms it is "land".
 - Prefer structured hints below when they agree with the text.
 
 HINTS:
