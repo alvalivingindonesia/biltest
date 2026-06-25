@@ -70,6 +70,41 @@ function imageUrls(img) {
     .filter(Boolean);
 }
 
+// Capture the listing's EXPLICIT property category (Tanah/Villa/Rumah/Apartemen/
+// Ruko) from the most reliable STRUCTURED signals — never marketing prose. The
+// server (lc_listing_type) maps the token to a key AND still gates any built type
+// on real building evidence, so an over-eager hint here can't turn a plot into a
+// villa; this mainly confirms land and disambiguates villa-vs-house for builds.
+function extractListingType(pg, product, url) {
+  // 1) Breadcrumb category — the portal's own taxonomy crumb (most reliable).
+  const crumbs = [];
+  const bl = findLd(pg.ld, ['BreadcrumbList'])[0];
+  if (bl && Array.isArray(bl.itemListElement)) {
+    for (const el of bl.itemListElement) {
+      const nm = (el && (el.name || (el.item && el.item.name))) || '';
+      if (nm) crumbs.push(String(nm));
+    }
+  }
+  // 2) JSON-LD @type / category, plus a "Tipe Properti" spec row if present.
+  const ldType = Array.isArray(product['@type']) ? product['@type'].join(' ') : String(product['@type'] || '');
+  const specM = String(pg.text || '').match(/tipe\s+properti[\s:]*([a-z]+)/i);
+  const hay = [crumbs.join(' '), product.category || '', product.additionalType || '', ldType, specM ? specM[1] : '', url]
+    .join(' ').toLowerCase();
+
+  // 3) Map explicit category tokens. Land cues first; built types need the word.
+  if (/\b(tanah|kavling|kapling|kebun|lahan|land|landlot)\b/.test(hay)) return 'tanah';
+  if (/\b(vila|villa)\b/.test(hay)) return 'villa';
+  if (/\b(apartemen|apartment|kondominium|condo)\b/.test(hay)) return 'apartment';
+  if (/\b(ruko|gudang|kantor|komersial|commercial|office|warehouse|shop)\b/.test(hay)) return 'commercial';
+  if (/\b(rumah|house|singlefamily|townhouse)\b/.test(hay)) return 'rumah';
+
+  // 4) rumah123 id-prefix fallback: las… = land, hos… = house/property
+  //    (the id sits after a "/" or "-": .../las8729298/ or ...-hos12345/).
+  if (/\blas\d{5,}/i.test(url)) return 'tanah';
+  if (/\bhos\d{5,}/i.test(url)) return 'rumah';
+  return '';
+}
+
 function phoneFromWa(href) {
   const m = (href || '').match(/(?:phone=|wa\.me\/)(\+?\d{6,})/);
   return m ? m[1] : '';
@@ -146,7 +181,7 @@ const lamudi = {
       kecamatan: addr.addressLocality || '',
       desa: addr.addressRegion || '',
       district: [addr.addressLocality, addr.addressRegion].filter(Boolean).join(', '),
-      listing_type: '',
+      listing_type: extractListingType(pg, product, url),
       photos: imageUrls(product.image).concat(pg.ogImages).slice(0, 5),
       agent: {
         name: product.broker?.name || '',
@@ -196,7 +231,7 @@ const rumah123 = {
       kecamatan: addr.addressLocality || '',
       desa: addr.addressRegion || '',
       district: [addr.streetAddress, addr.addressLocality].filter(Boolean).join(', '),
-      listing_type: '',
+      listing_type: extractListingType(pg, product, url),
       photos: imageUrls(product.image).slice(0, 5),
       agent: {
         name: product.broker?.name || product.seller?.name || '',
@@ -246,7 +281,7 @@ const dotproperty = {
       kecamatan: addr.addressLocality || '',
       desa: addr.addressRegion || '',
       district: [addr.addressLocality, addr.addressRegion].filter(Boolean).join(', '),
-      listing_type: '',
+      listing_type: extractListingType(pg, product, url),
       photos: imageUrls(product.image).slice(0, 5),
       agent: {
         name: product.broker?.name || '',
@@ -300,7 +335,7 @@ const olx = {
       kecamatan: addr.addressLocality || '',
       desa: addr.addressRegion || '',
       district: [addr.addressLocality, addr.addressRegion].filter(Boolean).join(', '),
-      listing_type: '',
+      listing_type: extractListingType(pg, product, url),
       photos: imageUrls(product.image).concat(pg.ogImages).slice(0, 5),
       agent: {
         name: product.seller?.name || product.broker?.name || '',

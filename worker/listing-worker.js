@@ -113,6 +113,9 @@ async function recheck(ctx, rechecks) {
                   facts.llm_area_key = ex.llm_area_key;
                   facts.llm_place = ex.llm_place;
                   if (ex.tags && ex.tags.length) facts.tags = ex.tags;
+                  // Explicit category from the page wins; fall back to the LLM's
+                  // (prompt-disciplined) type only when no category was found.
+                  if (!facts.listing_type && ex.listing_type) facts.listing_type = ex.listing_type;
                   if (ex.certificate_text) facts.certificate_text = ex.certificate_text;
                   facts.extraction_method = 'llm';
                   facts.extraction_confidence = ex.extraction_confidence;
