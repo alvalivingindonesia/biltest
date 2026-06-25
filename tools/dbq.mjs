@@ -4,7 +4,15 @@
  *
  * Sends one SQL statement to /api/db_console.php over HTTPS and prints the JSON
  * result. The endpoint enforces auth, IP allowlist, read-only-by-default and
- * audit logging — this is just an ergonomic wrapper (Node >=18, global fetch).
+ * audit logging — this is just an ergonomic wrapper.
+ *
+ * TRANSPORT: shells out to `curl` rather than Node's fetch. On this Windows box
+ * the HostPapa cert chain is missing its intermediate, which Node/OpenSSL won't
+ * auto-fetch (UNABLE_TO_VERIFY_LEAF_SIGNATURE), and the revocation server is
+ * unreachable (CRYPT_E_NO_REVOCATION_CHECK). curl validates the chain via the
+ * Windows cert store (which fetches the intermediate) and we only soft-fail the
+ * revocation check — TLS chain + leaf verification stay ON. The auth key is sent
+ * in the JSON body (an endpoint-supported fallback), never on the command line.
  *
  * KEY RESOLUTION (first that exists):
  *   --key <k>  |  $SQL_CONSOLE_KEY  |  config/sql_console.key (gitignored)
@@ -27,6 +35,7 @@
  *   --key <k>         override key
  */
 import { readFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 
 const DEFAULT_ENDPOINT = 'https://biltest.roving-i.com.au/api/db_console.php';
 
@@ -57,6 +66,31 @@ function resolveKey(o) {
   catch { return ''; }
 }
 
+// POST a JSON body to `url` via curl. Returns { status, bodyText }.
+function curlPost(url, bodyObj) {
+  return new Promise((resolve, reject) => {
+    const args = ['-sS', '-m', '30'];
+    if (process.platform === 'win32') args.push('--ssl-revoke-best-effort'); // schannel can't reach OCSP/CRL here
+    args.push('-X', 'POST', '-H', 'Content-Type: application/json',
+              '--data-binary', '@-', '-w', '\n__HTTP_STATUS__%{http_code}', url);
+    const cp = spawn('curl', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    let out = '', err = '';
+    cp.stdout.on('data', d => (out += d));
+    cp.stderr.on('data', d => (err += d));
+    cp.on('error', e => reject(new Error(e.code === 'ENOENT' ? 'curl not found on PATH' : e.message)));
+    cp.on('close', code => {
+      const marker = '\n__HTTP_STATUS__';
+      const idx = out.lastIndexOf(marker);
+      let status = 0, bodyText = out;
+      if (idx !== -1) { status = parseInt(out.slice(idx + marker.length), 10) || 0; bodyText = out.slice(0, idx); }
+      if (code !== 0 && !bodyText) return reject(new Error(`curl exit ${code}: ${err.trim() || 'request failed'}`));
+      resolve({ status, bodyText });
+    });
+    cp.stdin.write(JSON.stringify(bodyObj));
+    cp.stdin.end();
+  });
+}
+
 const o = parseArgs(process.argv.slice(2));
 const endpoint = o.endpoint || process.env.DBQ_ENDPOINT || DEFAULT_ENDPOINT;
 const key = resolveKey(o);
@@ -71,25 +105,24 @@ if (!o.ping && !o.sql) {
 }
 
 const url = o.ping ? `${endpoint}?action=ping` : `${endpoint}?action=query`;
-const body = o.ping ? {} : {
-  sql: o.sql,
-  params: o.params,
-  allow_write: o.write,
-  dry_run: o.dryRun,
-  ...(o.maxRows ? { max_rows: o.maxRows } : {}),
-};
+const body = o.ping
+  ? { console_key: key }
+  : {
+      sql: o.sql,
+      params: o.params,
+      allow_write: o.write,
+      dry_run: o.dryRun,
+      console_key: key,
+      ...(o.maxRows ? { max_rows: o.maxRows } : {}),
+    };
 
 try {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Console-Key': key },
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
+  const { status, bodyText } = await curlPost(url, body);
   let json;
-  try { json = JSON.parse(text); } catch { json = { ok: false, error: 'non_json_response', detail: text.slice(0, 500) }; }
+  try { json = JSON.parse(bodyText); }
+  catch { json = { ok: false, error: 'non_json_response', http: status, detail: bodyText.slice(0, 500) }; }
   console.log(JSON.stringify(json, null, 2));
-  process.exit(res.ok && json.ok ? 0 : 1);
+  process.exit(json.ok ? 0 : 1);
 } catch (e) {
   console.error(JSON.stringify({ ok: false, error: 'request_failed', detail: String(e.message || e) }, null, 2));
   process.exit(1);
