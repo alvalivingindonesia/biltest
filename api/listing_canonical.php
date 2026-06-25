@@ -621,6 +621,11 @@ function lc_resolve_location($db, array $candidates) {
     foreach ($candidates as $c) {
         $n = lc_normalize_area_text($c);
         if ($n === '') continue;
+        // "Praya Barat / Barat Daya / Timur / Tengah" are south-coast kecamatan,
+        // NOT Praya town — strip the phrase so a bare "praya" substring can't drag
+        // coastal listings (Selong Belanak, Mawun, Torok…) into the Praya area.
+        $n = trim(preg_replace('/\bpraya\s+(barat\s+daya|barat|timur|tengah)\b/u', ' ', $n));
+        if ($n === '') continue;
         $exact->execute(array($n));
         $row = $exact->fetch();
         if ($row && $row['area_key']) return array('area_key' => $row['area_key'], 'place_key' => $row['place_key'] ?: null);

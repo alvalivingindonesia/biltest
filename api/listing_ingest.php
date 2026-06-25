@@ -537,12 +537,15 @@ function handle_post_listing() {
         $resolved_area = $llm_area;
     }
     if (!$resolved_area) {
+        // Order by SPECIFICITY: the real place is usually the LLM place or the
+        // title; broad admin districts come LAST — a kecamatan like "Praya Barat
+        // Daya" must never outrank "Torok"/"Selong Belanak" named in the title.
         $cands = array();
         if ($llm_place !== '') $cands[] = $llm_place;
-        foreach (array('kecamatan','desa','district','sub_district','address','location_detail') as $f) {
+        $cands[] = $title;
+        foreach (array('desa','sub_district','kecamatan','district','address','location_detail') as $f) {
             if (!empty($d[$f])) $cands[] = (string)$d[$f];
         }
-        $cands[] = $title;
         $r = lc_resolve_location($db, $cands);
         $resolved_area = $r['area_key']; $resolved_place = $r['place_key'];
     }
