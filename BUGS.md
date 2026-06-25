@@ -128,3 +128,13 @@ outranks a display-only one).
 - **Repro / example:** `GET /api/listings` → `data[0].image.url` was `{"@type":"ImageObject","contentUrl":"https://picture.rumah123.com/…"}` rather than the URL string.
 - **Suggested fix:** Add `_photo_url_str()` that coerces a string OR an ImageObject (`contentUrl`/`url`/`@id`) to a URL; use it in the list image-derivation and as a `photo_urls` fallback for the detail gallery (non-destructive, no DB rewrite). Normalize `product.image` to plain URLs in the extractor (`imageUrls`) so future crawls store clean data.
 - **Resolution:** 2026-06-13 — `_photo_url_str` + tolerant list/detail derivation in `api/index.php`; `imageUrls()` normalizer applied to all four site extractors; verified live API now returns `image.url` as a string and the URLs load — commit c6a2888.
+
+### BUG-010 — Coastal places dragged into "Praya" by the kecamatan
+- **Status:** fixed
+- **Severity:** high (data-integrity — south-coast listings showed the wrong area, undermining the granular-location selling point)
+- **Area:** `api/listing_ingest.php` (location fallback order); `api/listing_canonical.php` `lc_resolve_location`
+- **Reported:** 2026-06-25
+- **Description:** Listings for Torok, Tampah, Lancing, Pengantap, Selong Belanak etc. resolved to area `praya`. Two compounding resolver bugs: (1) the ingest fallback matched candidates in the order kecamatan→…→title, so the broad admin district `location_detail` ("Praya Barat Daya, Lombok Tengah") was tried BEFORE the title that names the real place; (2) the only `praya` alias substring-matched `\bpraya\b` inside "praya barat"/"praya barat daya" — which are the south-COAST kecamatan, not Praya town. The place aliases (`torok aik belek → selong_belanak`, `pengantap → sekotong`, …) were already correct; this was purely order + greedy matching.
+- **Repro / example:** Listing #1010 "Di Jual Tanah Di Torok Aik Belek Beach Front", `location_detail`="Praya Barat Daya, Lombok Tengah" → `area_key`='praya'.
+- **Suggested fix:** Reorder the ingest fallback so `llm_place`+`title` are tried before admin districts; strip "praya (barat daya|barat|timur|tengah)" in `lc_resolve_location` before alias matching so a bare "praya" can't match the coastal kecamatan.
+- **Resolution:** 2026-06-25 — both fixes in commit e8fa91d (verified: a Torok title now resolves to selong_belanak/torok); 10 already-misclassified active rows re-pointed to selong_belanak / sekotong (+place_key) via the SQL console. Future crawls + worker re-checks self-heal the rest.
