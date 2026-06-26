@@ -43,6 +43,20 @@ live DB  (providers + provider_categories + provider_tags), via api/db_console.p
     also updates its rating/review count.
 - **`tools/dir_fix_areas.mjs`** — corrects any provider whose `area_key` contradicts
   its coordinates; reports (does not touch) off-island providers for review.
+- **`tools/dir_fix_urls.mjs`** — repairs `google_maps_url` to the canonical listing.
+
+### Maps links — must open the listing, never a bare pin
+`google_maps_url` MUST open the business's Google Maps **place page** (reviews, photos,
+address) — never a `/maps/search/?query=lat,lng` coordinate (that drops a useless pin).
+The canonical link is `https://maps.google.com/?cid=<cid>`, where the cid is the place's
+feature id: each result `a.hfpxzc` href contains `!1s0x..:0x<hex>`; `cid = BigInt('0x'+hex)`.
+`dir_pack` derives this from the harvested href automatically (so the harvester must keep
+the href). To repair existing rows, re-run the searches capturing `[lat,lng,ftid]` (return
+the **ftid hex** not the decimal cid — the browser tool redacts long digit strings as
+"base64"), drop them in `directory_seed/urls/`, then `dir_fix_urls <urls_dir> --write
+--fallback`. It matches by exact coordinates (immune to name edits) and writes cid links;
+`--fallback` gives any unmatched row a `…/search/<name>/@lat,lng,17z` link (resolves to
+the listing for uniquely-named shops) instead of a bare pin.
 
 Raw harvest = the in-page extractor output: `{n,r,v,lat,lng,t,ph}` (name, rating,
 reviews, lat, lng, gmaps type, phone). The extractor scrolls the `[role=feed]` list,

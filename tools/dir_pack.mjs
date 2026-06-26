@@ -54,11 +54,20 @@ for (const f of readdirSync(rawDir)) {
       if (sub.startsWith('_')) continue;
       if (nameL.includes(sub.toLowerCase())) cats = ov.cats.slice();
     }
+    // Canonical Maps link: prefer the place's cid (from the harvested href's
+    // feature id) -> opens the real listing (reviews/photos). Fall back to a
+    // name+coords search (resolves for uniquely-named shops), never a bare pin.
+    let gmapsUrl = '';
+    const href = r.href || r.h || '';
+    const fm = href.match(/!1s0x[0-9a-f]+:0x([0-9a-f]+)/i);
+    if (fm) { try { gmapsUrl = 'https://maps.google.com/?cid=' + BigInt('0x' + fm[1]).toString(); } catch {} }
+    if (!gmapsUrl && r.lat != null && r.n) {
+      gmapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(r.n)}/@${r.lat},${r.lng},17z`;
+    }
     out.push({
       name: r.n, gmaps_type: r.t || '', address: r.a || '', phone: r.ph || '',
       website: r.w || '', lat: r.lat, lng: r.lng, rating: r.r, reviews: r.v,
-      group_key: spec.group, category_keys: cats,
-      gmaps_url: r.lat != null ? `https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lng}` : '',
+      group_key: spec.group, category_keys: cats, gmaps_url: gmapsUrl,
     });
   }
 }
