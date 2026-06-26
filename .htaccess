@@ -19,7 +19,7 @@ Options -Indexes
 # (.git history, raw SQL migrations, internal docs, worker/agent source).
 # These dirs may still exist on disk from earlier deploys; this makes them
 # unreachable over HTTP. The .cpanel.yml allow-list stops re-publishing them.
-RedirectMatch 404 ^/(\.git|\.github|migrations|docs|worker|agent|database)(/|$)
+RedirectMatch 404 ^/(\.git|\.github|migrations|docs|worker|agent|database|tools|directory_seed)(/|$)
 
 # --- Block sensitive file types by extension (site-wide) -------------------
 <FilesMatch "\.(md|sql|ya?ml|sh|bat|log|env|sample|lock|ini|toml|map|dist|bak|gitignore|gitattributes|modelfile)$">

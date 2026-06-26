@@ -1,0 +1,47 @@
+{
+  "_overrides": {
+    "keramik": {"cats":["tiles_stone_supplier"]},
+    "granit": {"cats":["tiles_stone_supplier"]},
+    "marmer": {"cats":["tiles_stone_supplier"]},
+    "stone mosaic": {"cats":["tiles_stone_supplier"]},
+    "mitra10": {"cats":["building_materials_store","tiles_stone_supplier","sanitary_supplier","paint_supplier","lighting_supplier"]},
+    "kokoh mandiri": {"cats":["building_materials_store","sanitary_supplier"]}
+  },
+  "tiles": {"group":"suppliers_materials","cats":["building_materials_store"]},
+  "sanitary": {"group":"suppliers_materials","cats":["sanitary_supplier"]},
+  "lighting": {"group":"suppliers_materials","cats":["lighting_supplier"]},
+  "paint": {"group":"suppliers_materials","cats":["paint_supplier"]},
+  "steel": {"group":"suppliers_materials","cats":["steel_rebar_supplier"]},
+  "readymix": {"group":"suppliers_materials","cats":["readymix_supplier"]},
+  "brick": {"group":"suppliers_materials","cats":["brick_block_supplier"]},
+  "stone": {"group":"suppliers_materials","cats":["tiles_stone_supplier"]},
+  "timber": {"group":"suppliers_materials","cats":["timber_workshop"]},
+  "eaststores": {"group":"suppliers_materials","cats":["building_materials_store"]},
+  "sand": {"group":"suppliers_materials","cats":["sand_supplier","aggregate_supplier","gravel_supplier"]},
+  "earthfill": {"group":"suppliers_materials","cats":["earth_fill_supplier"]},
+  "topsoil": {"group":"suppliers_materials","cats":["topsoil_supplier"]},
+
+  "waterproofing": {"group":"specialist_contractors","cats":["waterproofing"]},
+  "solar": {"group":"specialist_contractors","cats":["solar_installer"]},
+  "pool": {"group":"specialist_contractors","cats":["pool_contractor"]},
+  "hvac": {"group":"specialist_contractors","cats":["hvac_contractor"]},
+  "welldrill": {"group":"specialist_contractors","cats":["well_drilling"]},
+  "rental": {"group":"specialist_contractors","cats":["equipment_rental"]},
+  "glazing": {"group":"specialist_contractors","cats":["glazing_contractor"]},
+
+  "engcons": {"group":"professional_services","cats":["structural_engineer","civil_engineer"]},
+  "mep": {"group":"professional_services","cats":["mep_engineer"]},
+  "qs": {"group":"professional_services","cats":["quantity_surveyor"]},
+  "pm": {"group":"professional_services","cats":["project_manager"]},
+  "surveyor": {"group":"professional_services","cats":["land_surveyor"]},
+
+  "tiler": {"group":"builders_trades","cats":["tiler"]},
+  "plumbing": {"group":"builders_trades","cats":["plumber"]},
+  "bajaringan": {"group":"builders_trades","cats":["roofer"]},
+  "renovasi": {"group":"builders_trades","cats":["general_contractor","mason","tiler","plumber","painter"]},
+  "mason": {"group":"builders_trades","cats":["mason"]},
+  "furniture": {"group":"builders_trades","cats":["furniture_joinery"]},
+  "mebel": {"group":"builders_trades","cats":["furniture_joinery"]},
+  "roofer": {"group":"builders_trades","cats":["roofer"]},
+  "painter": {"group":"builders_trades","cats":["painter"]}
+}
