@@ -26,10 +26,23 @@ const overrides = manifest._overrides || {};
 const out = [];
 let files = 0, rowsIn = 0;
 
+// Match a raw filename to a manifest entry: exact key, else the LONGEST manifest
+// key K such that the filename is "K_<something>" (e.g. paint_selong -> paint,
+// painter_kuta -> painter). Lets one category be harvested at many town centres.
+const manifestKeys = Object.keys(manifest).filter(k => !k.startsWith('_'));
+function resolveSpec(name) {
+  if (manifest[name]) return manifest[name];
+  let best = null;
+  for (const k of manifestKeys) {
+    if (name.startsWith(k + '_') && (!best || k.length > best.length)) best = k;
+  }
+  return best ? manifest[best] : null;
+}
+
 for (const f of readdirSync(rawDir)) {
   if (!f.endsWith('.json')) continue;
   const key = basename(f, '.json');
-  const spec = manifest[key];
+  const spec = resolveSpec(key);
   if (!spec) { console.error(`! no manifest entry for ${key} — skipped`); continue; }
   files++;
   const rows = JSON.parse(readFileSync(join(rawDir, f), 'utf8'));

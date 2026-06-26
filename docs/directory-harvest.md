@@ -46,8 +46,36 @@ live DB  (providers + provider_categories + provider_tags), via api/db_console.p
 
 Raw harvest = the in-page extractor output: `{n,r,v,lat,lng,t,ph}` (name, rating,
 reviews, lat, lng, gmaps type, phone). The extractor scrolls the `[role=feed]` list,
-then reads each `a.hfpxzc` card. Search at zoom ~10–11 centred on Lombok
-(`/@-8.62,116.16,10.5z`) — one wide search reaches the whole island.
+then reads each `a.hfpxzc` card.
+
+**Pagination — scroll to the real end.** Google Maps lazy-loads ~8 results per page
+as you scroll. The extractor must keep scrolling the last card into view until the
+**"You've reached the end of the list"** marker appears (or growth stalls for ~8s on
+slow loads) — NOT stop after the first page. Stopping early silently drops most of a
+category (a search that shows 7 often has 20+).
+
+**Zoom — one island search is NOT enough.** At island zoom (~10z) Maps only returns
+the most prominent ~120 businesses for that viewport; local shops in Selong, Praya,
+Kuta, Tanjung etc. never appear until you zoom into that town. So every category must
+be harvested at **per-town centres**, not just island-wide. Coordinates then place
+each result and the pipeline dedupes the overlap. Town centres used:
+
+| Centre | URL fragment |
+|---|---|
+| Mataram / Cakra / Ampenan | `/@-8.59,116.13,13z` |
+| Gunung Sari / Senggigi (W coast) | `/@-8.50,116.09,12.5z` |
+| Gerung / Lembar (SW) | `/@-8.70,116.11,13z` |
+| Praya / airport (Central) | `/@-8.70,116.27,12.5z` |
+| Kuta / Mandalika (South) | `/@-8.87,116.28,12.5z` |
+| Selong / Masbagik / Aikmel (East) | `/@-8.62,116.50,12.5z` |
+| Tanjung / Pemenang / Bayan (North) | `/@-8.37,116.13,12.5z` |
+
+Raw files are named `<manifestKey>_<centre>.json` (e.g. `bangunan_selong.json`,
+`paint_praya.json`); `dir_pack` resolves the category by the longest matching key
+prefix. NB: dedicated trade/service categories (sumur bor, AC, waterproofing, solar)
+stay Bali-dominated even when you zoom into a Lombok town — the coordinate gate filters
+them; the per-town zoom mainly multiplies the *supplier/shop* counts (toko bangunan,
+mebel, cat, besi, listrik, keramik).
 
 `directory_seed/manifest.json` maps each raw file to its group + category_keys, with
 `_overrides` for name-substring multi-category (e.g. `mitra10`). It is the record of

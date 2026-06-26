@@ -8,6 +8,7 @@
     "kokoh mandiri": {"cats":["building_materials_store","sanitary_supplier"]}
   },
   "tiles": {"group":"suppliers_materials","cats":["building_materials_store"]},
+  "bangunan": {"group":"suppliers_materials","cats":["building_materials_store"]},
   "sanitary": {"group":"suppliers_materials","cats":["sanitary_supplier"]},
   "lighting": {"group":"suppliers_materials","cats":["lighting_supplier"]},
   "paint": {"group":"suppliers_materials","cats":["paint_supplier"]},
@@ -39,6 +40,7 @@
   "plumbing": {"group":"builders_trades","cats":["plumber"]},
   "bajaringan": {"group":"builders_trades","cats":["roofer"]},
   "renovasi": {"group":"builders_trades","cats":["general_contractor","mason","tiler","plumber","painter"]},
+  "kontraktor": {"group":"builders_trades","cats":["general_contractor"]},
   "mason": {"group":"builders_trades","cats":["mason"]},
   "furniture": {"group":"builders_trades","cats":["furniture_joinery"]},
   "mebel": {"group":"builders_trades","cats":["furniture_joinery"]},
