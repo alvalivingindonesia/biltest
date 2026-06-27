@@ -181,3 +181,30 @@ existing i18n/per-domain-PHP precedent. Reuse the existing `.wizard` / `.rdtl-*`
 Composer/`vendor/`. Catalog/prices/templates seed from `migrations/2026_06_16_drab_seed.sql`
 (derived from the 3 Villa BOQs + `Lombok_RAB_Database_v2` + other-province refs); schema in
 `migrations/2026_06_16_drab_generator.sql`. Glossary in CONTEXT.md.
+
+## Zoning & Land Check (ADR 0013)
+A zoning/land-regulation tool for foreign HNW investors — instant plain-English
+"is this Lombok plot buildable?" clarity (free) plus a paid, human-verified **Site
+Suitability Report**. Isolated **`zoning_*`** schema; dedicated **`zoning.js`** /
+**`zoning.css`** (own `<script>`/`<link>`, like `drab.js`) + **`api/zoning_api.php`**;
+route `#zoning`. **Data is ingest-once, served by us** (point-in-polygon against our
+DB) — NOT a live proxy: ATR/BPN is the only origin but reaches us via open mirrors
+(**BIG Satu Peta** `kspservices.big.go.id/satupeta/rest/services` folder
+`PERENCANAANRUANG`, kabupaten **SIMTARU**, perda annexes incl. **Perbup Lombok Tengah
+105/2021** for RDTR Mandalika); GISTARU's own REST is gated. Three layers: **Zoning**
+(ingested *Land-Use Class* → **Buildability Status** traffic light; *Zona Hijau* =
+"green zone" is **Prohibited → RED**, never colour-only), **Plot Profile** (parcel/cert
+facts via BHUMI's documented **WMS**, on-demand per plot + cache), and a notaris-brokered
+**Verified Certificate Check**. **HARD BOUNDARY: owner names are out, permanently** —
+confidential personal data (PDP Law UU 27/2022); the notaris check is the only
+owner-grade route. Trust model reuses DRAB's **Indicative/Confirmed** + `source`/`date`;
+free never says "buildable/legal" as a guarantee (decision-support, not legal advice).
+Its own **Leaflet** map (Esri satellite, OSM/Photon geocoder, keyless-first, pin-drop +
+paste-coords) — **separate from the listings SVG map (ADR 0005)**, which stays
+listings-only. **No payment gateway** yet (subs are admin-granted): free = instant basic
+per-plot info + watermarked preview; paid = detailed verified report via WhatsApp +
+generated invoice, with a gateway-ready status lifecycle. Cert upload is
+**attachment-only, no OCR**, hardened + PDP-aware. Report = one engine, free/premium
+views, **printable-HTML** (no PDF lib). KKPR/OSS = a permitting workflow, not a dataset
+(checklist step + concierge upsell). Gate via `feature_access`, never hardcoded.
+Glossary in CONTEXT.md.

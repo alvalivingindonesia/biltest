@@ -1194,6 +1194,8 @@ function toggleSidebarSub(e,id){
     <h2>RAB Module</h2>
     <a href="rab_tool.php">RAB Projects & Calculator</a>
     <a href="rab.php">RAB Admin (Materials etc.)</a>
+    <h2>Zoning &amp; Land Check</h2>
+    <a href="zoning.php">Report Queue &amp; Coverage</a>
     <h2>Subscriptions</h2>
     <a href="?s=subscriptions" class="<?= $section==='subscriptions'?'active':'' ?>">User Subscriptions</a>
     <a href="?s=feature_access" class="<?= $section==='feature_access'?'active':'' ?>">Feature Access</a>

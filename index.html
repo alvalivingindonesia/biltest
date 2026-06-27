@@ -15,6 +15,10 @@
   <link rel="stylesheet" href="./base.css">
   <link rel="stylesheet" href="./style.css">
   <link rel="stylesheet" href="./drab.css?v=20260617"><!-- Detailed RAB Generator (ADR 0012). Bump ?v= on each drab.css deploy to bust cache. -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
+        integrity="sha512-h9FcoyWjHcOcmEVkxOfTLnmZFWIH0iZhZT1H2TbOq55xssQGEJHEaIm+PgoUaZbRvQTNTluNOEfb1ZRy6D3BOw=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"><!-- Leaflet (Zoning & Land Check, ADR 0013) -->
+  <link rel="stylesheet" href="./zoning.css?v=20260628"><!-- Zoning & Land Check (ADR 0013). Bump ?v= on each zoning.css deploy. -->
 
   <!-- Open Graph -->
   <meta property="og:title" content="Build in Lombok">
@@ -92,6 +96,10 @@
             <svg class="nav-dd-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
           <ul class="nav-dropdown-menu" role="menu">
+            <li><a href="#zoning" onclick="navigate('zoning');return false;" role="menuitem">
+              <svg class="nav-dd-mini-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              <span class="nav-dd-label" data-i18n="home.tool_zoning_title">Zoning &amp; Land Check</span>
+            </a></li>
             <li><a href="#tax-house" onclick="navigate('tax-house');return false;" role="menuitem">
               <svg class="nav-dd-mini-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
               <span class="nav-dd-label" data-i18n="home.tool_txn_title">Property Transaction Tax</span>
@@ -222,6 +230,7 @@
         <svg class="mobile-nav-group-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <div class="mobile-nav-group-items">
+        <a href="#zoning" onclick="navigate('zoning');return false;" data-i18n="home.tool_zoning_title">Zoning &amp; Land Check</a>
         <a href="#tax-house" onclick="navigate('tax-house');return false;" data-i18n="home.tool_txn_title">Property Transaction Tax</a>
         <a href="#tax-land" onclick="navigate('tax-land');return false;" data-i18n="home.tool_land_title">Land Acquisition Tax</a>
         <a href="#rab-calculator" onclick="navigate('rab-calculator');return false;" data-i18n="home.tool_est_title">Construction Cost Estimator</a>
@@ -291,6 +300,7 @@
             <li><a href="#guide/how-to-build-in-lombok" onclick="navigate('guide/how-to-build-in-lombok');return false;" data-i18n="footer.link.how_to_build">How to Build</a></li>
             <li><a href="#guide/understanding-land-titles-lombok" onclick="navigate('guide/understanding-land-titles-lombok');return false;" data-i18n="footer.link.land_titles">Land Titles</a></li>
             <li><a href="#guide/lombok-investment-yields-guide" onclick="navigate('guide/lombok-investment-yields-guide');return false;" data-i18n="footer.link.investment_yields">Investment Yields</a></li>
+            <li><a href="#zoning" onclick="navigate('zoning');return false;" data-i18n="footer.link.zoning">Zoning &amp; Land Check</a></li>
             <li><a href="#rab-calculator" onclick="navigate('rab-calculator');return false;" data-i18n="footer.link.rab_calculator">RAB Cost Calculator</a></li>
             <li><a href="#tax-land" onclick="navigate('tax-land');return false;" data-i18n="footer.link.tax_calculator">Property Tax Calculator</a></li>
             <li><a href="#rab-estimates" onclick="navigate('rab-estimates');return false;" data-i18n="footer.link.my_saved_estimates">My Saved Estimates</a></li>
@@ -373,8 +383,12 @@
           crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
   <!-- ===================== APP SCRIPT ===================== -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"
+          integrity="sha512-puJW3E/qXDqYp9IfhAI54BJEaWIfloJ7JWs7OeD5i6ruC9JZL1gERT1wjtwXFlh7CjE7ZJ+/vcRZRkIYIb6p4g=="
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script><!-- Leaflet (Zoning & Land Check, ADR 0013) -->
   <script src="./app.js"></script>
   <script src="./drab.js?v=20260617"></script><!-- Detailed RAB Generator (ADR 0012). Bump ?v= on each drab.js deploy to bust cache. -->
+  <script src="./zoning.js?v=20260628"></script><!-- Zoning & Land Check (ADR 0013). Bump ?v= on each zoning.js deploy. -->
 
   <!-- ===================== NAV SCROLL BEHAVIOR ===================== -->
   <script>

@@ -722,6 +722,10 @@ async function router() {
     if (hrefPage === 'rab-calculator' && (page === 'rab-calculator' || page === 'rab-estimates' || page === 'rab-result' || page === 'rab-projects' || page === 'rab-project' || page === 'rab-editor' || page === 'drab' || page === 'drab-wizard' || page === 'drab-dashboard' || page === 'drab-dev' || page === 'drab-editor' || page === 'drab-catalog')) {
       a.classList.add('active');
     }
+    // Zoning & Land Check
+    if (hrefPage === 'zoning' && (page === 'zoning' || page === 'zoning-report')) {
+      a.classList.add('active');
+    }
     // About
     if (hrefPage === 'about' && page === 'about') {
       a.classList.add('active');
@@ -796,6 +800,8 @@ async function router() {
     case 'drab-dev': await renderDrabDevelopment(view, segments[1]); break;
     case 'drab-editor': await renderDrabEditor(view, segments[1]); break;
     case 'drab-catalog': await renderDrabCatalog(view); break;
+    case 'zoning': await renderZoningCheck(view, params); break;
+    case 'zoning-report': await renderZoningReport(view, params); break;
     case 'get-quotes': await renderGetQuotes(view, params); break;
     case 'quotes': await renderQuotesDashboard(view); break;
     case 'quote': await renderQuoteDetail(view, segments[1]); break;
