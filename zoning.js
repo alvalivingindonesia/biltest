@@ -182,13 +182,24 @@ function zInitMap(meta){
  * size, which mis-projects the vector overlay. Staggered invalidateSize + reload
  * passes guarantee the overlay lands aligned (the ResizeObserver covers later). */
 function zSettleMap(){
-  var pass = function(){
-    if (!ZState.map) return;
-    try { ZState.map.invalidateSize(); if (ZState.overlayOn) zLoadOverlay(); } catch(e){}
-  };
-  setTimeout(pass, 150);
-  setTimeout(pass, 700);
-  setTimeout(pass, 1600);
+  // Watchdog: the container reaches its final size at an unpredictable moment
+  // after load (viewport/infobar/font settle), and Leaflet caches the earlier
+  // size, mis-projecting the overlay. Poll briefly and, whenever Leaflet's cached
+  // size disagrees with the real container size, invalidateSize + reload aligned.
+  try { ZState.map.invalidateSize(); if (ZState.overlayOn) zLoadOverlay(); } catch(e){}
+  var tries = 0;
+  var iv = setInterval(function(){
+    tries++;
+    if (!ZState.map) { clearInterval(iv); return; }
+    var el = document.getElementById('zlc-map');
+    if (!el) { clearInterval(iv); return; }
+    if (ZState.map.getSize().y !== el.clientHeight || ZState.map.getSize().x !== el.clientWidth) {
+      try { ZState.map.invalidateSize(); if (ZState.overlayOn) zLoadOverlay(); } catch(e){}
+    } else if (ZState.overlayOn && (!ZState.overlay || !ZState.overlay.getLayers().length)) {
+      try { zLoadOverlay(); } catch(e){}
+    }
+    if (tries >= 28) clearInterval(iv); // ~7s safety window
+  }, 250);
 }
 
 /* Fetch + render the colour overlay for the current map view. */
