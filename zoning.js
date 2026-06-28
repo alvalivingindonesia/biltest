@@ -221,6 +221,10 @@ function zLoadOverlay(){
       }
     }).addTo(ZState.map);
     if (ZState.marker && ZState.marker.setZIndexOffset) ZState.marker.setZIndexOffset(1000);
+    // Nudge a repaint so the freshly-added vector paths composite immediately.
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(function(){
+      try { if (ZState.overlay) ZState.overlay.eachLayer(function(l){ if (l.redraw) l.redraw(); }); } catch(e){}
+    });
   });
 }
 
