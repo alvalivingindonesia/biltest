@@ -136,15 +136,14 @@ function zDeferMapInit(meta, params, tries){
     zInitMap(meta);
     zWireInputs(meta);
     zBuildLegend();
-    if (ZState.map) setTimeout(function(){ try { ZState.map.invalidateSize(); if (ZState.overlayOn) zLoadOverlay(); } catch(e){} }, 150);
+    zSettleMap();
     if (params && params.lat && params.lng) {
       zSelectPoint(parseFloat(params.lat), parseFloat(params.lng), params.label||null, true);
     }
     return;
   }
   if (tries > 60) { // ~1s elapsed — init anyway so the page is not dead
-    zInitMap(meta); zWireInputs(meta); zBuildLegend();
-    if (ZState.map) setTimeout(function(){ try { ZState.map.invalidateSize(); if (ZState.overlayOn) zLoadOverlay(); } catch(e){} }, 150);
+    zInitMap(meta); zWireInputs(meta); zBuildLegend(); zSettleMap();
     return;
   }
   requestAnimationFrame(function(){ zDeferMapInit(meta, params, tries + 1); });
@@ -176,6 +175,20 @@ function zInitMap(meta){
     var ro = new ResizeObserver(function(){ try { map.invalidateSize(); } catch(e){} });
     ro.observe(el);
   }
+}
+
+/* Re-sync map size + overlay across the load window. The container only reaches
+ * its final size after layout/fonts/infobars settle; Leaflet caches an earlier
+ * size, which mis-projects the vector overlay. Staggered invalidateSize + reload
+ * passes guarantee the overlay lands aligned (the ResizeObserver covers later). */
+function zSettleMap(){
+  var pass = function(){
+    if (!ZState.map) return;
+    try { ZState.map.invalidateSize(); if (ZState.overlayOn) zLoadOverlay(); } catch(e){}
+  };
+  setTimeout(pass, 150);
+  setTimeout(pass, 700);
+  setTimeout(pass, 1600);
 }
 
 /* Fetch + render the colour overlay for the current map view. */
