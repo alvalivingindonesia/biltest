@@ -105,14 +105,31 @@ function renderZoningCheck(view, params){
         '</aside>' +
       '</section>';
 
+    // The SPA router appends this `view` to the DOM only AFTER renderZoningCheck
+    // resolves, so #zlc-map is detached right now. Defer init until it is attached
+    // and has a height, otherwise Leaflet initialises on a zero-size node (blank
+    // map, no tiles) and the input handlers bind to nothing.
+    zDeferMapInit(meta, params, 0);
+  });
+}
+
+function zDeferMapInit(meta, params, tries){
+  var el = document.getElementById('zlc-map');
+  if (el && el.isConnected && el.offsetHeight > 0) {
     zInitMap(meta);
     zWireInputs(meta);
-
-    // Deep-link: #zoning?lat=..&lng=..
+    if (ZState.map) setTimeout(function(){ try { ZState.map.invalidateSize(); } catch(e){} }, 150);
     if (params && params.lat && params.lng) {
       zSelectPoint(parseFloat(params.lat), parseFloat(params.lng), params.label||null, true);
     }
-  });
+    return;
+  }
+  if (tries > 60) { // ~1s elapsed — init anyway so the page is not dead
+    zInitMap(meta); zWireInputs(meta);
+    if (ZState.map) setTimeout(function(){ try { ZState.map.invalidateSize(); } catch(e){} }, 150);
+    return;
+  }
+  requestAnimationFrame(function(){ zDeferMapInit(meta, params, tries + 1); });
 }
 
 function zInitMap(meta){
