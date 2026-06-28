@@ -17,7 +17,22 @@
 
 var ZONING_API = '/api/zoning_api.php';
 var ZState = { meta: null, map: null, marker: null, parcelLayer: null, lat: null, lng: null,
-               label: null, nib: null, lastTriage: null, csrf: '', geoTimer: null };
+               label: null, nib: null, lastTriage: null, csrf: '', geoTimer: null,
+               overlay: null, overlayOn: true, overlayTimer: null };
+
+/* Per-class fill colours for the zoning overlay. Temperature follows buildability
+ * (greens = permitted, yellows/olives = restricted, reds = prohibited) while each
+ * class is still visually distinct. Zona Hijau / forest / parks read RED (no-build),
+ * deliberately overriding the "green = nature" intuition (the colour-trap rule). */
+var ZCLASS_COLORS = {
+  pariwisata: '#17a89a', permukiman: '#3f9b4f', perdagangan_jasa: '#b8902b',
+  pertanian: '#c7b13e', perkebunan: '#7e8b2c', industri: '#7a7a85',
+  fasilitas: '#5b7a99', rawan_bencana: '#d2762a',
+  sempadan: '#d0592e', hutan_lindung: '#b3261e', hutan_produksi: '#9a3b2e',
+  hijau: '#b3261e', rth: '#cf6a5a', konservasi: '#8a1e1e', badan_air: '#3a6ea5',
+  unknown: '#9a9a9a'
+};
+function zClassColor(k) { return ZCLASS_COLORS[k] || '#9a9a9a'; }
 
 /* ---- defensive helpers (reuse app.js globals when present) ---- */
 function zEsc(s){ if (typeof escHtml==='function') return escHtml(s==null?'':s); var d=document.createElement('div'); d.textContent=(s==null?'':String(s)); return d.innerHTML; }
@@ -90,7 +105,9 @@ function renderZoningCheck(view, params){
             '<div id="zlc-suggest" class="zlc-suggest" hidden></div>' +
           '</div>' +
           '<div id="zlc-map" class="zlc-map"></div>' +
+          '<div id="zlc-legend" class="zlc-legend"></div>' +
           '<div class="zlc-maptools">' +
+            '<label class="zlc-chip zlc-toggle"><input type="checkbox" id="zlc-overlay-toggle" checked> '+zEsc(zT('zoning.overlay','Zoning colours'))+'</label>' +
             '<button id="zlc-coordbtn" class="zlc-chip">'+zEsc(zT('zoning.enter_coords','Enter coordinates'))+'</button>' +
             (meta.map.bhumi_wms_url ? '<label class="zlc-chip zlc-toggle"><input type="checkbox" id="zlc-parcels"> '+zEsc(zT('zoning.show_parcels','Show land parcels'))+'</label>' : '') +
           '</div>' +
@@ -118,15 +135,16 @@ function zDeferMapInit(meta, params, tries){
   if (el && el.isConnected && el.offsetHeight > 0) {
     zInitMap(meta);
     zWireInputs(meta);
-    if (ZState.map) setTimeout(function(){ try { ZState.map.invalidateSize(); } catch(e){} }, 150);
+    zBuildLegend();
+    if (ZState.map) setTimeout(function(){ try { ZState.map.invalidateSize(); if (ZState.overlayOn) zLoadOverlay(); } catch(e){} }, 150);
     if (params && params.lat && params.lng) {
       zSelectPoint(parseFloat(params.lat), parseFloat(params.lng), params.label||null, true);
     }
     return;
   }
   if (tries > 60) { // ~1s elapsed — init anyway so the page is not dead
-    zInitMap(meta); zWireInputs(meta);
-    if (ZState.map) setTimeout(function(){ try { ZState.map.invalidateSize(); } catch(e){} }, 150);
+    zInitMap(meta); zWireInputs(meta); zBuildLegend();
+    if (ZState.map) setTimeout(function(){ try { ZState.map.invalidateSize(); if (ZState.overlayOn) zLoadOverlay(); } catch(e){} }, 150);
     return;
   }
   requestAnimationFrame(function(){ zDeferMapInit(meta, params, tries + 1); });
@@ -149,6 +167,46 @@ function zInitMap(meta){
     L.tileLayer(meta.map.labels_url, { maxZoom: meta.map.max_zoom||19, opacity:0.9 }).addTo(map);
   }
   map.on('click', function(e){ zSelectPoint(e.latlng.lat, e.latlng.lng, null, false); });
+  map.on('moveend', function(){ if (!ZState.overlayOn) return; clearTimeout(ZState.overlayTimer); ZState.overlayTimer = setTimeout(zLoadOverlay, 400); });
+}
+
+/* Fetch + render the colour overlay for the current map view. */
+function zLoadOverlay(){
+  if (!ZState.map || !ZState.overlayOn || typeof L === 'undefined') return;
+  var b = ZState.map.getBounds();
+  zGet('overlay', { w: b.getWest(), s: b.getSouth(), e: b.getEast(), n: b.getNorth() }).then(function(res){
+    if (!ZState.overlayOn) return;
+    if (ZState.overlay) { ZState.map.removeLayer(ZState.overlay); ZState.overlay = null; }
+    var data = res.json;
+    if (!data || !data.features || !data.features.length) return;
+    var lang = zLang();
+    ZState.overlay = L.geoJSON(data, {
+      style: function(f){ var c = zClassColor(f.properties.class_key); return { fillColor: c, fillOpacity: 0.42, color: c, weight: 1, opacity: 0.55 }; },
+      onEachFeature: function(f, layer){
+        var nm = lang === 'id' ? f.properties.name_id : f.properties.name_en;
+        layer.bindTooltip(nm, { sticky: true, className: 'zlc-zone-tip', direction: 'top' });
+        layer.on('click', function(e){ if (L.DomEvent) L.DomEvent.stopPropagation(e); zSelectPoint(e.latlng.lat, e.latlng.lng, null, false); });
+      }
+    }).addTo(ZState.map);
+    if (ZState.marker && ZState.marker.setZIndexOffset) ZState.marker.setZIndexOffset(1000);
+  });
+}
+
+/* Build the collapsible colour legend from the class taxonomy. */
+function zBuildLegend(){
+  var el = document.getElementById('zlc-legend');
+  if (!el || !ZState.meta || !ZState.meta.classes) return;
+  var lang = zLang();
+  var rows = ZState.meta.classes.filter(function(c){ return c.class_key !== 'unknown'; }).map(function(c){
+    var nm = lang === 'id' ? c.name_id : c.name_en;
+    return '<div class="zlc-leg-row"><span class="zlc-leg-sw" style="background:' + zClassColor(c.class_key) + '"></span><span>' + zEsc(nm) + '</span></div>';
+  }).join('');
+  el.innerHTML = '<button type="button" class="zlc-leg-head" id="zlc-leg-head">'
+    + zEsc(zT('zoning.legend', 'Zoning legend')) + ' <span class="zlc-leg-caret">▾</span></button>'
+    + '<div class="zlc-leg-body">' + rows + '</div>';
+  document.getElementById('zlc-leg-head').addEventListener('click', function(){ el.classList.toggle('zlc-leg-collapsed'); });
+  if (window.innerWidth < 760) el.classList.add('zlc-leg-collapsed');
+  el.style.display = ZState.overlayOn ? '' : 'none';
 }
 
 function zWireInputs(meta){
@@ -183,6 +241,15 @@ function zWireInputs(meta){
     var lat=parseFloat(m[0]), lng=parseFloat(m[1]);
     if (!isFinite(lat)||!isFinite(lng)) { zToast(zT('zoning.coord_bad','Could not read those coordinates'),'error'); return; }
     zSelectPoint(lat, lng, null, true);
+  });
+
+  var ov = document.getElementById('zlc-overlay-toggle');
+  if (ov) ov.addEventListener('change', function(){
+    ZState.overlayOn = ov.checked;
+    var leg = document.getElementById('zlc-legend');
+    if (leg) leg.style.display = ov.checked ? '' : 'none';
+    if (ov.checked) { zLoadOverlay(); }
+    else if (ZState.overlay) { ZState.map.removeLayer(ZState.overlay); ZState.overlay = null; }
   });
 
   var parcels = document.getElementById('zlc-parcels');

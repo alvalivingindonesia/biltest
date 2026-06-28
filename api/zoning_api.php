@@ -443,6 +443,36 @@ case 'plot_profile': {
     break;
 }
 
+case 'overlay': {
+    // Colour-overlay layer: zoning polygons (as GeoJSON) intersecting the map view.
+    if (!sec_rate_ok('zoning_overlay', $ip, 120, 60)) json_error(429, 'rate_limited');
+    $w = isset($_GET['w']) ? (float)$_GET['w'] : 115.7;
+    $s = isset($_GET['s']) ? (float)$_GET['s'] : -9.3;
+    $e = isset($_GET['e']) ? (float)$_GET['e'] : 117.2;
+    $n = isset($_GET['n']) ? (float)$_GET['n'] : -8.0;
+    if ($w > $e) { $t = $w; $w = $e; $e = $t; }
+    if ($s > $n) { $t = $s; $s = $n; $n = $t; }
+    $db = get_db();
+    $poly = sprintf('POLYGON((%F %F,%F %F,%F %F,%F %F,%F %F))', $w, $s, $e, $s, $e, $n, $w, $n, $w, $s);
+    $sql = "SELECT p.class_key, c.name_en, c.name_id, c.buildability, ST_AsGeoJSON(p.geom) gj
+            FROM zoning_landuse_polys p JOIN zoning_landuse_classes c ON c.class_key = p.class_key
+            WHERE p.is_active = 1 AND MBRIntersects(p.geom, ST_GeomFromText(?, 0)) LIMIT 4000";
+    $st = $db->prepare($sql);
+    $st->execute(array($poly));
+    $features = array();
+    foreach ($st->fetchAll() as $r) {
+        $g = json_decode($r['gj'], true);
+        if (!$g) continue;
+        $features[] = array(
+            'type' => 'Feature',
+            'properties' => array('class_key' => $r['class_key'], 'name_en' => $r['name_en'], 'name_id' => $r['name_id'], 'buildability' => $r['buildability']),
+            'geometry' => $g,
+        );
+    }
+    json_out(array('type' => 'FeatureCollection', 'features' => $features));
+    break;
+}
+
 case 'save_plot': {
     $uid = require_auth();
     $in = get_post_data();

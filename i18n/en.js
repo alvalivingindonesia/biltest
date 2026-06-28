@@ -127,6 +127,8 @@ window.I18N_EN = {
   'zoning.use_location': 'Use my location',
   'zoning.enter_coords': 'Enter coordinates',
   'zoning.show_parcels': 'Show land parcels',
+  'zoning.overlay': 'Zoning colours',
+  'zoning.legend': 'Zoning legend',
   'zoning.empty_lead': 'No location selected yet.',
   'zoning.empty_sub': 'Tap the map, search above, or use your location to get an instant buildability check.',
   'zoning.get_report': 'Get verified Site Suitability Report',

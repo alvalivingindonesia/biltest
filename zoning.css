@@ -65,6 +65,32 @@
 .zlc-chip:hover { background: var(--color-surface-offset); }
 .zlc-toggle input { margin: 0; }
 
+/* Leaflet zoom control — push below the floating search bar so they never overlap
+   (fixes the mobile zoom buttons sitting under the search field). */
+.zlc-map .leaflet-top.leaflet-left { top: 64px; }
+
+/* Zone hover tooltip */
+.leaflet-tooltip.zlc-zone-tip { font-family: var(--font-body); font-size: .8rem; padding: 4px 9px;
+  background: var(--color-surface-2); color: var(--color-text); border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm); box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+
+/* Colour legend (top-right of the map, collapsible) */
+.zlc-legend { position: absolute; top: 64px; right: 14px; z-index: 600; width: 192px;
+  background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  box-shadow: 0 6px 22px rgba(0,0,0,.14); overflow: hidden; }
+.zlc-leg-head { width: 100%; text-align: left; background: var(--color-surface-offset); border: none;
+  padding: 9px 12px; font-family: var(--font-body); font-size: .72rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .08em; color: var(--color-text-muted); cursor: pointer;
+  display: flex; justify-content: space-between; align-items: center; }
+.zlc-leg-caret { transition: transform .3s var(--zlc-ease); }
+.zlc-legend.zlc-leg-collapsed .zlc-leg-caret { transform: rotate(-90deg); }
+.zlc-leg-body { max-height: 258px; overflow-y: auto; padding: 8px 12px; }
+.zlc-legend.zlc-leg-collapsed .zlc-leg-body { display: none; }
+.zlc-leg-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-family: var(--font-body);
+  font-size: .76rem; color: var(--color-text); }
+.zlc-leg-sw { width: 14px; height: 14px; border-radius: 3px; flex: 0 0 14px; opacity: .9; border: 1px solid rgba(0,0,0,.15); }
+@media (max-width: 760px) { .zlc-legend { width: 156px; right: 10px; } }
+
 /* ---- Result panel ---- */
 .zlc-panel { background: var(--color-surface-2); border: 1px solid var(--color-border);
   border-radius: var(--radius-lg); padding: 28px; min-height: 200px; margin-top: 16px; }

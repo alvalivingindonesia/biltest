@@ -124,6 +124,8 @@ window.I18N_ID = {
   'zoning.use_location': 'Gunakan lokasi saya',
   'zoning.enter_coords': 'Masukkan koordinat',
   'zoning.show_parcels': 'Tampilkan bidang tanah',
+  'zoning.overlay': 'Warna zonasi',
+  'zoning.legend': 'Legenda zonasi',
   'zoning.empty_lead': 'Belum ada lokasi dipilih.',
   'zoning.empty_sub': 'Ketuk peta, cari di atas, atau gunakan lokasi Anda untuk cek kelayakan bangun seketika.',
   'zoning.get_report': 'Dapatkan Laporan Kelayakan Lokasi terverifikasi',
