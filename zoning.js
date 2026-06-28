@@ -168,6 +168,14 @@ function zInitMap(meta){
   }
   map.on('click', function(e){ zSelectPoint(e.latlng.lat, e.latlng.lng, null, false); });
   map.on('moveend', function(){ if (!ZState.overlayOn) return; clearTimeout(ZState.overlayTimer); ZState.overlayTimer = setTimeout(zLoadOverlay, 400); });
+  // The container reaches its final size only after layout/fonts settle; Leaflet
+  // caches an intermediate size at init, which mis-projects the vector overlay.
+  // A ResizeObserver re-invalidates on every size change (its moveend reloads the
+  // overlay aligned) — robust against layout settle, font load, rotate, resize.
+  if (typeof ResizeObserver !== 'undefined') {
+    var ro = new ResizeObserver(function(){ try { map.invalidateSize(); } catch(e){} });
+    ro.observe(el);
+  }
 }
 
 /* Fetch + render the colour overlay for the current map view. */
