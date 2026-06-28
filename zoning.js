@@ -135,7 +135,10 @@ function zDeferMapInit(meta, params, tries){
 function zInitMap(meta){
   var el = document.getElementById('zlc-map');
   if (!el || typeof L === 'undefined') { if(el) el.innerHTML='<p style="padding:20px">Map unavailable.</p>'; return; }
-  var map = L.map(el, { zoomControl:true, attributionControl:true }).setView(meta.map.center, meta.map.zoom);
+  // fadeAnimation:false — the tile fade-in can stick at opacity:0 when the map is
+  // initialised via the deferred/invalidateSize path (SPA), leaving tiles loaded
+  // but invisible. Disabling the fade paints them at full opacity immediately.
+  var map = L.map(el, { zoomControl:true, attributionControl:true, fadeAnimation:false }).setView(meta.map.center, meta.map.zoom);
   ZState.map = map;
   if (meta.map.satellite_url) {
     L.tileLayer(meta.map.satellite_url, { maxZoom: meta.map.max_zoom||19, attribution: meta.map.satellite_attr||'' }).addTo(map);
