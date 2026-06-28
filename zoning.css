@@ -65,6 +65,14 @@
 .zlc-chip:hover { background: var(--color-surface-offset); }
 .zlc-toggle input { margin: 0; }
 
+/* Neutralise base.css's global `img,svg,canvas { max-width:100%; height:auto }`
+   reset inside the map — it otherwise collapses Leaflet's vector-overlay SVG
+   (sized via width/height attributes) so the colour layer renders invisible. */
+.zlc-map .leaflet-pane svg,
+.zlc-map .leaflet-pane img,
+.zlc-map .leaflet-pane canvas,
+.zlc-map img.leaflet-tile { max-width: none !important; max-height: none !important; }
+
 /* Leaflet zoom control — push below the floating search bar so they never overlap
    (fixes the mobile zoom buttons sitting under the search field). */
 .zlc-map .leaflet-top.leaflet-left { top: 64px; }
