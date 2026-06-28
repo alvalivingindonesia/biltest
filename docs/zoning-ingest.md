@@ -39,6 +39,30 @@ node tools/zoning_ingest.mjs \
 - Widen later with `--bbox 115.7,-9.1,116.9,-8.1` for the whole island, or split per kabupaten
   with `--where "wadmkk='LOMBOK TENGAH'"`.
 
+## Land-certificate (Bidang Tanah) parcel overlay
+
+Parcel/certificate boundaries come ONLY from ATR/BPN's **BHUMI** — the sole official
+cadastre. BHUMI serves them as a **raster WMS** layer `bhumi_persil` at
+`https://bhumi.atrbpn.go.id/mprx/service` (WMS 1.3.0, EPSG:3857). It is **referer-gated**
+(403 unless the request carries a `bhumi.atrbpn.go.id` referer).
+
+We serve it from our own caching proxy, never live from the client:
+- **`api/parcel_tile.php?z={z}&x={x}&y={y}`** — serves a tile from our disk cache
+  (`PARCEL_TILE_DIR`, default `/home/rovin629/parcel_tiles`, **7-day TTL**); on a miss it
+  fetches that one tile from BHUMI (referer + SSRF-safe `safe_fetch`) and caches it.
+  Hardened: z 15-19 + Lombok-only tile window, per-IP rate limit, image/png only.
+- Frontend: the **"Land certificates"** toggle (default on, `zoning_config.parcel_overlay=1`)
+  adds `L.tileLayer('/api/parcel_tile.php?...')` in a pane above the colour fills; renders
+  at z>=15. Attribution: "Bidang Tanah © ATR/BPN (BHUMI)". "Map data not yet available"
+  tiles come from BHUMI where no parcels are mapped.
+- **Weekly pre-warm (optional):** `node tools/parcel_warm.mjs` requests tiles for curated
+  hotspot bboxes through our own endpoint so the cache is filled ahead of user views and
+  BHUMI calls concentrate in the scheduled job. Schedule it weekly (Windows Task Scheduler
+  / cron). Edit `DEFAULT_BBOXES` / pass `--bbox` to extend coverage.
+- **ToS note:** the referer is required by BHUMI's hotlink protection; sending it is an
+  owner-accepted decision, mitigated by caching + 7-day TTL (minimal load) + attribution
+  (see SEC-060). Parcel *images* carry boundaries only — no owner names (PDP-safe).
+
 ## Candidate sources (in order of preference)
 
 1. **BIG "Satu Peta"** — `https://kspservices.big.go.id/satupeta/rest/services`
