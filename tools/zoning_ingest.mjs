@@ -32,6 +32,7 @@ const DB_ENDPOINT = process.env.DBQ_ENDPOINT || 'https://biltest.roving-i.com.au
 const ZONA_MAP = [
   ['hutan lindung', 'hutan_lindung'],
   ['hutan produksi', 'hutan_produksi'],
+  ['bakau', 'hutan_lindung'], ['mangrove', 'hutan_lindung'], ['mangr', 'hutan_lindung'],
   ['suaka', 'konservasi'], ['cagar', 'konservasi'], ['taman nasional', 'konservasi'],
   ['konservasi', 'konservasi'], ['taman wisata alam', 'konservasi'], ['twa', 'konservasi'],
   ['sempadan', 'sempadan'], ['lindung setempat', 'sempadan'],
@@ -41,10 +42,15 @@ const ZONA_MAP = [
   ['permukiman', 'permukiman'], ['perumahan', 'permukiman'], ['pemukiman', 'permukiman'],
   ['perdagangan', 'perdagangan_jasa'], ['jasa', 'perdagangan_jasa'], ['komersial', 'perdagangan_jasa'],
   ['perkebunan', 'perkebunan'],
+  ['tambak', 'pertanian'], ['perikanan', 'pertanian'],
   ['pertanian', 'pertanian'], ['sawah', 'pertanian'], ['tanaman pangan', 'pertanian'], ['holtikultura', 'pertanian'], ['hortikultura', 'pertanian'], ['lp2b', 'pertanian'],
   ['industri', 'industri'], ['pergudangan', 'industri'],
-  ['badan air', 'badan_air'], ['sungai', 'badan_air'], ['danau', 'badan_air'], ['waduk', 'badan_air'],
+  ['tubuh air', 'badan_air'], ['badan air', 'badan_air'], ['bendungan', 'badan_air'], ['sungai', 'badan_air'], ['danau', 'badan_air'], ['waduk', 'badan_air'],
   ['rawan bencana', 'rawan_bencana'], ['rawan', 'rawan_bencana'],
+  ['hankam', 'fasilitas'], ['pertahanan', 'fasilitas'], ['keamanan', 'fasilitas'],
+  ['pelabuhan', 'fasilitas'], ['bandara', 'fasilitas'], ['bandar udara', 'fasilitas'],
+  ['perkantoran', 'fasilitas'], ['peruntukan umum', 'fasilitas'], ['fasilitas umum', 'fasilitas'], ['sosial', 'fasilitas'],
+  ['transportasi', 'fasilitas'], ['jaringan jalan', 'fasilitas'], ['jalan', 'fasilitas'],
 ];
 function normaliseZona(raw) {
   if (!raw) return null;
@@ -55,7 +61,7 @@ function normaliseZona(raw) {
 
 function parseArgs(argv) {
   const o = { bbox: '115.7,-9.1,116.9,-8.1', where: '1=1', planLevel: 'rtrw', page: 500, limit: 100000,
-              dryRun: false, source: 'arcgis', sourceDate: null, kabupaten: null,
+              dryRun: false, source: 'arcgis', sourceDate: null, kabupaten: null, simplify: 0.0003,
               zonaField: null, kdbField: null, klbField: null, kkbField: null, service: null, key: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i], n = () => argv[++i];
@@ -71,6 +77,7 @@ function parseArgs(argv) {
       case '--kdb-field': o.kdbField = n(); break;
       case '--klb-field': o.klbField = n(); break;
       case '--kkb-field': o.kkbField = n(); break;
+      case '--simplify': o.simplify = parseFloat(n()); break;
       case '--page': o.page = parseInt(n(), 10); break;
       case '--limit': o.limit = parseInt(n(), 10); break;
       case '--dry-run': o.dryRun = true; break;
@@ -106,7 +113,7 @@ async function curlPostJson(url, obj) {
 }
 
 /* GeoJSON / Esri ring coords -> WKT (SRID 0, X=lng Y=lat), precision 6. */
-function ring(coords) { return coords.map(c => (+c[0]).toFixed(6) + ' ' + (+c[1]).toFixed(6)).join(','); }
+function ring(coords) { return coords.map(c => (+c[0]).toFixed(5) + ' ' + (+c[1]).toFixed(5)).join(','); }
 function geojsonToWkt(geom) {
   if (!geom) return null;
   if (geom.type === 'Polygon') return 'POLYGON(' + geom.coordinates.map(r => '(' + ring(r) + ')').join(',') + ')';
@@ -142,6 +149,7 @@ async function main() {
       where: o.where, outFields: '*', returnGeometry: 'true', outSR: '4326', f: 'geojson',
       geometryType: 'esriGeometryEnvelope', inSR: '4326', spatialRel: 'esriSpatialRelIntersects',
       geometry: JSON.stringify({ xmin: minx, ymin: miny, xmax: maxx, ymax: maxy, spatialReference: { wkid: 4326 } }),
+      maxAllowableOffset: String(o.simplify), // server-side Douglas-Peucker (deg) so big polygons fit the SQL size cap
       resultOffset: String(offset), resultRecordCount: String(o.page),
     });
     const url = queryBase + '?' + params.toString();

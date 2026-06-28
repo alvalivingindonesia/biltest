@@ -67,7 +67,7 @@ sec_install_json_exception_handler();                        // generic 500 on u
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
-define('SQLC_MAX_SQL_BYTES', 100 * 1024);   // 100 KB statement cap
+define('SQLC_MAX_SQL_BYTES', 1024 * 1024);  // 1 MB statement cap (token+IP-gated ingest channel; large geometry INSERTs from tools/zoning_ingest.mjs)
 define('SQLC_DEFAULT_ROWS', 1000);
 define('SQLC_MAX_ROWS', 5000);
 

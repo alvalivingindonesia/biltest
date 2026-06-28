@@ -16,6 +16,29 @@ request. ATR/BPN is the only origin, but it reaches us through *open mirrors*.
 We do **not** bulk-ingest BHUMI parcels (millions, gated, fast-changing) — those are read
 on demand per plot via BHUMI WMS (see `api/zoning_api.php` `plot_profile`).
 
+## Confirmed working source (2026-06-28)
+
+A discovery sweep verified a **public, auth-free** RTRW layer on BIG Satu Peta and it is
+ingested for South Lombok:
+
+```
+node tools/zoning_ingest.mjs \
+  --service "https://kspservices.big.go.id/satupeta/rest/services/PUBLIK/PERENCANAAN_RUANG/MapServer/12" \
+  --zona-field "rtrsys" --plan-level rtrw --kabupaten lombok \
+  --source "RTRW Kabupaten/Kota (BIG Satu Peta, layer 12 RTRWK)" --source-date 2026-06-28 \
+  --bbox 115.9,-9.0,116.5,-8.5
+```
+
+- Layer 12 (RTRWK) = kabupaten-level pola ruang, ~35 classes; zona field `rtrsys`.
+- It is **RTRW only — no KDB/KLB/KKB**. Building coefficients are not in any public layer;
+  the Mandalika RDTR FeatureServer (services9.arcgis.com) and GISTARU are token-gated.
+  Re-check the Mandalika RDTR periodically — it is the prize for development metrics.
+- Backups (same service): layer 14 (RTRWP, NTB province), 164 (NT islands), 154 (national).
+- `--simplify` (default 0.0003 ≈ 33m) applies server-side Douglas-Peucker so dense polygons
+  fit the SQL-console statement cap; widen the `--bbox` and re-run to extend coverage north.
+- Widen later with `--bbox 115.7,-9.1,116.9,-8.1` for the whole island, or split per kabupaten
+  with `--where "wadmkk='LOMBOK TENGAH'"`.
+
 ## Candidate sources (in order of preference)
 
 1. **BIG "Satu Peta"** — `https://kspservices.big.go.id/satupeta/rest/services`
