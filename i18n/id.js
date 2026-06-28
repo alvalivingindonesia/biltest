@@ -123,7 +123,7 @@ window.I18N_ID = {
   'zoning.search_ph': 'Cari tempat atau landmark (mis. Villa Ellya, Kuta)',
   'zoning.use_location': 'Gunakan lokasi saya',
   'zoning.enter_coords': 'Masukkan koordinat',
-  'zoning.show_parcels': 'Tampilkan bidang tanah',
+  'zoning.show_parcels': 'Bidang tanah',
   'zoning.overlay': 'Warna zonasi',
   'zoning.legend': 'Legenda zonasi',
   'zoning.empty_lead': 'Belum ada lokasi dipilih.',

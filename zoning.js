@@ -109,7 +109,7 @@ function renderZoningCheck(view, params){
           '<div class="zlc-maptools">' +
             '<label class="zlc-chip zlc-toggle"><input type="checkbox" id="zlc-overlay-toggle" checked> '+zEsc(zT('zoning.overlay','Zoning colours'))+'</label>' +
             '<button id="zlc-coordbtn" class="zlc-chip">'+zEsc(zT('zoning.enter_coords','Enter coordinates'))+'</button>' +
-            (meta.map.bhumi_wms_url ? '<label class="zlc-chip zlc-toggle"><input type="checkbox" id="zlc-parcels"> '+zEsc(zT('zoning.show_parcels','Show land parcels'))+'</label>' : '') +
+            (meta.parcel_overlay ? '<label class="zlc-chip zlc-toggle"><input type="checkbox" id="zlc-parcels" checked> '+zEsc(zT('zoning.show_parcels','Land certificates'))+'</label>' : '') +
           '</div>' +
         '</div>' +
         '<aside id="zlc-panel" class="zlc-panel">' +
@@ -157,6 +157,11 @@ function zInitMap(meta){
   // but invisible. Disabling the fade paints them at full opacity immediately.
   var map = L.map(el, { zoomControl:true, attributionControl:true, fadeAnimation:false }).setView(meta.map.center, meta.map.zoom);
   ZState.map = map;
+  // Dedicated pane so parcel boundaries sit ABOVE the zoning colour fills
+  // (overlayPane z400) but BELOW the marker (markerPane z600).
+  map.createPane('parcels');
+  map.getPane('parcels').style.zIndex = 450;
+  map.getPane('parcels').style.pointerEvents = 'none';
   if (meta.map.satellite_url) {
     L.tileLayer(meta.map.satellite_url, { maxZoom: meta.map.max_zoom||19, attribution: meta.map.satellite_attr||'' }).addTo(map);
   } else {
@@ -289,14 +294,27 @@ function zWireInputs(meta){
   });
 
   var parcels = document.getElementById('zlc-parcels');
-  if (parcels) parcels.addEventListener('change', function(){
-    if (!ZState.map) return;
-    if (parcels.checked) {
-      ZState.parcelLayer = L.tileLayer.wms(meta.map.bhumi_wms_url, {
-        layers: meta.map.bhumi_wms_layers||'', format:'image/png', transparent:true, opacity:0.7, version:'1.1.1'
-      }).addTo(ZState.map);
-    } else if (ZState.parcelLayer) { ZState.map.removeLayer(ZState.parcelLayer); ZState.parcelLayer=null; }
-  });
+  if (parcels) {
+    parcels.addEventListener('change', function(){ zToggleParcels(parcels.checked); });
+    if (parcels.checked) zToggleParcels(true);
+  }
+}
+
+/* Land-certificate (Bidang Tanah) boundary tiles, served from our own caching
+ * proxy (api/parcel_tile.php). Only render at z>=15 where parcels are drawn. */
+function zToggleParcels(on){
+  if (!ZState.map || typeof L === 'undefined') return;
+  if (on) {
+    if (ZState.parcelLayer) return;
+    var mz = (ZState.meta && ZState.meta.map && ZState.meta.map.max_zoom) ? ZState.meta.map.max_zoom : 19;
+    ZState.parcelLayer = L.tileLayer('/api/parcel_tile.php?z={z}&x={x}&y={y}', {
+      minZoom: 15, maxZoom: mz, minNativeZoom: 15, maxNativeZoom: 19,
+      opacity: 0.9, pane: 'parcels', attribution: 'Bidang Tanah © ATR/BPN (BHUMI)'
+    }).addTo(ZState.map);
+  } else if (ZState.parcelLayer) {
+    ZState.map.removeLayer(ZState.parcelLayer);
+    ZState.parcelLayer = null;
+  }
 }
 
 function zRunGeocode(q){

@@ -821,3 +821,13 @@ live-verified on biltest.roving-i.com.au.** Worked this session and deployed to
 - **Exploit:** None identified at review; entry recorded so the new surfaces are tracked alongside the rest of the audit.
 - **Fix:** As above (shipped with the feature).
 - **Resolution:** 2026-06-28 — built to the secure-by-default baseline. **One residual, deferred:** certificate uploads are personal data (PDP Law) and retention/auto-deletion is not yet automated — files persist until manually purged after the notary check. Track: add a scheduled purge (e.g. delete `zoning_cert_uploads` + files older than N days past report delivery) and a documented retention/consent policy before heavy production use.
+
+### SEC-060 — Parcel-tile caching proxy (api/parcel_tile.php) to BHUMI
+- **Status:** fixed
+- **Severity:** low
+- **Category:** Outbound Proxy / SSRF + Abuse surface   **OWASP:** A10:2021 SSRF   **Confidence:** High
+- **Affected:** `api/parcel_tile.php`, `api/_sec.php` (safe_fetch referer opt)
+- **Description:** Serves BHUMI `bhumi_persil` parcel-boundary tiles from our server with a 7-day disk cache, fetching one tile at a time from BHUMI's referer-gated WMS on cache miss (owner-directed; public boundary data only, no PII). Hardening: upstream host is FIXED (bhumi.atrbpn.go.id), the bbox is computed server-side from z/x/y (no user-controlled URL); z is clamped to 15-19 and x/y to the Lombok tile window so it cannot be used as a general proxy; per-IP rate limit (800/min); output is image/png only; fetch goes through `safe_fetch` (DNS-pinned, redirect-revalidated, size-capped) with a Referer opt. Cache dir is outside the web root.
+- **Exploit:** Mitigated — not usable as an open proxy (fixed host + tightly bounded tile coords), bounded storage, rate-limited.
+- **Fix:** As above (shipped with the feature).
+- **Resolution:** 2026-06-28 — built to baseline. **Note (ToS):** the upstream WMS is referer-gated; we send a bhumi.atrbpn.go.id referer, which steps around their hotlink protection — an owner-accepted business decision, mitigated by caching + 7-day TTL (minimal load) and ATR/BPN attribution + the BHUMI as-is disclaimer surfaced in-product. Revisit if ATR/BPN publishes an open WMS or objects.

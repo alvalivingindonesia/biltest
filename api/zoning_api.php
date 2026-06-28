@@ -327,6 +327,7 @@ case 'meta': {
             'bhumi_wms_layers' => zcfg('bhumi_wms_layers',''),
         ),
         'geocoder_enabled' => (zcfg('geocoder_url','') !== ''),
+        'parcel_overlay' => (zcfg('parcel_overlay','0') === '1'),
         'report_price_idr' => (int)zcfg('report_price_idr','0'),
         'report_price_label' => fmt_idr((int)zcfg('report_price_idr','0')),
         'contact_whatsapp' => zcfg('contact_whatsapp',''),

@@ -203,6 +203,7 @@ function safe_fetch(string $url, array $opt = []): array {
     $maxRedirs = (int)($opt['max_redirects'] ?? 3);
     $timeout   = (int)($opt['timeout'] ?? 12);
     $ua        = (string)($opt['user_agent'] ?? 'BuildInLombok/1.0 (+https://biltest.roving-i.com.au)');
+    $referer   = (string)($opt['referer'] ?? '');
 
     $current = $url;
     for ($hop = 0; $hop <= $maxRedirs; $hop++) {
@@ -231,6 +232,7 @@ function safe_fetch(string $url, array $opt = []): array {
             CURLOPT_TIMEOUT        => $timeout,
             CURLOPT_PROTOCOLS      => CURLPROTO_HTTP | CURLPROTO_HTTPS,
             CURLOPT_USERAGENT      => $ua,
+            CURLOPT_REFERER        => $referer,
             CURLOPT_HEADERFUNCTION => function ($c, $h) use (&$location) {
                 if (stripos($h, 'location:') === 0) $location = trim(substr($h, 9));
                 return strlen($h);

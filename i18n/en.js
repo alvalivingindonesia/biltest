@@ -126,7 +126,7 @@ window.I18N_EN = {
   'zoning.search_ph': 'Search a place or landmark (e.g. Villa Ellya, Kuta)',
   'zoning.use_location': 'Use my location',
   'zoning.enter_coords': 'Enter coordinates',
-  'zoning.show_parcels': 'Show land parcels',
+  'zoning.show_parcels': 'Land certificates',
   'zoning.overlay': 'Zoning colours',
   'zoning.legend': 'Zoning legend',
   'zoning.empty_lead': 'No location selected yet.',

@@ -52,6 +52,7 @@ INSERT INTO zoning_config (cfg_key, cfg_value) VALUES
  ('bhumi_wms_layers',''),
  ('contact_whatsapp',''),
  ('report_price_idr','1500000'),
+ ('parcel_overlay','1'),
  ('disclaimer_en','Indicative information for decision-support only — not legal, planning or investment advice. Zoning is read from official spatial plans captured on the date shown and may be outdated or imprecise at boundaries. Always confirm via an official KKPR application and a licensed notary (PPAT) before transacting.'),
  ('disclaimer_id','Informasi indikatif untuk pendukung keputusan saja — bukan nasihat hukum, tata ruang, atau investasi. Zonasi dibaca dari rencana tata ruang resmi pada tanggal yang ditampilkan dan dapat tidak mutakhir atau kurang presisi di batas. Selalu konfirmasi melalui pengajuan KKPR resmi dan notaris (PPAT) berlisensi sebelum bertransaksi.'),
  ('coverage_note_en','Official zoning coverage is being expanded across Lombok. Where we do not yet hold data for a point, the status shows Not Yet Mapped and you can request a verified report.'),
