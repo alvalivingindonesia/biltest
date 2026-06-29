@@ -105,16 +105,15 @@ function renderZoningCheck(view, params){
               '<div id="zlc-suggest" class="zlc-suggest" hidden></div>' +
             '</div>' +
             '<button id="zlc-locate" class="zlc-iconbtn" title="'+zEsc(zT('zoning.use_location','Use my location'))+'" aria-label="'+zEsc(zT('zoning.use_location','Use my location'))+'">◎</button>' +
+          '</div>' +
+          '<div class="zlc-controlbar">' +
+            (meta.parcel_overlay ? '<label class="zlc-chip zlc-toggle"><input type="checkbox" id="zlc-parcels" checked> '+zEsc(zT('zoning.show_parcels','Land certificates'))+'</label>' : '') +
+            '<label class="zlc-chip zlc-toggle"><input type="checkbox" id="zlc-overlay-toggle" checked> '+zEsc(zT('zoning.overlay','Zoning colours'))+'</label>' +
             '<button id="zlc-coordbtn" class="zlc-chip zlc-coordbtn">'+zEsc(zT('zoning.enter_coords','Enter coordinates'))+'</button>' +
           '</div>' +
-          '<div id="zlc-resultstrip" class="zlc-resultstrip" hidden></div>' +
           '<div class="zlc-mapwrap">' +
             '<div id="zlc-map" class="zlc-map"></div>' +
             '<div id="zlc-legend" class="zlc-legend"></div>' +
-            '<div class="zlc-maptools">' +
-              (meta.parcel_overlay ? '<label class="zlc-chip zlc-toggle zlc-tool-certs"><input type="checkbox" id="zlc-parcels" checked> '+zEsc(zT('zoning.show_parcels','Land certificates'))+'</label>' : '') +
-              '<label class="zlc-chip zlc-toggle zlc-tool-zoning"><input type="checkbox" id="zlc-overlay-toggle" checked> '+zEsc(zT('zoning.overlay','Zoning colours'))+'</label>' +
-            '</div>' +
           '</div>' +
         '</div>' +
         '<aside id="zlc-panel" class="zlc-panel">' +
@@ -221,14 +220,11 @@ function zLoadOverlay(){
     if (ZState.overlay) { ZState.map.removeLayer(ZState.overlay); ZState.overlay = null; }
     var data = res.json;
     if (!data || !data.features || !data.features.length) return;
-    var lang = zLang();
+    // interactive:false — purely visual. Clicks pass through to the map handler
+    // (no focus outline box, no tooltip rendered over the dropped pin).
     ZState.overlay = L.geoJSON(data, {
-      style: function(f){ var c = zClassColor(f.properties.class_key); return { fillColor: c, fillOpacity: 0.42, color: c, weight: 1, opacity: 0.55 }; },
-      onEachFeature: function(f, layer){
-        var nm = lang === 'id' ? f.properties.name_id : f.properties.name_en;
-        layer.bindTooltip(nm, { sticky: true, className: 'zlc-zone-tip', direction: 'top' });
-        layer.on('click', function(e){ if (L.DomEvent) L.DomEvent.stopPropagation(e); zSelectPoint(e.latlng.lat, e.latlng.lng, null, false); });
-      }
+      interactive: false,
+      style: function(f){ var c = zClassColor(f.properties.class_key); return { fillColor: c, fillOpacity: 0.42, color: c, weight: 1, opacity: 0.55 }; }
     }).addTo(ZState.map);
     if (ZState.marker && ZState.marker.setZIndexOffset) ZState.marker.setZIndexOffset(1000);
     // Nudge a repaint so the freshly-added vector paths composite immediately.
@@ -275,7 +271,13 @@ function zWireInputs(meta){
     locate.disabled = true;
     navigator.geolocation.getCurrentPosition(function(p){
       locate.disabled=false; zSelectPoint(p.coords.latitude, p.coords.longitude, zT('zoning.your_location','Your location'), true);
-    }, function(){ locate.disabled=false; zToast(zT('zoning.geo_denied','Could not get your location'),'error'); }, { enableHighAccuracy:true, timeout:8000 });
+    }, function(err){
+      locate.disabled=false;
+      var msg = zT('zoning.geo_denied','Could not get your location');
+      if (err && err.code === 1) msg = zT('zoning.geo_perm','Location access is blocked — allow it for this site in your browser and try again.');
+      else if (err && err.code === 3) msg = zT('zoning.geo_timeout','Locating timed out — please try again.');
+      zToast(msg, 'error');
+    }, { enableHighAccuracy:true, timeout:12000, maximumAge:60000 });
   });
 
   var coordBtn = document.getElementById('zlc-coordbtn');
@@ -347,7 +349,7 @@ function zSelectPoint(lat, lng, label, fly){
   if (ZState.map){
     if (ZState.marker) ZState.marker.setLatLng([lat,lng]);
     else {
-      var icon = L.divIcon({ className:'zlc-pin-wrap', html:'<span class="zlc-pin"></span>', iconSize:[28,28], iconAnchor:[14,28] });
+      var icon = L.divIcon({ className:'zlc-pin-wrap', html:'<span class="zlc-pin"></span>', iconSize:[28,28], iconAnchor:[14,28], tooltipAnchor:[0,-30] });
       ZState.marker = L.marker([lat,lng], { icon:icon }).addTo(ZState.map);
     }
     if (fly) ZState.map.flyTo([lat,lng], Math.max(ZState.map.getZoom(), 16), { duration:0.6 });
@@ -364,33 +366,21 @@ function zRunCheck(){
     ZState.lastTriage = res.json.triage;
     panel.innerHTML = zRenderTriage(res.json.triage);
     zWireTriageActions();
-    zFillResultStrip(res.json.triage);
+    zSetMarkerLabel(res.json.triage);
   });
 }
 
-/* Compact result above the map: the clicked coordinate, and to its right a box
- * with the zoning type + a BHUMI link for further info. */
-function zFillResultStrip(tr){
-  var strip = document.getElementById('zlc-resultstrip');
-  if (!strip) return;
+/* Zone label anchored ABOVE the map pin (clear of the dot, so it doesn't sit
+ * on top of it). The divIcon's tooltipAnchor lifts it above the pin head. */
+function zSetMarkerLabel(tr){
+  if (!ZState.marker || typeof L === 'undefined') return;
   var lang = zLang();
-  var info = zStatusInfo(tr.buildability);
   var name = lang === 'id' ? tr.name_id : tr.name_en;
-  var bhumiUrl = 'https://bhumi.atrbpn.go.id/peta?latitude=' + encodeURIComponent(tr.lat) + '&longitude=' + encodeURIComponent(tr.lng);
-  strip.innerHTML =
-    '<div class="zlc-rs-coord">' +
-      '<span class="zlc-rs-label">' + zEsc(zT('zoning.coords','Coordinates')) + '</span>' +
-      '<span class="zlc-rs-val">' + zEsc((+tr.lat).toFixed(5) + ', ' + (+tr.lng).toFixed(5)) + '</span>' +
-    '</div>' +
-    '<div class="zlc-rs-zone zlc-' + info.cls + '">' +
-      '<span class="zlc-rs-dot zlc-bigdot-' + info.cls + '"></span>' +
-      '<div class="zlc-rs-zonetext">' +
-        '<span class="zlc-rs-status">' + zEsc(zStatusLabel(tr.buildability)) + '</span>' +
-        '<span class="zlc-rs-zonename">' + zEsc(name) + '</span>' +
-      '</div>' +
-      '<a class="zlc-rs-bhumi" href="' + bhumiUrl + '" target="_blank" rel="noopener noreferrer" title="' + zEsc(zT('zoning.view_bhumi','View parcel on BHUMI (official)')) + '">' + zEsc(zT('zoning.bhumi_short','BHUMI')) + ' ↗</a>' +
-    '</div>';
-  strip.hidden = false;
+  var info = zStatusInfo(tr.buildability);
+  try {
+    ZState.marker.unbindTooltip();
+    ZState.marker.bindTooltip(name, { permanent: true, direction: 'top', className: 'zlc-pin-label zlc-' + info.cls }).openTooltip();
+  } catch(e){}
 }
 
 function zRenderTriage(tr){
@@ -407,6 +397,8 @@ function zRenderTriage(tr){
             '<p class="zlc-class">'+zEsc(name)+(tr.raw_zona?(' <span class="zlc-raw">· '+zEsc(tr.raw_zona)+'</span>'):'')+'</p></div>' +
           '</div>';
   if (summary) html += '<p class="zlc-summary">'+zEsc(summary)+'</p>';
+
+  html += '<p class="zlc-coord-line"><span class="zlc-coord-lbl">'+zEsc(zT('zoning.coords','Coordinates'))+'</span> '+zEsc((+tr.lat).toFixed(5)+', '+(+tr.lng).toFixed(5))+'</p>';
 
   if (tr.metrics) {
     var m = tr.metrics, bits=[];

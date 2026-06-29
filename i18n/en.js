@@ -189,6 +189,8 @@ window.I18N_EN = {
   'zoning.your_location': 'Your location',
   'zoning.no_geo': 'Geolocation not available',
   'zoning.geo_denied': 'Could not get your location',
+  'zoning.geo_perm': 'Location access is blocked — allow it for this site in your browser and try again.',
+  'zoning.geo_timeout': 'Locating timed out — please try again.',
   'zoning.coord_prompt': 'Enter coordinates as "lat, lng" (e.g. -8.890, 116.300)',
   'zoning.coord_bad': 'Could not read those coordinates',
   'common.sending': 'Sending…',

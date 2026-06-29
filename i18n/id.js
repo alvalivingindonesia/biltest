@@ -186,6 +186,8 @@ window.I18N_ID = {
   'zoning.your_location': 'Lokasi Anda',
   'zoning.no_geo': 'Geolokasi tidak tersedia',
   'zoning.geo_denied': 'Tidak dapat memperoleh lokasi Anda',
+  'zoning.geo_perm': 'Akses lokasi diblokir — izinkan untuk situs ini di browser Anda lalu coba lagi.',
+  'zoning.geo_timeout': 'Pencarian lokasi habis waktu — silakan coba lagi.',
   'zoning.coord_prompt': 'Masukkan koordinat sebagai "lat, lng" (mis. -8.890, 116.300)',
   'zoning.coord_bad': 'Tidak dapat membaca koordinat tersebut',
   'common.sending': 'Mengirim…',
