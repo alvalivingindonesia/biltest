@@ -35,29 +35,59 @@
   overflow: hidden; border: 1px solid var(--color-border); background: var(--color-surface-offset); z-index: 0; }
 @media (min-width: 980px) { .zlc-map { height: 72vh; } }
 
-/* Search bar floating over the map */
-.zlc-searchbar { position: absolute; top: 14px; left: 14px; right: 14px; z-index: 600;
-  display: flex; gap: 8px; align-items: center; }
-.zlc-searchbar input { flex: 1; height: 46px; border: 1px solid var(--color-border);
+/* ---- Map column wrapper (input bar + result strip stack above the map) ---- */
+.zlc-mapcol { display: flex; flex-direction: column; min-width: 0; }
+
+/* ---- Input bar ABOVE the map (search + locate + coordinates) ---- */
+.zlc-inputbar { display: flex; gap: 8px; align-items: center; margin: 0 0 12px; }
+.zlc-search-wrap { position: relative; flex: 1; min-width: 0; }
+.zlc-inputbar input { width: 100%; height: 46px; box-sizing: border-box; border: 1px solid var(--color-border);
   background: var(--color-surface-2); color: var(--color-text); border-radius: var(--radius-full);
-  padding: 0 18px; font-family: var(--font-body); font-size: .95rem; box-shadow: 0 6px 22px rgba(0,0,0,.12);
+  padding: 0 18px; font-family: var(--font-body); font-size: .95rem;
   transition: border-color .4s var(--zlc-ease), box-shadow .4s var(--zlc-ease); }
-.zlc-searchbar input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 8px 28px rgba(0,0,0,.18); }
+.zlc-inputbar input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 4px 18px rgba(0,0,0,.1); }
+.zlc-coordbtn { height: 46px; flex: 0 0 auto; white-space: nowrap; }
 .zlc-iconbtn { width: 46px; height: 46px; flex: 0 0 46px; border-radius: var(--radius-full);
   border: 1px solid var(--color-border); background: var(--color-surface-2); color: var(--color-primary);
-  font-size: 1.3rem; cursor: pointer; box-shadow: 0 6px 22px rgba(0,0,0,.12);
-  transition: background .4s var(--zlc-ease), transform .4s var(--zlc-ease); }
+  font-size: 1.3rem; cursor: pointer; transition: background .4s var(--zlc-ease), transform .4s var(--zlc-ease); }
 .zlc-iconbtn:hover { background: var(--color-surface-offset); transform: translateY(-1px); }
-.zlc-suggest { position: absolute; top: 54px; left: 0; right: 60px; background: var(--color-surface-2);
-  border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden;
-  box-shadow: 0 14px 40px rgba(0,0,0,.18); max-height: 320px; overflow-y: auto; }
+.zlc-suggest { position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 1000;
+  background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  overflow-y: auto; box-shadow: 0 14px 40px rgba(0,0,0,.18); max-height: 320px; }
 .zlc-sug-item { display: block; width: 100%; text-align: left; padding: 12px 16px; background: none;
   border: none; border-bottom: 1px solid var(--color-divider); color: var(--color-text);
   font-family: var(--font-body); font-size: .92rem; cursor: pointer; transition: background .25s var(--zlc-ease); }
 .zlc-sug-item:last-child { border-bottom: none; }
 .zlc-sug-item:hover { background: var(--color-surface-offset); }
 
-.zlc-maptools { position: absolute; left: 14px; bottom: 14px; z-index: 600; display: flex; gap: 8px; flex-wrap: wrap; }
+/* ---- Result strip: coordinate (left) + zoning box with BHUMI link (right) ---- */
+.zlc-resultstrip { display: flex; gap: 10px; align-items: stretch; margin: 0 0 12px; flex-wrap: wrap;
+  animation: zlc-fade .4s var(--zlc-ease); }
+.zlc-rs-coord { display: flex; flex-direction: column; justify-content: center; gap: 2px; flex: 0 0 auto;
+  background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 8px 14px; }
+.zlc-rs-label { font-family: var(--font-body); text-transform: uppercase; letter-spacing: .1em;
+  font-size: .6rem; color: var(--color-text-faint); }
+.zlc-rs-val { font-family: var(--font-display); font-size: 1rem; color: var(--color-text); }
+.zlc-rs-zone { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 210px;
+  background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 8px 14px; }
+.zlc-rs-dot { width: 18px; height: 18px; border-radius: var(--radius-full); flex: 0 0 18px; }
+.zlc-rs-zonetext { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.zlc-rs-status { font-family: var(--font-body); text-transform: uppercase; letter-spacing: .1em; font-size: .62rem; font-weight: 600; }
+.zlc-ok   .zlc-rs-status { color: var(--color-success-hover); }
+.zlc-warn .zlc-rs-status { color: var(--color-warning-hover); }
+.zlc-bad  .zlc-rs-status { color: var(--color-error-hover); }
+.zlc-unk  .zlc-rs-status { color: var(--color-text-muted); }
+.zlc-rs-zonename { font-family: var(--font-display); font-size: 1.05rem; color: var(--color-text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zlc-rs-bhumi { flex: 0 0 auto; font-family: var(--font-body); font-size: .8rem; font-weight: 600;
+  color: var(--color-primary); text-decoration: none; padding: 6px 11px; border: 1px solid var(--color-border);
+  border-radius: var(--radius-full); white-space: nowrap; transition: background .3s var(--zlc-ease); }
+.zlc-rs-bhumi:hover { background: var(--color-surface-offset); }
+
+/* ---- Map controls (bottom-left): Land certificates, then Zoning colours lower+right ---- */
+.zlc-maptools { position: absolute; left: 14px; bottom: 14px; z-index: 600;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.zlc-tool-zoning { margin-left: 30px; }
 .zlc-chip { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px;
   border-radius: var(--radius-full); border: 1px solid var(--color-border); background: var(--color-surface-2);
   color: var(--color-text); font-family: var(--font-body); font-size: .82rem; cursor: pointer;
@@ -73,9 +103,8 @@
 .zlc-map .leaflet-pane canvas,
 .zlc-map img.leaflet-tile { max-width: none !important; max-height: none !important; }
 
-/* Leaflet zoom control — push below the floating search bar so they never overlap
-   (fixes the mobile zoom buttons sitting under the search field). */
-.zlc-map .leaflet-top.leaflet-left { top: 64px; }
+/* Search now sits ABOVE the map, so the zoom control stays at its default
+   top-left corner (no overlap to fix anymore). */
 
 /* Zone hover tooltip */
 .leaflet-tooltip.zlc-zone-tip { font-family: var(--font-body); font-size: .8rem; padding: 4px 9px;
@@ -83,7 +112,7 @@
   border-radius: var(--radius-sm); box-shadow: 0 4px 14px rgba(0,0,0,.18); }
 
 /* Colour legend (top-right of the map, collapsible) */
-.zlc-legend { position: absolute; top: 64px; right: 14px; z-index: 600; width: 192px;
+.zlc-legend { position: absolute; top: 14px; right: 14px; z-index: 600; width: 192px;
   background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: var(--radius-md);
   box-shadow: 0 6px 22px rgba(0,0,0,.14); overflow: hidden; }
 .zlc-leg-head { width: 100%; text-align: left; background: var(--color-surface-offset); border: none;

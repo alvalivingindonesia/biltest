@@ -147,6 +147,7 @@ window.I18N_ID = {
   'zoning.parcel_note': 'Data bidang indikatif — konfirmasi dengan pengecekan sertipikat notaris.',
   'zoning.cert_title': 'Sertifikat tanah (Bidang Tanah)',
   'zoning.view_bhumi': 'Lihat bidang di BHUMI (resmi)',
+  'zoning.bhumi_short': 'BHUMI',
   'zoning.bhumi_note': 'Membuka peta BHUMI ATR/BPN pada titik ini — ketuk bidangnya di sana untuk jenis hak, luas, dan NIB.',
   'zoning.report_title': 'Laporan Kelayakan Lokasi',
   'zoning.report_lead': 'Tim kami memverifikasi zonasi resmi dan sertipikat untuk lahan ini lalu mengirimkan laporan rapi yang dapat diunduh.',

@@ -98,18 +98,23 @@ function renderZoningCheck(view, params){
         '</div>' +
       '</section>' +
       '<section class="zlc-stage">' +
-        '<div class="zlc-mapwrap">' +
-          '<div class="zlc-searchbar">' +
-            '<input id="zlc-search" type="text" autocomplete="off" placeholder="'+zEsc(zT('zoning.search_ph','Search a place or landmark (e.g. Villa Ellya, Kuta)'))+'">' +
+        '<div class="zlc-mapcol">' +
+          '<div class="zlc-inputbar">' +
+            '<div class="zlc-search-wrap">' +
+              '<input id="zlc-search" type="text" autocomplete="off" placeholder="'+zEsc(zT('zoning.search_ph','Search a place or landmark (e.g. Villa Ellya, Kuta)'))+'">' +
+              '<div id="zlc-suggest" class="zlc-suggest" hidden></div>' +
+            '</div>' +
             '<button id="zlc-locate" class="zlc-iconbtn" title="'+zEsc(zT('zoning.use_location','Use my location'))+'" aria-label="'+zEsc(zT('zoning.use_location','Use my location'))+'">◎</button>' +
-            '<div id="zlc-suggest" class="zlc-suggest" hidden></div>' +
+            '<button id="zlc-coordbtn" class="zlc-chip zlc-coordbtn">'+zEsc(zT('zoning.enter_coords','Enter coordinates'))+'</button>' +
           '</div>' +
-          '<div id="zlc-map" class="zlc-map"></div>' +
-          '<div id="zlc-legend" class="zlc-legend"></div>' +
-          '<div class="zlc-maptools">' +
-            '<label class="zlc-chip zlc-toggle"><input type="checkbox" id="zlc-overlay-toggle" checked> '+zEsc(zT('zoning.overlay','Zoning colours'))+'</label>' +
-            '<button id="zlc-coordbtn" class="zlc-chip">'+zEsc(zT('zoning.enter_coords','Enter coordinates'))+'</button>' +
-            (meta.parcel_overlay ? '<label class="zlc-chip zlc-toggle"><input type="checkbox" id="zlc-parcels" checked> '+zEsc(zT('zoning.show_parcels','Land certificates'))+'</label>' : '') +
+          '<div id="zlc-resultstrip" class="zlc-resultstrip" hidden></div>' +
+          '<div class="zlc-mapwrap">' +
+            '<div id="zlc-map" class="zlc-map"></div>' +
+            '<div id="zlc-legend" class="zlc-legend"></div>' +
+            '<div class="zlc-maptools">' +
+              (meta.parcel_overlay ? '<label class="zlc-chip zlc-toggle zlc-tool-certs"><input type="checkbox" id="zlc-parcels" checked> '+zEsc(zT('zoning.show_parcels','Land certificates'))+'</label>' : '') +
+              '<label class="zlc-chip zlc-toggle zlc-tool-zoning"><input type="checkbox" id="zlc-overlay-toggle" checked> '+zEsc(zT('zoning.overlay','Zoning colours'))+'</label>' +
+            '</div>' +
           '</div>' +
         '</div>' +
         '<aside id="zlc-panel" class="zlc-panel">' +
@@ -359,7 +364,33 @@ function zRunCheck(){
     ZState.lastTriage = res.json.triage;
     panel.innerHTML = zRenderTriage(res.json.triage);
     zWireTriageActions();
+    zFillResultStrip(res.json.triage);
   });
+}
+
+/* Compact result above the map: the clicked coordinate, and to its right a box
+ * with the zoning type + a BHUMI link for further info. */
+function zFillResultStrip(tr){
+  var strip = document.getElementById('zlc-resultstrip');
+  if (!strip) return;
+  var lang = zLang();
+  var info = zStatusInfo(tr.buildability);
+  var name = lang === 'id' ? tr.name_id : tr.name_en;
+  var bhumiUrl = 'https://bhumi.atrbpn.go.id/peta?latitude=' + encodeURIComponent(tr.lat) + '&longitude=' + encodeURIComponent(tr.lng);
+  strip.innerHTML =
+    '<div class="zlc-rs-coord">' +
+      '<span class="zlc-rs-label">' + zEsc(zT('zoning.coords','Coordinates')) + '</span>' +
+      '<span class="zlc-rs-val">' + zEsc((+tr.lat).toFixed(5) + ', ' + (+tr.lng).toFixed(5)) + '</span>' +
+    '</div>' +
+    '<div class="zlc-rs-zone zlc-' + info.cls + '">' +
+      '<span class="zlc-rs-dot zlc-bigdot-' + info.cls + '"></span>' +
+      '<div class="zlc-rs-zonetext">' +
+        '<span class="zlc-rs-status">' + zEsc(zStatusLabel(tr.buildability)) + '</span>' +
+        '<span class="zlc-rs-zonename">' + zEsc(name) + '</span>' +
+      '</div>' +
+      '<a class="zlc-rs-bhumi" href="' + bhumiUrl + '" target="_blank" rel="noopener noreferrer" title="' + zEsc(zT('zoning.view_bhumi','View parcel on BHUMI (official)')) + '">' + zEsc(zT('zoning.bhumi_short','BHUMI')) + ' ↗</a>' +
+    '</div>';
+  strip.hidden = false;
 }
 
 function zRenderTriage(tr){

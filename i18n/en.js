@@ -150,6 +150,7 @@ window.I18N_EN = {
   'zoning.parcel_note': 'Indicative parcel data — confirm with a notary certificate check.',
   'zoning.cert_title': 'Land certificate (Bidang Tanah)',
   'zoning.view_bhumi': 'View parcel on BHUMI (official)',
+  'zoning.bhumi_short': 'BHUMI',
   'zoning.bhumi_note': 'Opens the ATR/BPN BHUMI map at this point — tap the plot there for its certificate type, area and NIB.',
   'zoning.report_title': 'Site Suitability Report',
   'zoning.report_lead': 'Our team verifies the official zoning and certificate for this exact plot and sends you a clean, downloadable report.',
