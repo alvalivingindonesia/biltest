@@ -359,10 +359,6 @@ function zRunCheck(){
     ZState.lastTriage = res.json.triage;
     panel.innerHTML = zRenderTriage(res.json.triage);
     zWireTriageActions();
-    // Best-effort parcel profile.
-    zGet('plot_profile', { lat: ZState.lat, lng: ZState.lng }).then(function(pr){
-      if (pr.json && pr.json.available && pr.json.profile) zRenderParcelInto(pr.json.profile);
-    });
   });
 }
 
@@ -401,8 +397,14 @@ function zRenderTriage(tr){
     if (cnote) html += '<p class="zlc-coverage">'+zEsc(cnote)+'</p>';
   }
 
-  // Parcel slot (filled async)
-  html += '<div id="zlc-parcel-slot"></div>';
+  // Land-certificate (parcel) details — deep-link to BHUMI's official record at
+  // this point (NIB / area / right-type from the source; no scraping/decryption).
+  var bhumiUrl = 'https://bhumi.atrbpn.go.id/peta?latitude=' + encodeURIComponent(tr.lat) + '&longitude=' + encodeURIComponent(tr.lng);
+  html += '<div class="zlc-parcel">'
+    + '<p class="zlc-parcel-h">' + zEsc(zT('zoning.cert_title','Land certificate (Bidang Tanah)')) + '</p>'
+    + '<a class="zlc-btn zlc-btn-ghost zlc-cert-link" href="' + bhumiUrl + '" target="_blank" rel="noopener noreferrer">' + zEsc(zT('zoning.view_bhumi','View parcel on BHUMI (official)')) + ' ↗</a>'
+    + '<p class="zlc-parcel-note">' + zEsc(zT('zoning.bhumi_note','Opens the ATR/BPN BHUMI map at this point — tap the plot there for its certificate type, area and NIB.')) + '</p>'
+    + '</div>';
 
   // CTAs
   html += '<div class="zlc-cta">' +
