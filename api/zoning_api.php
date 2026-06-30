@@ -453,25 +453,40 @@ case 'overlay': {
     $n = isset($_GET['n']) ? (float)$_GET['n'] : -8.0;
     if ($w > $e) { $t = $w; $w = $e; $e = $t; }
     if ($s > $n) { $t = $s; $s = $n; $n = $t; }
+    // Simplify geometry to the viewport scale and cap coordinates to ~1 m precision.
+    // Without this, a wide (desktop) view returned ~12 MB of full-resolution polygons:
+    // the heavy query starved the shared DB (so the concurrent `check` hung — details
+    // never loaded) and the giant payload froze the browser main thread (so parcels
+    // and the panel never rendered). Mobile's smaller bbox dodged it. Tolerance scales
+    // with the view span (Douglas–Peucker); ST_Simplify can null out tiny polys so we
+    // COALESCE back to the original geometry for those.
+    $span = max($e - $w, $n - $s);
+    $tol  = $span / 700;
+    if ($tol < 0.00002) $tol = 0.00002;
     $db = get_db();
     $poly = sprintf('POLYGON((%F %F,%F %F,%F %F,%F %F,%F %F))', $w, $s, $e, $s, $e, $n, $w, $n, $w, $s);
-    $sql = "SELECT p.class_key, c.name_en, c.name_id, c.buildability, ST_AsGeoJSON(p.geom) gj
+    $sql = "SELECT p.class_key, c.name_en, c.name_id, c.buildability,
+                   ST_AsGeoJSON(COALESCE(ST_Simplify(p.geom, ?), p.geom), 5) gj
             FROM zoning_landuse_polys p JOIN zoning_landuse_classes c ON c.class_key = p.class_key
             WHERE p.is_active = 1 AND MBRIntersects(p.geom, ST_GeomFromText(?, 0)) LIMIT 4000";
     $st = $db->prepare($sql);
-    $st->execute(array($poly));
-    $features = array();
+    $st->execute(array($tol, $poly));
+    // Stream the FeatureCollection, embedding the SQL-built GeoJSON geometry verbatim.
+    // Decoding then re-encoding it in PHP re-emitted every coordinate at full float
+    // precision (serialize_precision), ~4x-ing the payload — so we concatenate instead.
+    $parts = array();
     foreach ($st->fetchAll() as $r) {
-        $g = json_decode($r['gj'], true);
-        if (!$g) continue;
-        $features[] = array(
-            'type' => 'Feature',
-            'properties' => array('class_key' => $r['class_key'], 'name_en' => $r['name_en'], 'name_id' => $r['name_id'], 'buildability' => $r['buildability']),
-            'geometry' => $g,
-        );
+        if ($r['gj'] === null || $r['gj'] === '') continue;
+        $props = json_encode(array(
+            'class_key'    => $r['class_key'],
+            'name_en'      => $r['name_en'],
+            'name_id'      => $r['name_id'],
+            'buildability' => $r['buildability'],
+        ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $parts[] = '{"type":"Feature","properties":' . $props . ',"geometry":' . $r['gj'] . '}';
     }
-    json_out(array('type' => 'FeatureCollection', 'features' => $features));
-    break;
+    echo '{"type":"FeatureCollection","features":[' . implode(',', $parts) . ']}';
+    exit;
 }
 
 case 'save_plot': {
