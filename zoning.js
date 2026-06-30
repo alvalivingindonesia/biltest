@@ -105,16 +105,22 @@ function renderZoningCheck(view, params){
               '<div id="zlc-suggest" class="zlc-suggest" hidden></div>' +
             '</div>' +
             '<button id="zlc-locate" class="zlc-iconbtn" title="'+zEsc(zT('zoning.use_location','Use my location'))+'" aria-label="'+zEsc(zT('zoning.use_location','Use my location'))+'">◎</button>' +
+            '<button id="zlc-coordbtn" class="zlc-iconbtn" title="'+zEsc(zT('zoning.enter_coords','Enter coordinates'))+'" aria-label="'+zEsc(zT('zoning.enter_coords','Enter coordinates'))+'"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><circle cx="11" cy="11" r="1.7" fill="currentColor" stroke="none"/></svg></button>' +
+          '</div>' +
+          '<div id="zlc-coordbox" class="zlc-coordbox" hidden>' +
+            '<input id="zlc-coordinput" type="text" autocomplete="off" placeholder="'+zEsc(zT('zoning.coord_ph','lat, lng  (e.g. -8.890, 116.300)'))+'">' +
+            '<button id="zlc-coordgo" class="zlc-chip zlc-coordgo">'+zEsc(zT('zoning.go','Go'))+'</button>' +
           '</div>' +
           '<div class="zlc-controlbar">' +
             (meta.parcel_overlay ? '<label class="zlc-chip zlc-toggle"><input type="checkbox" id="zlc-parcels" checked> '+zEsc(zT('zoning.show_parcels','Land certificates'))+'</label>' : '') +
             '<label class="zlc-chip zlc-toggle"><input type="checkbox" id="zlc-overlay-toggle" checked> '+zEsc(zT('zoning.overlay','Zoning colours'))+'</label>' +
-            '<button id="zlc-coordbtn" class="zlc-chip zlc-coordbtn">'+zEsc(zT('zoning.enter_coords','Enter coordinates'))+'</button>' +
           '</div>' +
           '<div class="zlc-mapwrap">' +
             '<div id="zlc-map" class="zlc-map"></div>' +
             '<div id="zlc-legend" class="zlc-legend"></div>' +
+            '<button id="zlc-detailbar" class="zlc-detailbar" type="button">'+zEsc(zT('zoning.detail','Detail'))+' <span class="zlc-detail-caret">▾</span></button>' +
           '</div>' +
+          '<p class="zlc-attrib">'+zEsc(zT('zoning.attrib','Imagery © Esri · Land parcels © ATR/BPN (BHUMI) · Leaflet'))+'</p>' +
         '</div>' +
         '<aside id="zlc-panel" class="zlc-panel">' +
           '<div class="zlc-panel-empty">' +
@@ -159,7 +165,9 @@ function zInitMap(meta){
   // fadeAnimation:false — the tile fade-in can stick at opacity:0 when the map is
   // initialised via the deferred/invalidateSize path (SPA), leaving tiles loaded
   // but invisible. Disabling the fade paints them at full opacity immediately.
-  var map = L.map(el, { zoomControl:true, attributionControl:true, fadeAnimation:false }).setView(meta.map.center, meta.map.zoom);
+  // attributionControl:false — the on-map credit bar is replaced by a "Detail" bar;
+  // attribution is shown as a small line under the map instead (zlc-attrib).
+  var map = L.map(el, { zoomControl:true, attributionControl:false, fadeAnimation:false }).setView(meta.map.center, meta.map.zoom);
   ZState.map = map;
   // Dedicated pane so parcel boundaries sit ABOVE the zoning colour fills
   // (overlayPane z400) but BELOW the marker (markerPane z600).
@@ -281,14 +289,29 @@ function zWireInputs(meta){
   });
 
   var coordBtn = document.getElementById('zlc-coordbtn');
-  if (coordBtn) coordBtn.addEventListener('click', function(){
-    var v = window.prompt(zT('zoning.coord_prompt','Enter coordinates as "lat, lng" (e.g. -8.890, 116.300)'));
-    if (!v) return;
+  var coordBox = document.getElementById('zlc-coordbox');
+  var coordInput = document.getElementById('zlc-coordinput');
+  function zSubmitCoords(){
+    var v = coordInput ? coordInput.value.trim() : '';
     var m = v.split(/[, ]+/).filter(Boolean);
-    if (m.length<2) { zToast(zT('zoning.coord_bad','Could not read those coordinates'),'error'); return; }
-    var lat=parseFloat(m[0]), lng=parseFloat(m[1]);
-    if (!isFinite(lat)||!isFinite(lng)) { zToast(zT('zoning.coord_bad','Could not read those coordinates'),'error'); return; }
+    var lat = parseFloat(m[0]), lng = parseFloat(m[1]);
+    if (m.length < 2 || !isFinite(lat) || !isFinite(lng)) { zToast(zT('zoning.coord_bad','Could not read those coordinates'),'error'); return; }
+    if (coordBox) coordBox.hidden = true;
     zSelectPoint(lat, lng, null, true);
+  }
+  if (coordBtn && coordBox) coordBtn.addEventListener('click', function(){
+    coordBox.hidden = !coordBox.hidden;
+    coordBtn.classList.toggle('zlc-iconbtn-on', !coordBox.hidden);
+    if (!coordBox.hidden && coordInput) coordInput.focus();
+  });
+  if (coordInput) coordInput.addEventListener('keydown', function(e){ if (e.key === 'Enter') { e.preventDefault(); zSubmitCoords(); } });
+  var coordGo = document.getElementById('zlc-coordgo');
+  if (coordGo) coordGo.addEventListener('click', zSubmitCoords);
+
+  var detailBar = document.getElementById('zlc-detailbar');
+  if (detailBar) detailBar.addEventListener('click', function(){
+    var panel = document.getElementById('zlc-panel');
+    if (panel && panel.scrollIntoView) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
   var ov = document.getElementById('zlc-overlay-toggle');
@@ -390,11 +413,20 @@ function zRenderTriage(tr){
   var summary = lang==='id' ? tr.summary_id : tr.summary_en;
   var prov = tr.provenance || {};
   var disc = lang==='id' ? (meta.disclaimer_id||'') : (meta.disclaimer_en||'');
+  // WhatsApp button (sits to the RIGHT of the classification; replaces the floating FAB on this page).
+  var biz = (meta.contact_whatsapp || '').replace(/\D/g, '');
+  var waBtn = '';
+  if (biz) {
+    var waMsg = 'Hi, I have a question about a plot in Lombok.\n' + zStatusLabel(tr.buildability) + ' — ' + name + '\nLocation: ' + (+tr.lat).toFixed(5) + ', ' + (+tr.lng).toFixed(5);
+    var waUrl = 'https://wa.me/' + biz + '?text=' + encodeURIComponent(waMsg);
+    waBtn = '<a class="zlc-wa-btn" href="' + waUrl + '" target="_blank" rel="noopener noreferrer" title="' + zEsc(zT('zoning.wa_aria','Ask about this plot on WhatsApp')) + '" aria-label="' + zEsc(zT('zoning.wa_aria','Ask about this plot on WhatsApp')) + '"><svg viewBox="0 0 32 32" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M16 .4C7.4.4.4 7.4.4 16c0 2.8.7 5.4 2 7.8L.3 31.6l8-2.1c2.3 1.2 4.9 1.9 7.7 1.9 8.6 0 15.6-7 15.6-15.6S24.6.4 16 .4zm0 28.2c-2.5 0-4.8-.7-6.8-1.8l-.5-.3-4.8 1.3 1.3-4.7-.3-.5c-1.3-2-2-4.4-2-6.9C2.6 8.6 8.6 2.6 16 2.6S29.4 8.6 29.4 16 23.4 28.6 16 28.6zm7.4-9.6c-.4-.2-2.4-1.2-2.7-1.3-.4-.1-.6-.2-.9.2-.3.4-1 1.3-1.2 1.5-.2.2-.4.3-.8.1-.4-.2-1.7-.6-3.2-2-1.2-1.1-2-2.4-2.2-2.8-.2-.4 0-.6.2-.8.2-.2.4-.4.5-.7.2-.2.2-.4.4-.6.1-.3 0-.5 0-.7-.1-.2-.9-2.1-1.2-2.9-.3-.8-.6-.7-.9-.7h-.7c-.2 0-.6.1-1 .5-.3.4-1.3 1.3-1.3 3.1s1.3 3.6 1.5 3.9c.2.3 2.6 4 6.3 5.6.9.4 1.6.6 2.1.8.9.3 1.7.2 2.3.1.7-.1 2.1-.9 2.4-1.7.3-.8.3-1.5.2-1.7-.1-.1-.3-.2-.7-.4z"/></svg></a>';
+  }
   var html = '<div class="zlc-result zlc-'+info.cls+'">';
   html += '<div class="zlc-light">' +
             '<span class="zlc-bigdot zlc-bigdot-'+info.cls+'"></span>' +
-            '<div><p class="zlc-status">'+zEsc(zStatusLabel(tr.buildability))+'</p>' +
+            '<div class="zlc-light-text"><p class="zlc-status">'+zEsc(zStatusLabel(tr.buildability))+'</p>' +
             '<p class="zlc-class">'+zEsc(name)+(tr.raw_zona?(' <span class="zlc-raw">· '+zEsc(tr.raw_zona)+'</span>'):'')+'</p></div>' +
+            waBtn +
           '</div>';
   if (summary) html += '<p class="zlc-summary">'+zEsc(summary)+'</p>';
 
