@@ -452,19 +452,18 @@ function zRenderTriage(tr){
     if (cnote) html += '<p class="zlc-coverage">'+zEsc(cnote)+'</p>';
   }
 
-  // Land-certificate (parcel) details.
-  // NOTE: BHUMI's public map (bhumi.atrbpn.go.id/peta) CANNOT be deep-linked to a
-  // coordinate — it ignores lat/lng URL params (always opens at the national default,
-  // i.e. Jakarta) and its search box rejects raw coordinates. So the reliable
-  // "go straight to this plot" action uses Google Maps (?query=lat,lng centres on the
-  // point); BHUMI is kept as a clearly-labelled link to the official cadastral portal.
+  // Land-certificate (parcel) details — deep-link to BHUMI's official map AT this plot.
+  // BHUMI's coordinate-search reads latitude + longitude + recenter=1 from the URL and
+  // calls map.flyTo() to the point on load (decompiled from its bundle, chunk 5147:
+  // `if (recenter==="1" && latitude && longitude) map.flyTo({center:{lat,lon}})`).
+  // The recenter=1 flag is REQUIRED — plain lat/lng is ignored (defaults to Jakarta).
+  var bhumiUrl = 'https://bhumi.atrbpn.go.id/peta?latitude=' + encodeURIComponent(tr.lat) + '&longitude=' + encodeURIComponent(tr.lng) + '&recenter=1';
   var gmapUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent((+tr.lat) + ',' + (+tr.lng));
-  var bhumiUrl = 'https://bhumi.atrbpn.go.id/peta';
   html += '<div class="zlc-parcel">'
     + '<p class="zlc-parcel-h">' + zEsc(zT('zoning.cert_title','Land certificate (Bidang Tanah)')) + '</p>'
-    + '<a class="zlc-btn zlc-btn-ghost zlc-cert-link" href="' + gmapUrl + '" target="_blank" rel="noopener noreferrer">' + zEsc(zT('zoning.view_gmaps','Open this plot in Google Maps')) + ' ↗</a>'
-    + '<p class="zlc-parcel-note">' + zEsc(zT('zoning.cert_note','Land-certificate boundaries are shown on the map above (the "Land certificates" layer). For the official record — certificate type, area and NIB — open the ATR/BPN BHUMI portal and search this area.')) + '</p>'
-    + '<a class="zlc-cert-bhumi" href="' + bhumiUrl + '" target="_blank" rel="noopener noreferrer">' + zEsc(zT('zoning.bhumi_portal','Official ATR/BPN cadastral portal (BHUMI)')) + ' ↗</a>'
+    + '<a class="zlc-btn zlc-btn-ghost zlc-cert-link" href="' + bhumiUrl + '" target="_blank" rel="noopener noreferrer">' + zEsc(zT('zoning.view_bhumi','View parcel on BHUMI (official)')) + ' ↗</a>'
+    + '<p class="zlc-parcel-note">' + zEsc(zT('zoning.bhumi_note','Opens the ATR/BPN BHUMI map at this point — tap the plot there for its certificate type, area and NIB.')) + '</p>'
+    + '<a class="zlc-cert-alt" href="' + gmapUrl + '" target="_blank" rel="noopener noreferrer">' + zEsc(zT('zoning.view_gmaps','Open this plot in Google Maps')) + ' ↗</a>'
     + '</div>';
 
   // CTAs
