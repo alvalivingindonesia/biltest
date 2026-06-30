@@ -55,6 +55,7 @@
 
 /* Inline coordinate-entry box (toggled by the magnifier+dot button) */
 .zlc-coordbox { display: flex; gap: 8px; align-items: center; margin: 0 0 12px; animation: zlc-fade .3s var(--zlc-ease); }
+.zlc-coordbox[hidden] { display: none; } /* the display:flex above otherwise overrides the hidden attribute */
 .zlc-coordbox input { flex: 1; min-width: 0; height: 42px; box-sizing: border-box; border: 1px solid var(--color-border);
   background: var(--color-surface-2); color: var(--color-text); border-radius: var(--radius-full);
   padding: 0 16px; font-family: var(--font-body); font-size: .92rem; }
