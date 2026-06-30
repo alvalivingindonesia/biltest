@@ -460,9 +460,12 @@ case 'overlay': {
     // and the panel never rendered). Mobile's smaller bbox dodged it. Tolerance scales
     // with the view span (Douglas–Peucker); ST_Simplify can null out tiny polys so we
     // COALESCE back to the original geometry for those.
+    // Floor (~16 m) keeps zoomed-in views bounded too: without it a deep zoom applies
+    // ~no simplification and returns the whole over-detailed polygon (was ~1 MB). For an
+    // indicative colour overlay 16 m is plenty; the precise layer is "Land certificates".
     $span = max($e - $w, $n - $s);
     $tol  = $span / 700;
-    if ($tol < 0.00002) $tol = 0.00002;
+    if ($tol < 0.00015) $tol = 0.00015;
     $db = get_db();
     $poly = sprintf('POLYGON((%F %F,%F %F,%F %F,%F %F,%F %F))', $w, $s, $e, $s, $e, $n, $w, $n, $w, $s);
     $sql = "SELECT p.class_key, c.name_en, c.name_id, c.buildability,
