@@ -18,7 +18,7 @@
 var ZONING_API = '/api/zoning_api.php';
 var ZState = { meta: null, map: null, marker: null, parcelLayer: null, lat: null, lng: null,
                label: null, nib: null, lastTriage: null, csrf: '', geoTimer: null,
-               overlay: null, overlayOn: true, overlayTimer: null };
+               overlay: null, overlayOn: true, overlayTimer: null, overlayBounds: null, overlayLoading: false };
 
 /* Per-class fill colours for the zoning overlay. Temperature follows buildability
  * (greens = permitted, yellows/olives = restricted, reds = prohibited) while each
@@ -219,14 +219,29 @@ function zSettleMap(){
   }, 250);
 }
 
-/* Fetch + render the colour overlay for the current map view. */
-function zLoadOverlay(){
+/* Fetch + render the colour overlay for the current map view.
+ * Dedupes hard: only one load runs at a time (overlayLoading), and we skip refetching
+ * when the current view is already covered by what we loaded (overlayBounds). The
+ * settle watchdog (polls every 250ms for ~7s), flyTo and moveend can otherwise call
+ * this many times, and on shared hosting those concurrent overlay queries starve the
+ * PHP workers so the `check` request (the details panel) can't get through — which made
+ * the panel take ~20s on desktop. invalidateSize re-projects the existing overlay
+ * without a refetch, so size-settle never needs a reload. */
+function zLoadOverlay(force){
   if (!ZState.map || !ZState.overlayOn || typeof L === 'undefined') return;
-  var b = ZState.map.getBounds();
+  var view = ZState.map.getBounds();
+  if (!force) {
+    if (ZState.overlayLoading) return;
+    if (ZState.overlay && ZState.overlayBounds && ZState.overlayBounds.contains(view)) return;
+  }
+  ZState.overlayLoading = true;
+  var b = view.pad(0.12); // pad so small pans don't refetch
   zGet('overlay', { w: b.getWest(), s: b.getSouth(), e: b.getEast(), n: b.getNorth() }).then(function(res){
+    ZState.overlayLoading = false;
     if (!ZState.overlayOn) return;
+    ZState.overlayBounds = b;
     if (ZState.overlay) { ZState.map.removeLayer(ZState.overlay); ZState.overlay = null; }
-    var data = res.json;
+    var data = res && res.json;
     if (!data || !data.features || !data.features.length) return;
     // interactive:false — purely visual. Clicks pass through to the map handler
     // (no focus outline box, no tooltip rendered over the dropped pin).
@@ -239,7 +254,7 @@ function zLoadOverlay(){
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(function(){
       try { if (ZState.overlay) ZState.overlay.eachLayer(function(l){ if (l.redraw) l.redraw(); }); } catch(e){}
     });
-  });
+  }).catch(function(){ ZState.overlayLoading = false; });
 }
 
 /* Build the collapsible colour legend from the class taxonomy. */
@@ -319,8 +334,8 @@ function zWireInputs(meta){
     ZState.overlayOn = ov.checked;
     var leg = document.getElementById('zlc-legend');
     if (leg) leg.style.display = ov.checked ? '' : 'none';
-    if (ov.checked) { zLoadOverlay(); }
-    else if (ZState.overlay) { ZState.map.removeLayer(ZState.overlay); ZState.overlay = null; }
+    if (ov.checked) { zLoadOverlay(true); }
+    else if (ZState.overlay) { ZState.map.removeLayer(ZState.overlay); ZState.overlay = null; ZState.overlayBounds = null; }
   });
 
   var parcels = document.getElementById('zlc-parcels');
