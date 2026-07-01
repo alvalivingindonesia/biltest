@@ -136,6 +136,8 @@ function renderZoningCheck(view, params){
     // resolves, so #zlc-map is detached right now. Defer init until it is attached
     // and has a height, otherwise Leaflet initialises on a zero-size node (blank
     // map, no tiles) and the input handlers bind to nothing.
+    // Warm the overlay in parallel with map init so it's ready the instant the map is.
+    zPrefetchOverlay();
     zDeferMapInit(meta, params, 0);
   });
 }
@@ -183,7 +185,8 @@ function zInitMap(meta){
     L.tileLayer(meta.map.labels_url, { maxZoom: meta.map.max_zoom||19, opacity:0.9 }).addTo(map);
   }
   map.on('click', function(e){ zSelectPoint(e.latlng.lat, e.latlng.lng, null, false); });
-  map.on('moveend', function(){ if (!ZState.overlayOn) return; clearTimeout(ZState.overlayTimer); ZState.overlayTimer = setTimeout(zLoadOverlay, 400); });
+  // No moveend overlay reload: the whole-island overlay is loaded once and Leaflet
+  // re-projects it on pan/zoom. (Was a debounced refetch per move.)
   // The container reaches its final size only after layout/fonts settle; Leaflet
   // caches an intermediate size at init, which mis-projects the vector overlay.
   // A ResizeObserver re-invalidates on every size change (its moveend reloads the
@@ -219,42 +222,49 @@ function zSettleMap(){
   }, 250);
 }
 
-/* Fetch + render the colour overlay for the current map view.
- * Dedupes hard: only one load runs at a time (overlayLoading), and we skip refetching
- * when the current view is already covered by what we loaded (overlayBounds). The
- * settle watchdog (polls every 250ms for ~7s), flyTo and moveend can otherwise call
- * this many times, and on shared hosting those concurrent overlay queries starve the
- * PHP workers so the `check` request (the details panel) can't get through — which made
- * the panel take ~20s on desktop. invalidateSize re-projects the existing overlay
- * without a refetch, so size-settle never needs a reload. */
-function zLoadOverlay(force){
+/* The whole-island colour overlay is STATIC and small, so it's fetched ONCE, cached
+ * in-memory for the whole app lifetime (survives SPA route changes), and reused for
+ * every pan/zoom — Leaflet re-projects the existing layer, no refetch. The server sends
+ * it pre-simplified + browser-cacheable, so first paint is one fast request and repeat
+ * visits are instant. Rendered on a CANVAS renderer so ~219 polygons never DOM-thrash. */
+var ZOverlayData = null;      // parsed FeatureCollection, cached across navigations
+var ZOverlayFetching = null;  // in-flight promise so parallel callers share one request
+
+function zFetchOverlay(){
+  if (ZOverlayData) return Promise.resolve(ZOverlayData);
+  if (ZOverlayFetching) return ZOverlayFetching;
+  ZOverlayFetching = zGet('overlay').then(function(res){
+    ZOverlayFetching = null;
+    ZOverlayData = (res && res.json) || null;
+    return ZOverlayData;
+  }).catch(function(){ ZOverlayFetching = null; return null; });
+  return ZOverlayFetching;
+}
+
+/* Warm the overlay data in parallel with map init so it's ready the moment the map is. */
+function zPrefetchOverlay(){ zFetchOverlay().then(function(){ if (ZState.overlayOn) zLoadOverlay(); }); }
+
+function zRenderOverlay(){
+  if (!ZState.map || !ZState.overlayOn || typeof L === 'undefined' || !ZOverlayData) return;
+  if (ZState.overlay) return; // already on the map
+  var data = ZOverlayData;
+  if (!data.features || !data.features.length) return;
+  // Canvas renderer: draws all polygons on one <canvas> (no per-feature DOM nodes),
+  // so rendering the whole island is cheap and never freezes the main thread.
+  // interactive:false — purely visual; clicks pass through to the map handler.
+  ZState.overlay = L.geoJSON(data, {
+    renderer: L.canvas({ padding: 0.5 }),
+    interactive: false,
+    style: function(f){ var c = zClassColor(f.properties.class_key); return { fillColor: c, fillOpacity: 0.42, color: c, weight: 1, opacity: 0.55 }; }
+  }).addTo(ZState.map);
+  if (ZState.marker && ZState.marker.setZIndexOffset) ZState.marker.setZIndexOffset(1000);
+}
+
+function zLoadOverlay(){
   if (!ZState.map || !ZState.overlayOn || typeof L === 'undefined') return;
-  var view = ZState.map.getBounds();
-  if (!force) {
-    if (ZState.overlayLoading) return;
-    if (ZState.overlay && ZState.overlayBounds && ZState.overlayBounds.contains(view)) return;
-  }
-  ZState.overlayLoading = true;
-  var b = view.pad(0.12); // pad so small pans don't refetch
-  zGet('overlay', { w: b.getWest(), s: b.getSouth(), e: b.getEast(), n: b.getNorth() }).then(function(res){
-    ZState.overlayLoading = false;
-    if (!ZState.overlayOn) return;
-    ZState.overlayBounds = b;
-    if (ZState.overlay) { ZState.map.removeLayer(ZState.overlay); ZState.overlay = null; }
-    var data = res && res.json;
-    if (!data || !data.features || !data.features.length) return;
-    // interactive:false — purely visual. Clicks pass through to the map handler
-    // (no focus outline box, no tooltip rendered over the dropped pin).
-    ZState.overlay = L.geoJSON(data, {
-      interactive: false,
-      style: function(f){ var c = zClassColor(f.properties.class_key); return { fillColor: c, fillOpacity: 0.42, color: c, weight: 1, opacity: 0.55 }; }
-    }).addTo(ZState.map);
-    if (ZState.marker && ZState.marker.setZIndexOffset) ZState.marker.setZIndexOffset(1000);
-    // Nudge a repaint so the freshly-added vector paths composite immediately.
-    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(function(){
-      try { if (ZState.overlay) ZState.overlay.eachLayer(function(l){ if (l.redraw) l.redraw(); }); } catch(e){}
-    });
-  }).catch(function(){ ZState.overlayLoading = false; });
+  if (ZState.overlay) return;              // rendered already
+  if (ZOverlayData) { zRenderOverlay(); return; }
+  zFetchOverlay().then(function(){ zRenderOverlay(); });
 }
 
 /* Build the collapsible colour legend from the class taxonomy. */
@@ -334,8 +344,8 @@ function zWireInputs(meta){
     ZState.overlayOn = ov.checked;
     var leg = document.getElementById('zlc-legend');
     if (leg) leg.style.display = ov.checked ? '' : 'none';
-    if (ov.checked) { zLoadOverlay(true); }
-    else if (ZState.overlay) { ZState.map.removeLayer(ZState.overlay); ZState.overlay = null; ZState.overlayBounds = null; }
+    if (ov.checked) { zLoadOverlay(); }
+    else if (ZState.overlay) { ZState.map.removeLayer(ZState.overlay); ZState.overlay = null; }
   });
 
   var parcels = document.getElementById('zlc-parcels');

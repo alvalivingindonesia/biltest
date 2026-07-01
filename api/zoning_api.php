@@ -445,38 +445,24 @@ case 'plot_profile': {
 }
 
 case 'overlay': {
-    // Colour-overlay layer: zoning polygons (as GeoJSON) intersecting the map view.
+    // Colour-overlay layer: ALL zoning polygons as GeoJSON. The dataset is static and
+    // small, so we serve the whole island from the pre-simplified, pre-serialised
+    // `gj_display` column (built once by migration/ingest at ~44 m tolerance, precision
+    // 5) — no per-request ST_Simplify / ST_AsGeoJSON, no bbox spatial op. The client
+    // loads this ONCE and reuses it for every pan/zoom, and the browser caches it, so
+    // repeat visits and in-session re-navigations are instant. (History: an earlier
+    // per-request full-resolution query returned ~12 MB and starved the shared DB.)
     if (!sec_rate_ok('zoning_overlay', $ip, 120, 60)) json_error(429, 'rate_limited');
-    $w = isset($_GET['w']) ? (float)$_GET['w'] : 115.7;
-    $s = isset($_GET['s']) ? (float)$_GET['s'] : -9.3;
-    $e = isset($_GET['e']) ? (float)$_GET['e'] : 117.2;
-    $n = isset($_GET['n']) ? (float)$_GET['n'] : -8.0;
-    if ($w > $e) { $t = $w; $w = $e; $e = $t; }
-    if ($s > $n) { $t = $s; $s = $n; $n = $t; }
-    // Simplify geometry to the viewport scale and cap coordinates to ~1 m precision.
-    // Without this, a wide (desktop) view returned ~12 MB of full-resolution polygons:
-    // the heavy query starved the shared DB (so the concurrent `check` hung — details
-    // never loaded) and the giant payload froze the browser main thread (so parcels
-    // and the panel never rendered). Mobile's smaller bbox dodged it. Tolerance scales
-    // with the view span (Douglas–Peucker); ST_Simplify can null out tiny polys so we
-    // COALESCE back to the original geometry for those.
-    // Floor (~16 m) keeps zoomed-in views bounded too: without it a deep zoom applies
-    // ~no simplification and returns the whole over-detailed polygon (was ~1 MB). For an
-    // indicative colour overlay 16 m is plenty; the precise layer is "Land certificates".
-    $span = max($e - $w, $n - $s);
-    $tol  = $span / 700;
-    if ($tol < 0.00015) $tol = 0.00015;
     $db = get_db();
-    $poly = sprintf('POLYGON((%F %F,%F %F,%F %F,%F %F,%F %F))', $w, $s, $e, $s, $e, $n, $w, $n, $w, $s);
+    // COALESCE fallback keeps it correct if a freshly-ingested row hasn't had gj_display
+    // computed yet (recanonicalize/ingest should populate it; this just degrades to slow).
     $sql = "SELECT p.class_key, c.name_en, c.name_id, c.buildability,
-                   ST_AsGeoJSON(COALESCE(ST_Simplify(p.geom, ?), p.geom), 5) gj
+                   COALESCE(p.gj_display, ST_AsGeoJSON(COALESCE(ST_Simplify(p.geom,0.0004), p.geom),5)) gj
             FROM zoning_landuse_polys p JOIN zoning_landuse_classes c ON c.class_key = p.class_key
-            WHERE p.is_active = 1 AND MBRIntersects(p.geom, ST_GeomFromText(?, 0)) LIMIT 4000";
-    $st = $db->prepare($sql);
-    $st->execute(array($tol, $poly));
-    // Stream the FeatureCollection, embedding the SQL-built GeoJSON geometry verbatim.
-    // Decoding then re-encoding it in PHP re-emitted every coordinate at full float
-    // precision (serialize_precision), ~4x-ing the payload — so we concatenate instead.
+            WHERE p.is_active = 1 LIMIT 4000";
+    $st = $db->query($sql);
+    // Concatenate — embedding the stored GeoJSON verbatim. (A json_decode/json_encode
+    // round-trip re-emitted every coordinate at full float precision, ~4x-ing the payload.)
     $parts = array();
     foreach ($st->fetchAll() as $r) {
         if ($r['gj'] === null || $r['gj'] === '') continue;
@@ -488,6 +474,8 @@ case 'overlay': {
         ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $parts[] = '{"type":"Feature","properties":' . $props . ',"geometry":' . $r['gj'] . '}';
     }
+    // Static data → let the browser + any proxy cache it (repeat loads are instant).
+    header('Cache-Control: public, max-age=3600');
     echo '{"type":"FeatureCollection","features":[' . implode(',', $parts) . ']}';
     exit;
 }

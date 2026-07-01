@@ -11,6 +11,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Work+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
+  <!-- Speed up cross-origin connections: Leaflet CDN (every page) + zoning-map satellite tiles -->
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <link rel="dns-prefetch" href="https://server.arcgisonline.com">
+
   <!-- Stylesheets -->
   <link rel="stylesheet" href="./base.css">
   <link rel="stylesheet" href="./style.css">
@@ -388,7 +392,7 @@
           crossorigin="anonymous" referrerpolicy="no-referrer"></script><!-- Leaflet (Zoning & Land Check, ADR 0013) -->
   <script src="./app.js"></script>
   <script src="./drab.js?v=20260617"></script><!-- Detailed RAB Generator (ADR 0012). Bump ?v= on each drab.js deploy to bust cache. -->
-  <script src="./zoning.js?v=20260630e"></script><!-- Zoning & Land Check (ADR 0013). Bump ?v= on each zoning.js deploy. -->
+  <script src="./zoning.js?v=20260630f"></script><!-- Zoning & Land Check (ADR 0013). Bump ?v= on each zoning.js deploy. -->
 
   <!-- ===================== NAV SCROLL BEHAVIOR ===================== -->
   <script>
