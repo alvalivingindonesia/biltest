@@ -439,13 +439,24 @@ function lc_is_price_surprise($old_idr, $new_idr) {
 // phrasing so we can recover a trustworthy total when the card price failed.
 // ─────────────────────────────────────────────────────────────────────
 
-/** Parse one Indonesian-formatted number literal ("1,9", "1.900", "9.67"). */
+/** Parse one number literal in Indonesian ("1,9", "1.900", "9.67") OR US
+ *  ("35,000,000", "1,234.5") notation. The rightmost separator is the decimal
+ *  point when both appear; a lone comma is decimal only when 1-2 digits follow. */
 function lc_parse_id_number($s) {
     $s = trim((string)$s);
     if ($s === '') return 0.0;
-    if (strpos($s, ',') !== false) {
-        // comma = decimal, dots = thousands  ("1.234,5" -> 1234.5)
-        return (float) str_replace(',', '.', str_replace('.', '', $s));
+    $hasC = strpos($s, ',') !== false;
+    $hasD = strpos($s, '.') !== false;
+    if ($hasC && $hasD) {
+        // Both separators present: the rightmost is the decimal, the other groups thousands.
+        return (strrpos($s, ',') > strrpos($s, '.'))
+            ? (float) str_replace(',', '.', str_replace('.', '', $s))   // "1.234.567,89"
+            : (float) str_replace(',', '', $s);                          // "1,234,567.89"
+    }
+    if ($hasC) {
+        $after = substr($s, strrpos($s, ',') + 1);
+        if (substr_count($s, ',') === 1 && strlen($after) <= 2) return (float) str_replace(',', '.', $s); // decimal "1,9"
+        return (float) str_replace(',', '', $s);                          // US thousands "35,000,000"
     }
     $dots = substr_count($s, '.');
     if ($dots === 1) {
@@ -468,7 +479,10 @@ function lc_prices_from_text($text) {
     $t = ' ' . mb_strtolower((string)$text, 'UTF-8') . ' ';
     $t = str_replace(array("\n", "\r", "\t"), ' ', $t);
     $out = array();
-    $re = '/(rp\.?\s*)?([0-9][0-9.,]*)\s*(miliar|milyar|juta|jt|ribu|rb|m(?![²2a-z0-9]))?\s*(\/\s*are|per\s+are|\/\s*m2|\/\s*m²|per\s+m2|per\s+m²)?/u';
+    // Allow a currency word (IDR/Rp/Rupiah) to sit BETWEEN the number and its
+    // per-unit — "35,000,000 IDR per Are" — else the unit is lost and the figure
+    // reads as a plain (sub-threshold) number and gets dropped.
+    $re = '/(rp\.?\s*)?([0-9][0-9.,]*)\s*(miliar|milyar|juta|jt|ribu|rb|m(?![²2a-z0-9]))?\s*(?:idr|rp|rupiah)?\s*(\/\s*are|per\s+are|\/\s*m2|\/\s*m²|per\s+m2|per\s+m²)?/u';
     if (!preg_match_all($re, $t, $ms, PREG_SET_ORDER)) return $out;
     $mult = array('miliar'=>1e9,'milyar'=>1e9,'m'=>1e9,'juta'=>1e6,'jt'=>1e6,'ribu'=>1e3,'rb'=>1e3);
     foreach ($ms as $m) {
@@ -480,8 +494,9 @@ function lc_prices_from_text($text) {
         if ($val <= 0) continue;
         $amount = $scale !== '' ? $val * $mult[$scale] : $val;
         $amount = (int)round($amount);
-        // qualify as a price (not a size/bedroom/etc.)
-        $qualifies = ($scale !== '') || $hasRp || ($amount >= 50000000);
+        // qualify as a price (not a size/bedroom/etc.). An explicit per-are/per-m²
+        // unit qualifies too — sizes never carry a "per"/"/" unit.
+        $qualifies = ($scale !== '') || $hasRp || ($perun !== '') || ($amount >= 50000000);
         if (!$qualifies || $amount < 1000000) continue;
         $unit = (stripos($perun, 'are') !== false) ? 'per_are'
               : ((stripos($perun, 'm') !== false) ? 'per_sqm' : 'total');
@@ -519,6 +534,66 @@ function lc_best_total_from_text($text, $size_sqm = null) {
     }
     if ($best) unset($best['score']);
     return $best;
+}
+
+/** Minimum plot size in ARE stated in a description: "Min 20 Are", "minimal 20
+ *  are", "mulai dari 20 are", "mulai 10 are", or the same in m² ("mulai dari
+ *  2000 m2" → 20). Returns a float are count, or null. */
+function lc_min_are_from_text($text) {
+    $t = ' ' . mb_strtolower((string)$text, 'UTF-8') . ' ';
+    // minimum expressed directly in are
+    if (preg_match('/\b(?:min(?:imal|imum)?\.?|mulai(?:\s+dari)?)\s*([0-9][0-9.,]*)\s*are\b/u', $t, $m)) {
+        $a = lc_parse_id_number($m[1]);
+        if ($a >= 1) return $a;
+    }
+    // minimum expressed in m² → convert to are
+    if (preg_match('/\b(?:min(?:imal|imum)?\.?|mulai(?:\s+dari)?)\s*([0-9][0-9.,]*)\s*(?:m2|m²)\b/u', $t, $m)) {
+        $sqm = lc_parse_id_number($m[1]);
+        if ($sqm >= 100) return $sqm / 100.0;
+    }
+    return null;
+}
+
+/**
+ * PER-ARE DEVELOPMENT TRAP. A "land plots" development priced PER ARE ("From
+ * 35,000,000 IDR per Are, Min 20 Are") whose structured land size is a NOMINAL
+ * 1-are stub (100 m²). Read as a total, the per-are figure understates the price
+ * ~20× and the card shows a tiny cheap plot. Recover the realistic MINIMUM total
+ * and plot size from the description.
+ *
+ * Deliberately narrow so it never touches a genuine small plot (#903) or a
+ * null-size development: fires ONLY when the stored size is a nominal 1-2 are
+ * (0 < sqm ≤ 200), the text states a PER-ARE price, AND a minimum plot area.
+ * Returns array(total, per_sqm, land_sqm, min_are, per_are, label) or null.
+ */
+function lc_per_are_development($desc, $stored_land_sqm) {
+    if ($desc === null || trim((string)$desc) === '') return null;
+    $sz = ($stored_land_sqm === null || $stored_land_sqm === '') ? null : (int)$stored_land_sqm;
+    if ($sz === null || $sz <= 0 || $sz > 200) return null;   // only a nominal 1-2 are stub
+
+    $per_are = null;
+    foreach (lc_prices_from_text($desc) as $c) {
+        if ($c['unit'] === 'per_are') { $per_are = $c['amount']; break; }
+    }
+    if ($per_are === null || $per_are <= 0) return null;
+
+    $min_are = lc_min_are_from_text($desc);
+    if ($min_are === null || $min_are < 1) return null;
+
+    $total   = (int)round($per_are * $min_are);
+    $per_sqm = (int)round($per_are / 100);
+    // both the total and the per-m² must be sane before we overwrite anything.
+    if ($total < 50000000 || $total > LC_TOTAL_HARD_MAX) return null;
+    if ($per_sqm < LC_PERM2_MIN || $per_sqm > LC_PERM2_HARD_MAX) return null;
+
+    return array(
+        'total'    => $total,
+        'per_sqm'  => $per_sqm,
+        'land_sqm' => (int)round($min_are * 100),
+        'min_are'  => $min_are,
+        'per_are'  => $per_are,
+        'label'    => 'From',
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────

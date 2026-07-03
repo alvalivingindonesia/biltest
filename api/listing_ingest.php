@@ -509,6 +509,20 @@ function handle_post_listing() {
         }
     }
 
+    // Per-are development trap ("From X per Are, Min N Are" with a nominal 1-are
+    // stub): recover the realistic minimum total + plot size from the description,
+    // BEFORE the floor guard (whose per-are rescale is a no-op when land = 1 are).
+    if ($is_land) {
+        $dev = lc_per_are_development($desc, $land_sqm);
+        if ($dev) {
+            $price['price_idr'] = $dev['total'];
+            $price['price_idr_per_sqm'] = $dev['per_sqm'];
+            $price['price_label'] = $dev['label'];   // 'From' (minimum-plot entry price)
+            $price['flagged'] = 0;
+            $land_sqm = $dev['land_sqm'];             // replace the nominal 1-are stub with the real minimum
+        }
+    }
+
     // Final floor: a real property total is never below ~$10k USD. If it is, the
     // stored figure is almost certainly a per-are (or, under $100, per-m²) price —
     // rescale land by its size; null+flag anything that can't be rescaled.
