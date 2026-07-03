@@ -555,15 +555,23 @@ function lc_min_are_from_text($text) {
 }
 
 /**
- * PER-ARE DEVELOPMENT TRAP. A "land plots" development priced PER ARE ("From
- * 35,000,000 IDR per Are, Min 20 Are") whose structured land size is a NOMINAL
- * 1-are stub (100 m²). Read as a total, the per-are figure understates the price
- * ~20× and the card shows a tiny cheap plot. Recover the realistic MINIMUM total
- * and plot size from the description.
+ * PER-ARE DEVELOPMENT normaliser. A "land plots" development priced PER ARE
+ * ("From 35,000,000 IDR per Are, Min 20 Are") is easy to store wrong: the /Are
+ * unit often lives only in the description, so the per-are figure gets recorded
+ * as a Total (understated ~20× on a nominal 1-are stub — #1123), or a whole-
+ * parcel / inflated number is stored instead of the per-are × plot maths (#1111).
  *
- * Deliberately narrow so it never touches a genuine small plot (#903) or a
- * null-size development: fires ONLY when the stored size is a nominal 1-2 are
- * (0 < sqm ≤ 200), the text states a PER-ARE price, AND a minimum plot area.
+ * Requires BOTH an explicit per-are price AND a stated minimum plot ("min/mulai
+ * N are") in the text — that pairing is the reliable signature of a by-the-are
+ * development, so a bare "per are" mention (246 listings) never triggers it.
+ *
+ * Deliberately narrow to the UNAMBIGUOUS case: the stored size is a nominal 1-2
+ * are stub (0 < sqm ≤ 200), i.e. the per-are figure was recorded as a total on a
+ * fake 1-are plot. It does NOT try to "correct" larger-size listings — many say
+ * "mulai dari Rp X per are" (a FLOOR rate, premium plots cost more), so
+ * recomputing per_are × size would understate real plots. Those are handled as a
+ * reviewed data pass, not auto-rewritten at ingest.
+ *
  * Returns array(total, per_sqm, land_sqm, min_are, per_are, label) or null.
  */
 function lc_per_are_development($desc, $stored_land_sqm) {
@@ -582,7 +590,7 @@ function lc_per_are_development($desc, $stored_land_sqm) {
 
     $total   = (int)round($per_are * $min_are);
     $per_sqm = (int)round($per_are / 100);
-    // both the total and the per-m² must be sane before we overwrite anything.
+    // total + per-m² must be sane before we overwrite anything.
     if ($total < 50000000 || $total > LC_TOTAL_HARD_MAX) return null;
     if ($per_sqm < LC_PERM2_MIN || $per_sqm > LC_PERM2_HARD_MAX) return null;
 
