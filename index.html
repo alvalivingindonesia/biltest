@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Work+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
-  <!-- Speed up cross-origin connections: Leaflet CDN (every page) + zoning-map satellite tiles -->
+  <!-- Speed up cross-origin connections: Leaflet CDN (every page) + Esri satellite tiles (zoning + listings maps) -->
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
   <link rel="dns-prefetch" href="https://server.arcgisonline.com">
 
@@ -21,7 +21,7 @@
   <link rel="stylesheet" href="./drab.css?v=20260617"><!-- Detailed RAB Generator (ADR 0012). Bump ?v= on each drab.css deploy to bust cache. -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
         integrity="sha512-h9FcoyWjHcOcmEVkxOfTLnmZFWIH0iZhZT1H2TbOq55xssQGEJHEaIm+PgoUaZbRvQTNTluNOEfb1ZRy6D3BOw=="
-        crossorigin="anonymous" referrerpolicy="no-referrer"><!-- Leaflet (Zoning & Land Check, ADR 0013) -->
+        crossorigin="anonymous" referrerpolicy="no-referrer"><!-- Leaflet (Zoning ADR 0013 + Listings map ADR 0014) -->
   <link rel="stylesheet" href="./zoning.css?v=20260630d"><!-- Zoning & Land Check (ADR 0013). Bump ?v= on each zoning.css deploy. -->
 
   <!-- Open Graph -->
@@ -389,7 +389,7 @@
   <!-- ===================== APP SCRIPT ===================== -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"
           integrity="sha512-puJW3E/qXDqYp9IfhAI54BJEaWIfloJ7JWs7OeD5i6ruC9JZL1gERT1wjtwXFlh7CjE7ZJ+/vcRZRkIYIb6p4g=="
-          crossorigin="anonymous" referrerpolicy="no-referrer"></script><!-- Leaflet (Zoning & Land Check, ADR 0013) -->
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script><!-- Leaflet (Zoning ADR 0013 + Listings map ADR 0014) — must load before app.js -->
   <script src="./app.js"></script>
   <script src="./drab.js?v=20260617"></script><!-- Detailed RAB Generator (ADR 0012). Bump ?v= on each drab.js deploy to bust cache. -->
   <script src="./zoning.js?v=20260630f"></script><!-- Zoning & Land Check (ADR 0013). Bump ?v= on each zoning.js deploy. -->

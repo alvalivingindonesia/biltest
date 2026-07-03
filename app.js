@@ -1996,14 +1996,17 @@ function renderListingCard(l, index) {
 // =====================================================
 
 // =====================================================
-// INTERACTIVE LOMBOK MAP — hand-drawn SVG market regions
-// (docs/adr/0005). Regions are MARKET regions, not kabupaten;
-// geometry is an owned design asset, deliberately stylised.
+// INTERACTIVE LOMBOK MAP — real-world Leaflet satellite map
+// (docs/adr/0014, replaces the stylised SVG of ADR 0005).
+// Regions are MARKET regions, not kabupaten. Their boundaries
+// remain an owned design asset: real OSM coast + curated
+// interior splits, baked as 880×640 viewBox paths by
+// docs/tools/build_lombok_map.py and unprojected back to
+// lat/lng at runtime via LOMBOK_MAP.geo.
 // =====================================================
 
 const LOMBOK_MAP = {
   viewBox: [0, 0, 880, 640],
-  terrain: 'images/lombok-terrain.webp',
   island: [82.9, 17.8, 722.1, 604.4],
   outline: 'M88.9,454.4 L91.5,458.1 L90.8,462.9 L92.0,468.9 L95.3,473.6 L95.5,475.7 L97.5,475.3 L98.2,477.0 L96.2,479.5 L95.6,483.9 L94.1,484.7 L94.9,486.2 L92.7,488.3 L95.9,488.5 L94.7,489.3 L94.7,491.9 L93.3,492.9 L97.0,491.5 L98.4,492.5 L98.4,494.5 L96.9,495.9 L99.3,497.6 L100.1,499.7 L97.4,502.0 L98.1,502.1 L96.8,504.3 L101.6,502.5 L104.9,503.2 L106.7,501.5 L110.2,502.5 L110.6,505.3 L107.4,508.2 L107.5,511.1 L108.6,512.5 L113.4,510.4 L116.3,510.4 L117.1,511.7 L121.3,509.5 L122.1,510.8 L123.8,507.2 L126.9,506.6 L128.7,507.7 L130.4,512.1 L133.4,512.4 L135.7,515.9 L136.9,515.4 L137.9,513.2 L140.1,512.5 L145.1,517.9 L147.8,516.2 L152.6,516.4 L155.6,520.7 L155.5,522.8 L159.3,523.7 L159.5,524.8 L161.7,524.7 L160.9,528.1 L162.8,527.2 L165.3,528.4 L167.0,526.4 L167.1,522.7 L169.8,519.8 L177.0,518.7 L179.1,521.2 L186.5,525.1 L188.2,527.3 L188.9,529.1 L187.5,532.0 L188.2,532.4 L187.1,533.1 L189.6,534.3 L190.9,533.8 L191.1,535.7 L192.5,535.8 L192.1,537.0 L194.7,536.9 L198.0,540.3 L200.7,540.7 L201.4,542.0 L199.6,543.8 L200.3,545.0 L199.0,545.3 L199.1,546.5 L199.7,546.0 L200.8,547.5 L202.8,546.5 L203.1,548.0 L206.2,546.6 L207.9,547.5 L207.9,549.8 L206.5,551.0 L207.6,551.3 L207.4,554.9 L209.4,553.5 L214.2,553.4 L214.6,557.1 L216.1,557.5 L217.3,556.0 L218.8,557.0 L218.7,558.2 L220.4,558.3 L220.1,559.6 L221.2,560.4 L220.1,562.2 L221.1,563.7 L221.9,564.1 L224.2,561.9 L226.7,561.9 L228.0,563.8 L228.1,566.0 L226.4,569.1 L229.0,568.8 L230.4,570.3 L231.4,569.7 L232.8,574.1 L234.7,573.7 L236.2,574.9 L242.8,570.9 L244.0,573.0 L247.7,574.1 L246.6,571.4 L242.2,570.1 L241.7,567.8 L244.1,563.9 L248.5,564.9 L248.3,563.4 L250.6,561.7 L251.3,558.9 L246.2,552.8 L245.0,553.0 L243.1,551.2 L237.2,550.9 L237.1,546.2 L239.6,542.2 L244.4,539.5 L246.4,540.6 L248.8,538.6 L252.5,537.6 L256.2,538.4 L256.3,541.9 L258.2,543.6 L259.6,541.9 L263.5,541.0 L265.3,536.5 L266.8,535.1 L271.2,534.7 L271.3,533.3 L274.2,533.2 L277.7,533.8 L280.1,536.5 L280.1,533.7 L281.9,533.0 L285.5,535.6 L285.8,537.2 L288.5,535.9 L290.6,536.7 L291.8,540.6 L290.4,540.3 L289.9,541.2 L290.3,543.9 L284.1,544.7 L276.6,543.5 L277.1,544.1 L276.3,544.2 L275.3,543.6 L276.5,543.4 L275.8,542.5 L271.0,543.8 L269.3,546.0 L268.2,545.5 L264.4,547.8 L265.0,550.9 L266.6,552.6 L266.1,555.1 L268.1,560.4 L270.2,560.4 L274.2,558.1 L285.9,559.7 L287.7,566.2 L290.6,568.0 L289.9,559.9 L291.8,558.3 L291.2,557.3 L292.2,553.9 L295.1,550.5 L312.3,547.1 L313.5,547.4 L313.8,549.8 L315.1,550.1 L316.8,549.2 L319.1,545.9 L320.9,545.4 L327.8,545.8 L333.4,547.8 L338.7,547.7 L344.9,544.8 L346.3,542.6 L350.8,543.0 L350.5,544.0 L351.1,543.5 L353.2,545.1 L356.3,550.5 L355.5,552.5 L353.1,553.5 L352.9,555.6 L355.8,560.5 L355.3,562.3 L354.3,562.4 L354.2,564.6 L352.6,564.8 L352.3,567.0 L354.8,567.8 L355.0,569.4 L355.4,568.5 L356.9,568.6 L356.5,571.2 L357.4,570.5 L358.6,572.0 L357.8,575.3 L356.7,575.3 L357.1,576.5 L355.9,576.8 L356.5,578.0 L357.8,578.3 L358.5,576.5 L359.3,577.1 L360.6,575.8 L362.1,577.9 L361.2,579.6 L364.2,579.9 L365.3,582.8 L371.6,580.6 L374.5,583.2 L376.1,582.3 L376.3,580.8 L377.1,581.8 L378.0,581.0 L378.5,582.3 L379.2,580.7 L379.4,581.8 L379.8,581.3 L382.0,582.4 L381.5,583.5 L382.5,585.6 L382.6,583.9 L385.9,581.0 L384.7,579.7 L384.9,576.1 L386.3,573.8 L391.7,572.5 L397.3,572.8 L399.0,573.6 L399.5,576.3 L401.3,578.5 L403.0,579.0 L403.8,578.1 L404.3,579.1 L405.8,579.1 L408.1,577.5 L408.1,576.0 L406.6,574.4 L409.1,571.9 L413.0,574.9 L412.2,576.8 L413.4,579.5 L413.0,583.7 L415.2,584.9 L416.9,584.5 L417.1,585.5 L419.3,584.7 L421.6,581.5 L420.0,578.2 L420.2,576.4 L425.1,573.8 L427.3,574.0 L430.0,576.6 L433.1,577.5 L434.1,576.5 L435.2,578.1 L436.8,577.3 L437.0,578.5 L439.6,578.9 L440.1,580.0 L442.7,579.2 L446.2,582.1 L446.2,581.1 L447.4,580.9 L445.8,579.7 L445.0,576.5 L444.8,574.2 L446.2,571.3 L445.0,568.5 L446.4,566.9 L448.9,566.5 L457.5,569.2 L458.5,570.2 L457.8,571.3 L460.7,573.1 L461.0,574.9 L462.2,574.8 L463.6,576.8 L463.7,575.2 L464.9,574.3 L464.5,572.5 L463.2,572.3 L462.9,571.1 L464.0,570.0 L466.6,573.1 L465.0,576.6 L462.6,576.8 L462.7,579.2 L465.0,580.2 L466.1,577.8 L467.7,577.4 L476.6,578.6 L480.6,586.2 L480.3,588.0 L483.8,585.3 L481.4,584.3 L480.4,581.1 L483.4,578.3 L486.7,578.5 L487.4,580.6 L488.5,579.9 L489.9,581.4 L489.7,584.3 L488.1,584.9 L488.0,586.4 L489.2,587.5 L491.1,584.0 L494.2,585.0 L498.5,589.4 L497.2,592.6 L501.6,596.1 L505.1,593.0 L503.9,590.5 L502.5,590.5 L501.9,588.5 L503.5,584.4 L501.7,583.8 L500.3,580.1 L495.1,574.8 L495.5,573.4 L497.7,571.3 L501.6,569.7 L502.2,570.9 L505.8,572.1 L505.2,575.8 L507.3,576.0 L508.2,574.5 L510.7,575.5 L512.0,579.9 L512.2,579.1 L514.5,579.7 L518.0,578.5 L520.9,575.5 L519.3,573.6 L520.4,574.5 L522.2,572.6 L522.5,573.6 L521.2,574.1 L521.3,574.8 L526.2,575.2 L528.4,577.7 L528.8,579.6 L524.4,585.1 L521.8,586.9 L520.3,589.7 L517.3,591.6 L517.7,595.9 L519.5,598.4 L518.9,601.6 L522.4,607.9 L518.6,612.1 L518.3,614.3 L519.2,614.6 L519.4,612.8 L521.7,611.8 L523.3,612.3 L524.5,615.8 L527.7,616.2 L528.9,613.8 L529.9,614.4 L530.3,611.3 L533.0,611.7 L533.8,609.7 L536.1,609.4 L538.6,613.5 L538.4,610.4 L539.6,609.5 L539.9,610.4 L540.9,609.2 L538.9,607.5 L540.6,606.5 L540.2,604.2 L541.8,604.5 L541.2,602.9 L540.3,603.2 L540.7,600.4 L541.8,600.8 L540.4,599.6 L538.4,592.5 L538.7,590.3 L539.6,586.6 L541.7,583.5 L542.7,576.5 L547.4,571.5 L545.1,567.0 L543.2,566.7 L542.0,564.5 L542.6,560.9 L539.8,560.1 L542.6,559.2 L542.2,557.9 L539.7,557.3 L539.8,551.9 L538.2,550.1 L535.6,549.3 L532.3,544.7 L531.6,544.9 L533.4,544.1 L534.2,541.5 L533.3,539.9 L534.2,541.0 L536.1,538.3 L539.1,536.6 L544.5,536.9 L546.1,540.5 L544.6,543.6 L546.9,544.2 L546.1,541.4 L550.3,533.1 L551.1,526.4 L553.9,525.1 L554.2,522.5 L556.2,522.4 L556.8,521.0 L555.2,519.5 L556.5,515.7 L559.3,516.2 L561.3,514.2 L562.7,514.8 L564.6,511.8 L568.5,518.3 L571.0,518.7 L571.3,522.5 L572.8,524.8 L574.3,523.9 L575.5,525.7 L576.6,523.2 L573.9,522.2 L573.9,520.7 L574.3,520.0 L576.2,520.6 L569.1,511.0 L571.0,510.9 L571.8,512.5 L573.2,512.9 L575.5,517.1 L575.1,515.0 L577.4,515.0 L574.6,510.9 L579.4,515.2 L581.3,513.1 L581.5,508.5 L582.1,511.4 L581.0,516.1 L585.3,517.8 L590.8,514.6 L591.4,509.6 L593.5,509.6 L592.7,507.0 L595.3,505.7 L595.8,509.9 L597.8,509.2 L601.9,513.4 L603.2,513.3 L601.6,516.8 L597.7,516.8 L597.3,517.9 L597.7,520.1 L601.0,520.0 L601.6,523.6 L598.4,529.4 L596.9,530.1 L595.1,529.3 L594.5,531.6 L591.9,531.6 L590.0,532.9 L591.1,534.2 L595.4,535.2 L595.4,536.0 L591.3,536.7 L590.9,537.7 L588.9,537.3 L591.2,542.6 L589.3,549.5 L590.6,550.5 L590.7,552.5 L589.1,550.4 L587.6,550.6 L588.8,549.3 L586.6,549.5 L583.8,561.7 L582.8,562.4 L581.4,571.6 L579.3,573.3 L576.4,573.7 L575.9,576.6 L573.2,578.3 L572.5,581.1 L568.0,582.3 L568.0,584.7 L570.2,585.4 L571.6,587.4 L575.1,586.8 L584.0,589.0 L587.9,588.6 L588.1,587.3 L590.7,587.0 L594.8,588.4 L600.6,588.7 L602.6,586.8 L611.4,583.0 L618.9,581.2 L621.5,578.5 L622.3,573.7 L627.1,567.4 L628.0,565.3 L627.5,562.5 L628.7,560.3 L627.3,561.9 L626.1,561.4 L625.2,562.2 L625.5,566.0 L621.7,569.4 L622.3,570.2 L621.2,571.5 L619.3,569.6 L617.2,569.2 L617.4,569.9 L616.5,570.1 L616.7,567.8 L614.6,564.1 L615.5,563.4 L615.3,560.4 L614.4,559.5 L617.5,562.3 L618.8,566.1 L619.5,564.8 L620.5,565.0 L620.4,568.0 L622.3,568.3 L624.5,565.4 L622.8,562.1 L621.0,561.6 L621.7,560.6 L620.6,559.4 L621.3,558.6 L620.4,556.2 L620.9,555.7 L623.4,557.8 L625.0,561.3 L626.0,560.7 L625.2,559.2 L626.3,558.5 L625.9,556.7 L627.5,557.8 L628.1,557.1 L629.5,561.0 L630.2,558.2 L627.9,554.6 L629.2,553.8 L630.6,555.2 L629.2,548.9 L631.0,546.8 L632.3,550.1 L631.4,552.5 L632.3,555.7 L635.0,556.1 L637.6,557.9 L638.4,561.7 L640.4,561.1 L640.1,562.7 L636.5,565.4 L638.1,567.3 L636.0,567.3 L634.7,569.6 L635.8,569.6 L636.5,571.3 L638.5,570.6 L638.4,571.7 L639.3,572.0 L641.8,570.7 L644.2,570.9 L637.6,575.1 L639.0,578.4 L636.2,577.3 L632.1,581.3 L629.4,580.9 L628.6,582.1 L629.8,583.8 L632.3,584.2 L638.4,579.3 L642.3,578.8 L644.5,577.0 L644.4,575.9 L646.3,576.6 L647.5,575.3 L649.9,576.2 L650.4,574.3 L651.7,573.7 L654.0,574.5 L655.0,570.8 L657.4,571.9 L658.8,570.3 L660.4,570.3 L660.5,572.0 L662.3,569.5 L665.4,570.7 L665.0,569.7 L667.0,567.6 L669.0,567.6 L670.0,568.7 L674.7,565.1 L677.7,565.3 L677.0,562.9 L677.8,561.5 L677.8,556.8 L678.7,556.5 L677.4,556.5 L677.9,554.0 L679.5,554.3 L680.0,553.0 L681.1,553.0 L681.0,549.7 L682.4,549.5 L683.8,547.8 L684.9,547.9 L685.1,549.0 L689.1,547.9 L689.4,548.6 L688.4,544.2 L690.2,542.6 L692.9,542.5 L694.2,544.5 L696.4,541.2 L694.7,539.0 L691.3,537.3 L689.4,539.6 L687.5,538.0 L685.6,537.9 L686.2,539.0 L684.4,539.7 L681.9,538.4 L682.1,540.3 L676.9,542.0 L676.5,544.3 L678.1,545.1 L674.4,546.4 L675.1,544.4 L673.5,543.9 L673.9,542.6 L672.5,542.8 L671.6,544.5 L670.1,543.2 L672.7,540.6 L672.0,538.4 L673.8,534.7 L672.3,534.1 L672.0,535.4 L669.5,536.7 L670.4,538.2 L668.2,538.1 L667.6,539.3 L666.5,537.4 L665.8,538.1 L662.4,536.7 L662.4,539.9 L660.3,536.9 L658.8,537.3 L657.9,538.9 L657.5,536.3 L655.1,538.3 L656.0,539.8 L655.2,540.3 L660.4,542.9 L660.6,543.9 L659.5,544.8 L657.1,543.4 L656.3,544.5 L657.0,546.3 L655.9,547.2 L654.6,546.5 L655.2,545.2 L653.1,544.8 L655.2,543.4 L655.3,542.3 L653.4,541.0 L652.6,541.4 L652.2,539.4 L650.7,541.7 L649.3,541.3 L648.7,539.6 L650.4,539.7 L651.4,537.0 L650.6,535.7 L653.3,536.5 L652.3,534.5 L655.3,534.7 L655.1,533.5 L651.0,531.9 L649.2,533.3 L648.6,532.4 L649.6,531.3 L647.3,531.7 L647.0,530.1 L649.8,529.5 L653.2,531.0 L653.9,529.8 L653.1,529.0 L654.5,528.1 L656.3,530.1 L657.6,529.3 L658.3,527.5 L655.2,524.9 L654.0,526.7 L651.5,524.8 L653.5,523.3 L654.3,521.2 L653.8,519.1 L654.7,518.4 L650.9,517.1 L649.7,514.8 L645.0,516.0 L641.3,512.6 L639.7,512.7 L640.1,516.1 L642.9,515.8 L643.4,517.0 L645.3,517.1 L646.3,518.4 L644.8,519.2 L642.1,517.8 L637.7,517.3 L638.9,518.7 L640.1,518.4 L642.0,520.2 L643.6,520.3 L643.7,521.4 L646.1,521.4 L647.4,520.3 L648.1,522.8 L644.4,523.0 L646.8,524.4 L644.7,525.4 L642.3,523.4 L642.3,522.0 L641.5,522.6 L639.1,521.6 L640.3,523.0 L640.1,524.4 L637.7,522.6 L635.6,523.1 L636.0,521.1 L637.3,520.5 L636.5,519.6 L635.7,520.3 L633.5,517.6 L633.3,518.8 L634.7,519.7 L634.8,520.9 L631.7,520.7 L632.6,522.5 L633.4,521.8 L634.1,523.0 L633.5,525.0 L634.6,524.5 L635.1,525.7 L636.0,524.9 L637.5,527.6 L635.2,527.9 L634.0,526.7 L634.0,527.7 L633.0,527.8 L630.1,524.6 L625.8,525.1 L624.5,528.3 L625.5,528.5 L625.7,530.8 L626.7,531.3 L626.0,532.3 L630.1,533.7 L629.9,538.0 L630.9,538.8 L629.6,537.5 L628.0,538.1 L626.5,537.2 L627.3,538.2 L626.8,539.3 L625.0,539.1 L620.4,536.3 L620.0,534.9 L617.7,534.4 L616.4,530.7 L619.8,526.1 L619.3,525.3 L620.6,525.8 L617.5,522.0 L619.9,519.2 L618.7,517.7 L619.0,516.3 L620.6,517.0 L621.8,516.1 L619.5,513.4 L622.0,511.6 L621.3,510.3 L622.7,509.3 L621.1,508.1 L622.4,507.8 L621.7,506.9 L622.4,503.6 L621.4,502.9 L622.9,501.1 L620.0,501.5 L618.3,503.9 L614.8,503.4 L610.9,504.7 L610.1,503.9 L608.9,507.5 L610.4,509.0 L610.1,509.6 L609.7,508.3 L608.0,509.5 L609.5,508.1 L607.9,507.2 L609.2,506.8 L609.7,504.9 L606.5,500.5 L606.8,499.3 L605.3,499.4 L602.0,497.2 L603.9,497.4 L605.7,499.3 L610.4,496.4 L614.3,498.5 L615.6,497.9 L616.4,500.2 L618.0,500.6 L620.9,498.7 L622.8,496.9 L622.7,493.9 L623.6,492.8 L624.4,493.4 L623.7,492.4 L625.7,491.1 L626.6,488.2 L626.0,485.4 L623.1,483.4 L626.2,484.9 L626.6,486.8 L627.1,486.2 L626.7,483.5 L629.0,478.2 L626.6,480.3 L629.5,474.5 L634.1,470.9 L633.4,471.9 L634.5,471.2 L636.3,472.0 L633.3,472.7 L629.6,475.9 L630.0,476.6 L633.2,473.7 L635.7,475.2 L637.4,474.8 L641.5,469.0 L651.2,462.0 L651.3,461.3 L646.9,460.0 L651.9,461.2 L653.2,459.0 L658.2,454.7 L658.0,453.6 L663.6,444.7 L664.1,441.1 L662.6,439.1 L663.8,433.6 L670.3,423.9 L677.6,415.9 L678.9,412.7 L680.4,413.6 L681.7,411.5 L680.2,410.5 L681.4,407.8 L680.4,409.2 L680.9,407.6 L679.7,407.4 L681.8,406.8 L681.6,407.5 L684.0,404.7 L685.1,397.6 L689.4,388.0 L699.1,379.9 L703.2,373.0 L710.8,364.6 L710.8,362.8 L716.7,355.2 L716.6,351.3 L719.7,343.9 L718.9,337.6 L719.9,335.3 L744.4,312.8 L753.0,301.0 L753.1,297.9 L750.8,296.6 L748.1,292.9 L745.3,284.6 L746.7,277.4 L749.4,273.7 L752.3,264.9 L761.8,257.2 L762.3,251.2 L760.0,244.6 L761.8,238.6 L760.7,238.4 L760.4,241.2 L758.6,243.2 L754.5,240.6 L755.1,242.6 L760.5,249.2 L760.4,252.8 L757.2,253.8 L756.6,256.7 L755.2,256.0 L756.0,255.4 L752.3,253.7 L754.2,252.1 L751.0,252.0 L749.4,250.6 L748.4,248.0 L750.0,247.5 L748.3,247.1 L748.3,246.3 L749.7,245.4 L749.0,244.0 L749.9,242.8 L754.2,239.6 L756.7,235.5 L761.3,232.7 L767.7,226.4 L770.3,222.7 L774.5,219.3 L776.2,216.2 L779.0,213.6 L782.6,212.6 L788.1,208.5 L786.5,197.0 L790.3,193.4 L787.7,187.9 L787.6,185.4 L796.9,171.8 L798.6,161.0 L797.9,157.2 L799.0,151.0 L798.5,148.2 L791.8,138.2 L793.5,133.1 L787.6,128.4 L786.0,129.2 L785.5,128.4 L786.4,128.0 L781.8,124.7 L770.6,121.5 L770.6,119.5 L772.8,121.7 L775.4,122.5 L773.1,121.7 L771.3,118.2 L758.9,104.7 L758.2,102.5 L752.6,99.3 L751.0,94.6 L747.8,92.0 L747.1,90.0 L741.2,86.2 L717.5,79.6 L707.3,81.5 L700.5,80.2 L695.4,77.8 L692.2,74.6 L684.5,70.9 L665.9,65.5 L661.7,65.6 L656.9,62.1 L647.5,58.7 L641.1,57.7 L630.3,59.8 L625.7,59.3 L618.4,53.9 L617.8,52.1 L614.2,48.7 L610.1,47.9 L606.9,44.0 L603.0,44.1 L593.4,39.5 L590.6,37.1 L576.4,38.1 L567.4,32.4 L562.2,33.0 L548.5,28.6 L541.8,29.7 L534.7,29.1 L526.5,27.2 L520.7,23.8 L510.0,26.7 L504.2,24.6 L494.1,27.5 L489.9,30.2 L480.2,33.3 L470.2,39.5 L464.5,40.9 L458.7,47.7 L453.9,46.0 L440.4,51.7 L428.6,58.9 L420.7,66.3 L414.3,69.2 L404.6,78.1 L401.6,84.2 L397.2,86.2 L388.7,97.6 L381.2,100.2 L377.6,105.6 L377.0,109.2 L375.6,111.1 L377.2,113.7 L376.5,115.7 L367.7,128.4 L358.7,131.2 L349.1,129.6 L345.2,133.7 L342.2,138.9 L336.8,141.1 L335.6,144.9 L330.8,146.9 L325.9,142.1 L324.2,145.6 L324.6,149.2 L322.8,150.7 L318.8,148.6 L315.5,144.5 L311.3,143.3 L307.4,143.8 L306.8,144.7 L307.8,148.4 L312.1,157.9 L312.3,161.4 L310.6,167.2 L308.0,169.5 L297.7,174.6 L294.3,176.0 L292.7,175.7 L291.6,178.6 L290.1,179.6 L286.4,179.7 L285.3,177.6 L282.6,176.0 L281.4,177.5 L278.5,177.5 L276.9,179.1 L273.9,177.8 L271.5,181.9 L270.4,188.7 L267.9,190.2 L265.7,189.4 L263.8,191.7 L262.2,191.7 L262.4,192.8 L265.1,193.6 L266.4,195.1 L265.6,200.1 L262.8,202.6 L257.4,202.8 L260.1,204.6 L260.1,206.2 L257.1,208.7 L255.6,208.0 L254.6,211.5 L257.7,219.5 L257.4,226.0 L258.7,229.7 L258.0,231.0 L258.8,238.7 L257.9,240.8 L255.7,241.8 L259.4,247.4 L260.2,251.0 L262.3,250.0 L264.6,251.9 L264.1,256.3 L267.2,254.8 L272.6,259.0 L273.7,262.3 L276.7,265.3 L276.4,267.2 L278.6,269.0 L281.2,275.0 L286.1,305.1 L285.1,318.0 L287.9,343.7 L287.4,354.4 L283.8,372.5 L283.1,380.4 L283.9,380.7 L282.7,381.3 L284.6,380.4 L282.8,381.4 L284.3,381.7 L286.1,387.6 L285.8,390.0 L282.8,395.6 L273.9,432.4 L273.0,443.0 L276.0,442.1 L273.4,442.8 L276.2,437.0 L275.5,434.8 L277.5,430.1 L277.4,432.9 L278.7,431.9 L277.2,427.7 L279.1,421.3 L278.4,419.1 L279.4,420.8 L279.2,423.9 L280.7,425.9 L278.1,426.8 L279.5,431.5 L276.2,434.8 L276.3,435.9 L277.5,435.3 L278.9,437.6 L284.0,435.4 L286.2,436.0 L286.0,437.2 L286.8,437.6 L288.1,436.2 L290.9,436.1 L294.1,434.1 L295.1,435.8 L286.5,443.1 L284.5,441.1 L282.1,444.7 L277.5,445.1 L279.3,447.4 L281.6,446.4 L281.3,447.7 L282.0,447.9 L280.0,451.1 L276.1,453.2 L275.5,455.6 L277.8,458.3 L277.3,463.0 L278.5,464.8 L280.1,465.0 L281.2,467.0 L282.5,467.2 L280.1,467.4 L280.6,470.8 L277.6,471.6 L276.3,470.3 L278.5,465.9 L274.2,466.9 L273.6,468.1 L273.6,466.5 L269.6,462.7 L268.6,460.5 L267.8,460.9 L268.2,465.2 L267.4,466.6 L267.0,459.8 L266.0,461.4 L266.6,463.3 L264.0,465.2 L261.7,465.1 L260.1,462.9 L261.4,460.0 L261.1,457.3 L258.9,455.3 L258.1,452.8 L260.2,451.6 L262.2,452.4 L265.6,449.1 L261.9,443.4 L263.0,441.8 L262.3,439.2 L265.7,436.1 L266.3,434.1 L265.0,431.6 L261.8,433.2 L256.8,432.7 L255.9,431.3 L256.8,429.8 L256.2,428.4 L254.0,433.3 L251.8,435.4 L253.3,441.8 L253.0,444.5 L247.5,446.0 L240.8,453.3 L237.5,454.0 L236.1,453.7 L230.2,445.2 L226.9,443.7 L221.6,437.5 L219.5,436.5 L217.7,437.1 L217.0,440.2 L214.1,441.4 L209.0,439.1 L204.5,439.9 L202.5,436.4 L203.1,441.5 L194.6,448.5 L188.7,449.4 L183.7,455.5 L184.6,458.8 L181.8,464.4 L178.8,466.6 L178.7,468.2 L177.1,467.5 L175.6,468.2 L176.9,469.1 L175.6,471.5 L174.5,471.8 L172.3,471.3 L172.6,470.3 L174.1,470.4 L174.5,467.6 L168.4,467.1 L166.3,467.7 L166.5,470.1 L165.0,472.6 L161.4,472.6 L154.4,469.5 L154.2,466.9 L149.7,462.9 L146.5,461.7 L145.2,463.0 L144.9,459.8 L146.2,460.2 L148.0,458.9 L149.1,457.6 L148.6,455.8 L150.6,453.5 L150.4,450.4 L148.8,449.1 L146.9,450.3 L147.2,453.0 L141.6,461.8 L141.6,463.2 L137.4,464.1 L136.2,462.4 L137.0,457.2 L135.4,454.7 L132.6,453.6 L131.3,451.8 L124.7,449.7 L123.1,446.7 L123.1,443.8 L126.5,436.2 L123.9,431.3 L124.1,429.5 L118.9,433.8 L113.6,429.0 L106.0,432.9 L102.5,436.1 L101.2,445.7 L96.0,448.2 L92.8,452.7 Z',
   regions: {
@@ -2081,15 +2084,81 @@ const LOMBOK_MAP = {
     tanjung_ringgit: { p: [659.8, 567.3], a: 'ekas', lp: 'down' },
     pink_beach: { p: [649.6, 573.1], a: 'ekas', lp: 'up' },
     jerowaru: { p: [615.8, 492.3], a: 'ekas', lp: 'up' },
+  },
+  // Real-world geometry (docs/adr/0014). lon0/lat0 + scales are the exact
+  // inverse of the equirectangular projection build_lombok_map.py used to bake
+  // the viewBox geometry above (fitted to the baked markers; max residual
+  // ≈0.06px ≈ 8m), so region/cluster paths and zoom boxes unproject to real
+  // lat/lng. areas/places are [lat, lng] straight from that script's
+  // AREAS/PLACES tables — the p:[x,y] values above were coast-SNAPPED for the
+  // old stylised SVG and are NOT true positions; these are. Refine a marker by
+  // editing its entry here (keep build_lombok_map.py in sync).
+  geo: {
+    lon0: 115.708075, lonScale: 785.612076,
+    lat0: -8.180291, latScale: 794.446776,
+    areas: {
+      selong_belanak: [-8.872, 116.158],
+      mawi: [-8.880, 116.166],
+      mawun: [-8.888, 116.232],
+      are_guling: [-8.892, 116.257],
+      kuta: [-8.885, 116.279],
+      gerupuk: [-8.900, 116.352],
+      awang: [-8.890, 116.385],
+      ekas: [-8.870, 116.460],
+      senggigi: [-8.493, 116.042],
+      mataram: [-8.583, 116.107],
+      gerung: [-8.685, 116.118],
+      lembar: [-8.725, 116.073],
+      sekotong: [-8.768, 115.975],
+      praya: [-8.705, 116.270],
+      jonggat: [-8.660, 116.220],
+      batukliang: [-8.610, 116.310],
+      selong: [-8.647, 116.531],
+      labuhan_lombok: [-8.448, 116.658],
+      bangsal: [-8.404, 116.102],
+      tanjung: [-8.355, 116.157],
+      senaru: [-8.305, 116.404],
+      gili_islands: [-8.352, 116.059]
+    },
+    places: {
+      torok: [-8.870, 116.115],
+      serangan: [-8.864, 116.133],
+      mekarsari: [-8.900, 116.190],
+      lancing: [-8.892, 116.210],
+      tampah: [-8.888, 116.222],
+      semeti: [-8.884, 116.178],
+      rowok: [-8.882, 116.175],
+      seger: [-8.898, 116.295],
+      tanjung_aan: [-8.902, 116.305],
+      merese: [-8.905, 116.318],
+      mertak: [-8.901, 116.315],
+      bumbang: [-8.899, 116.334],
+      gunung_tunak: [-8.905, 116.420],
+      pantai_surga: [-8.878, 116.478],
+      kaliantan: [-8.918, 116.505],
+      tanjung_ringgit: [-8.905, 116.548],
+      pink_beach: [-8.902, 116.535],
+      jerowaru: [-8.800, 116.492]
+    }
   }
 };
 
 function createLombokMap(wrapEl, opts) {
   opts = opts || {};
-  var VB = LOMBOK_MAP.viewBox;
+  // A previous listings visit may have left a live map: remove() it so its
+  // window-resize hook, tiles and layers are released (Leaflet only unhooks
+  // the window 'resize' listener inside map.remove()).
+  if (createLombokMap._live) {
+    try { createLombokMap._live.remove(); } catch (e) {}
+    createLombokMap._live = null;
+  }
   var counts = { regions: {}, areas: {}, places: {} };
+  var countsReady = false;
   var selRegion = '', selCluster = '', selArea = '', selPlace = '';
-  var animFrame = null;
+  var lmap = null;   // Leaflet instance — stays null until the deferred init lands
+  var lyr = null;    // layer registry, built once at init
+  var REDUCED_MOTION = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var FIT_OPTS = { padding: [22, 22], maxZoom: 15 };
 
   function regionHasClusters(rk) { var r = LOMBOK_MAP.regions[rk]; return !!(r && r.clusters); }
   function clusterOfArea(rk, ak) {
@@ -2121,375 +2190,355 @@ function createLombokMap(wrapEl, opts) {
     var lbl = row ? lookupLabel(row) : key.replace(/_/g, ' ');
     return lbl.split(' / ')[0].toUpperCase();
   }
+  function regionCount(rk) { return counts.regions[rk] || 0; }
+  function clusterCount(rk, ck) {
+    return clusterMarkers(rk, ck).reduce(function(s, ak) { return s + (counts.areas[ak] || 0); }, 0);
+  }
 
-  // ---- build SVG ----
-  var regionsHtml = '';
-  var labelsHtml = '';
-  Object.keys(LOMBOK_MAP.regions).forEach(function(rk) {
-    var rg = LOMBOK_MAP.regions[rk];
-    if (rg.circles) {
-      var circles = rg.circles.map(function(c) {
-        return '<circle cx="' + c[0] + '" cy="' + c[1] + '" r="' + c[2] + '"/>';
-      }).join('');
-      regionsHtml += '<g class="lmap-region lmap-region--gili" data-region="' + rk + '">'
-        + '<rect x="' + rg.bbox[0] + '" y="' + rg.bbox[1] + '" width="' + rg.bbox[2] + '" height="' + rg.bbox[3] + '" fill="transparent" stroke="none"/>'
-        + circles + '</g>';
-    } else {
-      regionsHtml += '<path class="lmap-region" data-region="' + rk + '" d="' + rg.d + '"/>';
+  // ---- geometry: unproject the owned SVG geometry back to lat/lng ----
+  // The 880×640 region/cluster paths were projected from real OSM coordinates
+  // by docs/tools/build_lombok_map.py; LOMBOK_MAP.geo holds the exact inverse,
+  // so the market-region boundaries land on the real island.
+  var GEO = LOMBOK_MAP.geo;
+  function unproj(x, y) { return [GEO.lat0 - y / GEO.latScale, GEO.lon0 + x / GEO.lonScale]; }
+  function pathLatLngs(d) {
+    return (d.match(/-?[\d.]+,-?[\d.]+/g) || []).map(function(pt) {
+      var xy = pt.split(',');
+      return unproj(parseFloat(xy[0]), parseFloat(xy[1]));
+    });
+  }
+  function boxBounds(b) { // [x, y, w, h] in viewBox units → LatLngBounds
+    return L.latLngBounds(unproj(b[0], b[1] + b[3]), unproj(b[0] + b[2], b[1]));
+  }
+
+  // ---- container (Leaflet mounts here once the SPA attaches + sizes it) ----
+  wrapEl.innerHTML = '<div class="lmapl" role="group" aria-label="' + t('map.aria', 'Lombok region map filter') + '"></div>';
+  var mapEl = wrapEl.firstChild;
+
+  // ---- divIcons: zero-size anchor at the latlng, content positioned by CSS ----
+  function divIcon(html) {
+    return L.divIcon({ className: 'lmapl-anchor', html: html, iconSize: [0, 0], iconAnchor: [0, 0] });
+  }
+  function lpClass(lp) {
+    if (lp === 'top' || lp === 'up') return 'up';
+    if (lp === 'bottom' || lp === 'down') return 'down';
+    if (lp === 'left') return 'left';
+    if (lp && lp.indexOf('diag') === 0) return 'diag';
+    return 'right';
+  }
+  function rlabelIcon(rk) {
+    var n = regionCount(rk);
+    var empty = countsReady && n === 0;
+    var count = !countsReady ? ''
+      : empty ? t('map.no_listings', 'No listings yet')
+      : n + ' ' + (n === 1 ? t('map.property', 'property') : t('map.properties', 'properties'));
+    return divIcon('<div class="lmapl-rlabel' + (empty ? ' empty' : '') + '">'
+      + '<span class="lmapl-rlabel-name">' + escHtml(regionLabel(rk)) + '</span>'
+      + (count ? '<span class="lmapl-rlabel-count">' + escHtml(count) + '</span>' : '')
+      + '</div>');
+  }
+  function czlabelIcon(rk, ck) {
+    var sum = clusterCount(rk, ck);
+    var txt = sum > 0 ? clusterLabel(rk, ck) + ' · ' + sum : clusterLabel(rk, ck);
+    return divIcon('<span class="lmapl-czlabel' + (countsReady && sum === 0 ? ' empty' : '') + '">' + escHtml(txt) + '</span>');
+  }
+  function amarkIcon(ak, diag) {
+    var n = counts.areas[ak] || 0;
+    var label = n > 0 ? areaLabel(ak) + ' · ' + n : areaLabel(ak);
+    var cls = 'lmapl-mark lmapl-lp-' + (diag ? 'diag' : lpClass(LOMBOK_MAP.areas[ak].lp))
+      + (countsReady && n === 0 ? ' empty' : '')
+      + (ak === selArea && !selPlace ? ' active' : '');
+    return divIcon('<div class="' + cls + '"><span class="lmapl-dot"></span>'
+      + '<span class="lmapl-mark-label">' + escHtml(label) + '</span></div>');
+  }
+  function placeIcon(pk) {
+    var n = counts.places[pk] || 0;
+    var label = n > 0 ? placeLabel(pk) + ' · ' + n : placeLabel(pk);
+    var cls = 'lmapl-mark lmapl-place lmapl-lp-' + lpClass(LOMBOK_MAP.places[pk].lp)
+      + (pk === selPlace ? ' active' : '');
+    return divIcon('<div class="' + cls + '"><span class="lmapl-dot"></span>'
+      + '<span class="lmapl-mark-label">' + escHtml(label) + '</span></div>');
+  }
+
+  // ---- polygon styles (the satellite backdrop is the same in both themes) ----
+  function regionStyle(rk) {
+    if (countsReady && regionCount(rk) === 0)
+      return { color: 'rgba(250,246,238,0.4)', weight: 1, dashArray: '4 4', fillColor: '#f2ebe1', fillOpacity: 0.05 };
+    if (selRegion === rk)
+      return { color: 'rgba(250,246,238,0.95)', weight: 1.6, dashArray: null, fillColor: '#a68f63', fillOpacity: 0.04 };
+    if (selRegion)
+      return { color: 'rgba(250,246,238,0.45)', weight: 1, dashArray: null, fillColor: '#a68f63', fillOpacity: 0.1 };
+    return { color: 'rgba(250,246,238,0.85)', weight: 1.2, dashArray: null, fillColor: '#a68f63', fillOpacity: 0.18 };
+  }
+  function czoneStyle(rk, ck) {
+    var dead = countsReady && clusterCount(rk, ck) === 0;
+    return { color: 'rgba(250,246,238,0.9)', weight: 1.2, dashArray: dead ? '3 3' : null,
+      fillColor: '#f2ebe1', fillOpacity: dead ? 0.06 : 0.2 };
+  }
+  function setRegionStyle(rk) {
+    var shape = lyr.regions[rk], st = regionStyle(rk);
+    var empty = countsReady && regionCount(rk) === 0;
+    function apply(c) {
+      c.setStyle(st);
+      // Dead regions keep their JS click guard, but must not advertise a
+      // pointer cursor (leaflet.css sets it on every interactive path).
+      var el = c.getElement && c.getElement();
+      if (el) el.classList.toggle('lmapl-noclick', empty);
     }
-    labelsHtml += '<g class="lmap-rlabel" data-region="' + rk + '" transform="translate(' + rg.label[0] + ',' + rg.label[1] + ')">'
-      + '<text class="lmap-rlabel-name" text-anchor="middle">' + regionLabel(rk) + '</text>'
-      + '<text class="lmap-rlabel-count" text-anchor="middle" dy="17"></text>'
-      + '</g>';
-  });
-
-  // Diagonal-up-right (and other) label placement, shared by area + place dots.
-  function labelAttrs(lp) {
-    var lx = 9, ly = 3.5, anchor = 'start', rot = '';
-    if (lp === 'left') { lx = -9; anchor = 'end'; }
-    else if (lp === 'top' || lp === 'up') { lx = 0; ly = -10; anchor = 'middle'; }
-    else if (lp === 'bottom' || lp === 'down') { lx = 0; ly = 15; anchor = 'middle'; }
-    else if (lp === 'diag') { lx = 5; ly = -5; rot = ' transform="rotate(-34)"'; }
-    else if (lp === 'diag2') { lx = 15; ly = -14; rot = ' transform="rotate(-34)"'; }
-    else if (lp === 'diag3') { lx = 25; ly = -23; rot = ' transform="rotate(-34)"'; }
-    return { lx: lx, ly: ly, anchor: anchor, rot: rot };
+    if (shape.setStyle) apply(shape);
+    else shape.eachLayer(apply); // Gili circle group
   }
 
-  var areasHtml = '';
-  Object.keys(LOMBOK_MAP.areas).forEach(function(ak) {
-    var a = LOMBOK_MAP.areas[ak], la = labelAttrs(a.lp);
-    areasHtml += '<g class="lmap-amark" data-area="' + ak + '" data-region="' + a.r + '" transform="translate(' + a.p[0] + ',' + a.p[1] + ')">'
-      + '<circle class="lmap-amark-hit" r="13"/>'
-      + '<circle class="lmap-amark-dot" r="3.5"/>'
-      + '<text class="lmap-amark-label" x="' + la.lx + '" y="' + la.ly + '" text-anchor="' + la.anchor + '"' + la.rot + '>' + areaLabel(ak) + '</text>'
-      + '</g>';
-  });
-
-  // Place dots — finer localities, shown at cluster zoom (docs/adr/0010 + 0011)
-  var placesHtml = '';
-  Object.keys(LOMBOK_MAP.places || {}).forEach(function(pk) {
-    var pl = LOMBOK_MAP.places[pk], la = labelAttrs(pl.lp);
-    placesHtml += '<g class="lmap-place" data-place="' + pk + '" data-area="' + pl.a + '" transform="translate(' + pl.p[0] + ',' + pl.p[1] + ')">'
-      + '<circle class="lmap-place-hit" r="11"/>'
-      + '<circle class="lmap-place-dot" r="2.6"/>'
-      + '<text class="lmap-place-label" x="' + la.lx + '" y="' + la.ly + '" text-anchor="' + la.anchor + '"' + la.rot + '>' + placeLabel(pk) + '</text>'
-      + '</g>';
-  });
-
-  // Cluster zones — clipped coastal strips with a border that highlights on
-  // hover, like the main regions (docs/adr/0011). Diagonal name+count label.
-  var zonesHtml = '', zlabelsHtml = '';
-  Object.keys(LOMBOK_MAP.regions).forEach(function(rk) {
-    var rg = LOMBOK_MAP.regions[rk];
-    if (!rg.clusters) return;
-    Object.keys(rg.clusters).forEach(function(ck) {
-      var cl = rg.clusters[ck];
-      zonesHtml += '<path class="lmap-czone" data-cluster="' + ck + '" data-region="' + rk + '" d="' + cl.d + '"/>';
-      // Label sits directly over the zone, centred (not above it).
-      zlabelsHtml += '<text class="lmap-czlabel" data-cluster="' + ck + '" data-region="' + rk + '"'
-        + ' x="' + cl.labelPos[0] + '" y="' + cl.labelPos[1] + '" text-anchor="middle"></text>';
+  // ---- clicks → onSelect (same semantics as the old SVG map) ----
+  function onRegionClick(rk) {
+    if (countsReady && regionCount(rk) === 0) return;
+    var deselect = rk === selRegion && !selCluster && !selArea;
+    if (opts.onSelect) opts.onSelect(deselect
+      ? { region: '', cluster: '', area: '', place: '' }
+      : { region: rk, cluster: '', area: '', place: '' });
+  }
+  function onClusterClick(rk, ck) {
+    if (countsReady && clusterCount(rk, ck) === 0) return;
+    if (opts.onSelect) opts.onSelect({ region: rk, cluster: ck, area: '', place: '' });
+  }
+  // Clicking a marker's *name* is the "show me the listings here" action
+  // (commits + scrolls to results on mobile); clicking the dot only refines the
+  // filter so the map stays put for further drilling — the same split the old
+  // SVG map made between label and dot clicks.
+  function hitLabel(e) {
+    var el = e && e.originalEvent && e.originalEvent.target;
+    return !!(el && el.closest && el.closest('.lmapl-mark-label'));
+  }
+  function onAreaClick(ak, e) {
+    var a = LOMBOK_MAP.areas[ak];
+    var label = hitLabel(e); // name click always commits; only a dot click toggles off
+    if (opts.onSelect) opts.onSelect({
+      region: a.r, cluster: clusterOfArea(a.r, ak),
+      area: (!label && ak === selArea && !selPlace) ? '' : ak, place: '',
+      scroll: label
     });
-  });
-
-  var initVB = (LOMBOK_MAP.island || VB).join(' ');
-  wrapEl.innerHTML =
-    '<svg class="lmap" viewBox="' + initVB + '" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="' + t('map.aria', 'Lombok region map filter') + '">'
-    // AI-painted terrain relief, aligned to the real OSM coastline geometry
-    + '<image class="lmap-terrain-img" href="' + LOMBOK_MAP.terrain + '" x="0" y="0" width="880" height="640" preserveAspectRatio="xMidYMid slice"/>'
-    + '<path class="lmap-outline" d="' + LOMBOK_MAP.outline + '"/>'
-    + '<g class="lmap-regions">' + regionsHtml + '</g>'
-    + '<g class="lmap-labels">' + labelsHtml + '</g>'
-    + '<g class="lmap-czones">' + zonesHtml + '</g>'
-    + '<g class="lmap-czlabels">' + zlabelsHtml + '</g>'
-    + '<g class="lmap-places">' + placesHtml + '</g>'
-    + '<g class="lmap-areas">' + areasHtml + '</g>'
-    + '</svg>';
-
-  var svg = wrapEl.querySelector('svg.lmap');
-
-  // ---- viewBox zoom animation ----
-  // Expand a target box to the ACTUAL render-area aspect so the SVG meet-fit
-  // adds no letterbox margin (the box fills the frame). Bias extra height north
-  // (coast stays near the bottom) so little ocean shows below.
-  function fitBBox(b, biasTop) {
-    biasTop = (biasTop == null) ? 0.5 : biasTop; // 0.5 = centred; >0.5 = coast lower
-    var pad = 0.06;
-    var x = b[0] - b[2] * pad / 2, y = b[1] - b[3] * pad / 2;
-    var w = b[2] * (1 + pad), h = b[3] * (1 + pad);
-    var r = svg.getBoundingClientRect();
-    var aspect = (r.width && r.height) ? (r.width / r.height) : (VB[2] / VB[3]);
-    if (w / h > aspect) { var nh = w / aspect; y -= (nh - h) * biasTop; h = nh; }
-    else { var nw = h * aspect; x -= (nw - w) / 2; w = nw; }
-    return [x, y, w, h];
   }
-  // Keep label/dot sizes constant on screen regardless of zoom: --lmap-u =
-  // user-units-per-screen-px, so CSS `calc(var(--lmap-u) * N)` renders as N px.
-  function setLabelScale(vbW) {
-    var w = svg.getBoundingClientRect().width;
-    if (!w) return;
-    svg.style.setProperty('--lmap-u', (vbW / w) + 'px');
-  }
-  var lastTarget = null, snapTimer = null;
-  function applyVB(b) { svg.setAttribute('viewBox', b.join(' ')); setLabelScale(b[2]); }
-  function animateTo(target) {
-    if (animFrame) cancelAnimationFrame(animFrame);
-    if (snapTimer) clearTimeout(snapTimer);
-    lastTarget = target;
-    // Detached (initial route render): set synchronously, no rAF race.
-    if (!svg.isConnected) { applyVB(target); return; }
-    var from = svg.getAttribute('viewBox').split(/[ ,]+/).map(Number);
-    var start = null, dur = 600;
-    function ease(p) { return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; }
-    function tick(ts) {
-      if (start === null) start = ts;
-      var p = Math.min(1, (ts - start) / dur);
-      var e = ease(p);
-      applyVB(from.map(function(v, i) { return v + (target[i] - v) * e; }));
-      if (p < 1) animFrame = requestAnimationFrame(tick);
-    }
-    animFrame = requestAnimationFrame(tick);
-    // Correctness fallback: rAF can be throttled (background tab/headless), so
-    // guarantee the final viewBox via a timer that always fires.
-    snapTimer = setTimeout(function() { if (lastTarget === target) applyVB(target); }, dur + 90);
+  function onPlaceClick(pk, e) {
+    var pl = LOMBOK_MAP.places[pk];
+    var prk = (LOMBOK_MAP.areas[pl.a] || {}).r || selRegion;
+    var label = hitLabel(e);
+    if (opts.onSelect) opts.onSelect({
+      region: prk, cluster: clusterOfArea(prk, pl.a), area: pl.a,
+      place: (!label && pk === selPlace) ? '' : pk,
+      scroll: label
+    });
   }
 
-  // ---- state rendering ----
-  function applySelection() {
-    var clustered = regionHasClusters(selRegion);
-    var atCluster = clustered && !!selCluster;
-    svg.classList.toggle('lmap--zoomed', !!selRegion);
-    svg.querySelectorAll('.lmap-region').forEach(function(n) {
-      n.classList.toggle('sel', n.getAttribute('data-region') === selRegion);
-    });
-    svg.querySelectorAll('.lmap-rlabel').forEach(function(n) {
-      n.classList.toggle('sel', n.getAttribute('data-region') === selRegion);
-    });
-    // Cluster zones + their labels: shown when the region is selected but no
-    // cluster picked yet (the cluster-overview level).
-    var showZones = clustered && !selCluster;
-    svg.querySelectorAll('.lmap-czone, .lmap-czlabel').forEach(function(n) {
-      n.classList.toggle('visible', showZones && n.getAttribute('data-region') === selRegion);
-    });
-    // Area markers: the selected cluster's members, or all of a non-clustered region.
-    var members = atCluster ? clusterMarkers(selRegion, selCluster) : null;
-    svg.querySelectorAll('.lmap-amark').forEach(function(n) {
-      var ak = n.getAttribute('data-area'), ark = n.getAttribute('data-region'), show = false;
-      if (atCluster) show = members.indexOf(ak) >= 0;
-      else if (selRegion && !clustered) show = ark === selRegion;
-      n.classList.toggle('visible', show);
-      n.classList.toggle('active', ak === selArea && !selPlace);
-    });
-    // Place dots: the selected cluster's member areas' places (empty ones hidden
-    // in applyCounts).
-    svg.querySelectorAll('.lmap-place').forEach(function(n) {
-      var show = atCluster && members.indexOf(n.getAttribute('data-area')) >= 0;
-      n.classList.toggle('visible', show);
-      n.classList.toggle('active', n.getAttribute('data-place') === selPlace);
-    });
-    animateTo(zoomTarget());
-  }
-
-  // Target viewBox for the current selection (fitted to the live render aspect).
-  function zoomTarget() {
-    var clustered = regionHasClusters(selRegion), atCluster = clustered && !!selCluster;
-    var rg = LOMBOK_MAP.regions[selRegion];
-    if (atCluster && rg.clusters[selCluster]) return fitBBox(rg.clusters[selCluster].zoom, 0.82);
-    if (selRegion && clustered && rg.clusterBox) return fitBBox(rg.clusterBox, 0.82);
-    if (selRegion && rg) return fitBBox(rg.bbox);
-    return LOMBOK_MAP.island ? fitBBox(LOMBOK_MAP.island) : VB.slice();
-  }
-
-  function applyCounts() {
+  // ---- build the layer registry once ----
+  function buildLayers() {
+    lyr = { regions: {}, rlabels: {}, czones: {}, czlabels: {}, amarks: {}, places: {} };
     Object.keys(LOMBOK_MAP.regions).forEach(function(rk) {
-      var n = counts.regions[rk] || 0;
-      var empty = n === 0;
-      svg.querySelectorAll('[data-region="' + rk + '"]').forEach(function(node) {
-        node.classList.toggle('lmap-region--empty', empty && node.classList.contains('lmap-region'));
-      });
-      var lbl = svg.querySelector('.lmap-rlabel[data-region="' + rk + '"]');
-      if (lbl) {
-        lbl.classList.toggle('empty', empty);
-        lbl.querySelector('.lmap-rlabel-count').textContent = empty
-          ? t('map.no_listings', 'No listings yet')
-          : n + ' ' + (n === 1 ? t('map.property', 'property') : t('map.properties', 'properties'));
+      var rg = LOMBOK_MAP.regions[rk];
+      var shape;
+      if (rg.circles) {
+        // Gili islands: the satellite shows the real islands — just ring them.
+        shape = L.layerGroup(rg.circles.map(function(c) {
+          var cm = L.circleMarker(unproj(c[0], c[1]), Object.assign({ radius: Math.max(7, Math.round(c[2] * 0.9)) }, regionStyle(rk)));
+          cm.on('click', function() { onRegionClick(rk); });
+          return cm;
+        }));
+      } else {
+        shape = L.polygon(pathLatLngs(rg.d), regionStyle(rk));
+        shape.on('click', function() { onRegionClick(rk); });
+        shape.on('mouseover', function() {
+          if (selRegion || (countsReady && regionCount(rk) === 0)) return;
+          shape.setStyle({ fillOpacity: 0.3 });
+        });
+        shape.on('mouseout', function() { setRegionStyle(rk); });
       }
+      shape.addTo(lmap);
+      lyr.regions[rk] = shape;
+
+      var lm = L.marker(unproj(rg.label[0], rg.label[1]), { icon: rlabelIcon(rk), keyboard: false });
+      lm.on('click', function() { onRegionClick(rk); });
+      lm.addTo(lmap);
+      lyr.rlabels[rk] = lm;
+
+      if (rg.clusters) Object.keys(rg.clusters).forEach(function(ck) {
+        var cl = rg.clusters[ck];
+        var zone = L.polygon(pathLatLngs(cl.d), czoneStyle(rk, ck));
+        zone.on('click', function() { onClusterClick(rk, ck); });
+        zone.on('mouseover', function() { if (!(countsReady && clusterCount(rk, ck) === 0)) zone.setStyle({ fillOpacity: 0.32 }); });
+        zone.on('mouseout', function() { zone.setStyle(czoneStyle(rk, ck)); });
+        lyr.czones[ck] = { layer: zone, region: rk };
+        var zl = L.marker(unproj(cl.labelPos[0], cl.labelPos[1]), { icon: czlabelIcon(rk, ck), keyboard: false });
+        zl.on('click', function() { onClusterClick(rk, ck); });
+        lyr.czlabels[ck] = { layer: zl, region: rk };
+      });
     });
     Object.keys(LOMBOK_MAP.areas).forEach(function(ak) {
-      var mark = svg.querySelector('.lmap-amark[data-area="' + ak + '"]');
-      if (!mark) return;
-      var n = counts.areas[ak] || 0;
-      mark.classList.toggle('empty', n === 0);
-      var txt = mark.querySelector('.lmap-amark-label');
-      txt.textContent = n > 0 ? areaLabel(ak) + ' · ' + n : areaLabel(ak);
-    });
-    // Place dots: label + count; hide places with no active listings.
-    Object.keys(LOMBOK_MAP.places || {}).forEach(function(pk) {
-      var mark = svg.querySelector('.lmap-place[data-place="' + pk + '"]');
-      if (!mark) return;
-      var n = counts.places[pk] || 0;
-      mark.classList.toggle('empty', n === 0);
-      mark.querySelector('.lmap-place-label').textContent = n > 0 ? placeLabel(pk) + ' · ' + n : placeLabel(pk);
-    });
-    // Cluster zone label = name · (sum of member Area counts) (docs/adr/0011)
-    svg.querySelectorAll('.lmap-czlabel').forEach(function(n) {
-      var rk = n.getAttribute('data-region'), ck = n.getAttribute('data-cluster');
-      var sum = clusterMarkers(rk, ck).reduce(function(s, ak) { return s + (counts.areas[ak] || 0); }, 0);
-      n.textContent = sum > 0 ? clusterLabel(rk, ck) + ' · ' + sum : clusterLabel(rk, ck);
-    });
-    svg.querySelectorAll('.lmap-czone').forEach(function(n) {
-      var rk = n.getAttribute('data-region'), ck = n.getAttribute('data-cluster');
-      var sum = clusterMarkers(rk, ck).reduce(function(s, ak) { return s + (counts.areas[ak] || 0); }, 0);
-      n.classList.toggle('lmap-czone--empty', sum === 0);
-    });
-    relabelCluster();
-  }
-
-  // In a zoomed cluster, lay out the VISIBLE dots' labels with greedy multi-row
-  // packing (which places are visible depends on live counts, so this can't be
-  // static): each label, west→east, drops to the first row where it clears the
-  // previous label — guaranteeing no overlap at any density.
-  function relabelCluster() {
-    if (!selCluster || !regionHasClusters(selRegion)) return;
-    var members = clusterMarkers(selRegion, selCluster);
-    // Each label ascends steeply up-right from its dot (the steep angle keeps
-    // the horizontal footprint small, so densely-packed coastal dots each get
-    // their own diagonal lane without overlapping).
-    function setDiag(lbl) {
-      if (!lbl) return;
-      lbl.setAttribute('x', 7);
-      lbl.setAttribute('y', 1);
-      lbl.setAttribute('text-anchor', 'start');
-      lbl.setAttribute('transform', 'rotate(-55)');
-    }
-    members.forEach(function(ak) {
-      var el = svg.querySelector('.lmap-amark[data-area="' + ak + '"]');
-      if (el && el.classList.contains('visible')) setDiag(el.querySelector('.lmap-amark-label'));
+      var m = L.marker(GEO.areas[ak], { icon: amarkIcon(ak, false), keyboard: false });
+      m.on('click', function(e) { onAreaClick(ak, e); });
+      lyr.amarks[ak] = m;
     });
     Object.keys(LOMBOK_MAP.places || {}).forEach(function(pk) {
-      if (members.indexOf(LOMBOK_MAP.places[pk].a) < 0) return;
-      var el = svg.querySelector('.lmap-place[data-place="' + pk + '"]');
-      if (el && el.classList.contains('visible') && !el.classList.contains('empty'))
-        setDiag(el.querySelector('.lmap-place-label'));
+      var m = L.marker(GEO.places[pk], { icon: placeIcon(pk), keyboard: false });
+      m.on('click', function(e) { onPlaceClick(pk, e); });
+      lyr.places[pk] = m;
     });
   }
 
-  // ---- events ----
-  function clickToSvg(e) {
-    var m = svg.getScreenCTM();
-    if (!m) return null;
-    var pt = svg.createSVGPoint();
-    pt.x = e.clientX; pt.y = e.clientY;
-    var p = pt.matrixTransform(m.inverse());
-    return { x: p.x, y: p.y };
-  }
-  // Nearest visible dot (Area or Place) to the click — robust against
-  // overlapping dots/labels on the dense south coast.
-  function nearestDot(sp) {
-    if (!sp) return null;
-    var vb = svg.getAttribute('viewBox').split(/[ ,]+/).map(Number);
-    var thresh = vb[2] * 0.075;
-    var best = null, bestD = thresh * thresh, type = null;
-    svg.querySelectorAll('.lmap-amark.visible').forEach(function(mk) {
-      var a = LOMBOK_MAP.areas[mk.getAttribute('data-area')]; if (!a) return;
-      var dx = a.p[0] - sp.x, dy = a.p[1] - sp.y, d = dx * dx + dy * dy;
-      if (d < bestD) { bestD = d; best = mk; type = 'area'; }
-    });
-    svg.querySelectorAll('.lmap-place.visible:not(.empty)').forEach(function(mk) {
-      var pl = LOMBOK_MAP.places[mk.getAttribute('data-place')]; if (!pl) return;
-      var dx = pl.p[0] - sp.x, dy = pl.p[1] - sp.y, d = dx * dx + dy * dy;
-      if (d < bestD) { bestD = d; best = mk; type = 'place'; }
-    });
-    return best ? { el: best, type: type } : null;
+  function setVisible(layer, on) {
+    if (on) { if (!lmap.hasLayer(layer)) layer.addTo(lmap); }
+    else if (lmap.hasLayer(layer)) lmap.removeLayer(layer);
   }
 
-  // Is the click on this text label? Diagonal labels have a huge axis-aligned
-  // bounding box, so test the click in the label's OWN (un-rotated) coordinate
-  // frame against its tight getBBox — this ignores the rotation and the empty
-  // corners of the slanted box. (Labels are pointer-events:none, so we hit-test
-  // them here rather than relying on e.target.)
-  function labelHit(textEl, e) {
-    if (!textEl) return false;
-    var ctm = textEl.getScreenCTM();
-    if (!ctm) return false;
-    var pt = svg.createSVGPoint();
-    pt.x = e.clientX; pt.y = e.clientY;
-    var loc = pt.matrixTransform(ctm.inverse());
-    var bb;
-    try { bb = textEl.getBBox(); } catch (err) { return false; }
-    var pad = 1.5;
-    return loc.x >= bb.x - pad && loc.x <= bb.x + bb.width + pad
-        && loc.y >= bb.y - pad && loc.y <= bb.y + bb.height + pad;
-  }
-
-  svg.addEventListener('click', function(e) {
-    var zone = e.target.closest('.lmap-czone');
-    if (zone && zone.classList.contains('visible') && !zone.classList.contains('lmap-czone--empty')) {
-      if (opts.onSelect) opts.onSelect({ region: zone.getAttribute('data-region'), cluster: zone.getAttribute('data-cluster'), area: '', place: '' });
-      return;
-    }
-    // Clicking an Area/Place *name* (the text label) is the "show me the
-    // listings here" action: set the location filter and scroll to the results.
-    // Clicking the dot only sets the filter so the map stays put for further
-    // drilling. Detect names geometrically (labelHit) so slanted labels respond
-    // only on the text itself, not their big bounding rectangle.
-    var amarks = svg.querySelectorAll('.lmap-amark.visible');
-    for (var ai = 0; ai < amarks.length; ai++) {
-      if (labelHit(amarks[ai].querySelector('.lmap-amark-label'), e)) {
-        var nak = amarks[ai].getAttribute('data-area'), nark = amarks[ai].getAttribute('data-region');
-        if (opts.onSelect) opts.onSelect({ region: nark, cluster: clusterOfArea(nark, nak), area: nak, place: '', scroll: true });
-        return;
+  // ---- state rendering: visibility + icons for the current drill level ----
+  // Same level rules as the old SVG map: nothing selected → region shapes +
+  // labels; clustered region selected → cluster zones; cluster selected →
+  // member Area markers + their non-empty Places; non-clustered region
+  // selected → all of its Area markers.
+  function sync() {
+    if (!lmap || !lyr) return;
+    var clustered = regionHasClusters(selRegion);
+    var atCluster = clustered && !!selCluster;
+    var members = atCluster ? clusterMarkers(selRegion, selCluster) : null;
+    // Place-name labels show at cluster level (the old map's rule) or deep zoom.
+    mapEl.classList.toggle('lmapl-deep', atCluster || lmap.getZoom() >= 13.5);
+    Object.keys(lyr.regions).forEach(function(rk) {
+      setRegionStyle(rk);
+      lyr.rlabels[rk].setIcon(rlabelIcon(rk));
+      // The selected region's headline label gives way to its zones/markers.
+      setVisible(lyr.rlabels[rk], rk !== selRegion);
+    });
+    Object.keys(lyr.czones).forEach(function(ck) {
+      var e = lyr.czones[ck];
+      var show = clustered && !selCluster && e.region === selRegion;
+      setVisible(e.layer, show);
+      setVisible(lyr.czlabels[ck].layer, show);
+      if (show) {
+        e.layer.setStyle(czoneStyle(e.region, ck));
+        var zel = e.layer.getElement && e.layer.getElement();
+        if (zel) zel.classList.toggle('lmapl-noclick', countsReady && clusterCount(e.region, ck) === 0);
+        lyr.czlabels[ck].layer.setIcon(czlabelIcon(e.region, ck));
       }
-    }
-    var pmarks = svg.querySelectorAll('.lmap-place.visible:not(.empty)');
-    for (var pi = 0; pi < pmarks.length; pi++) {
-      if (labelHit(pmarks[pi].querySelector('.lmap-place-label'), e)) {
-        var npk = pmarks[pi].getAttribute('data-place'), npa = pmarks[pi].getAttribute('data-area');
-        var nprk = (LOMBOK_MAP.areas[npa] || {}).r || selRegion;
-        if (opts.onSelect) opts.onSelect({ region: nprk, cluster: clusterOfArea(nprk, npa), area: npa, place: npk, scroll: true });
-        return;
-      }
-    }
-    var dot = nearestDot(clickToSvg(e));
-    if (dot && dot.type === 'area') {
-      var ak = dot.el.getAttribute('data-area'), ark = dot.el.getAttribute('data-region');
-      if (opts.onSelect) opts.onSelect({ region: ark, cluster: clusterOfArea(ark, ak), area: ak === selArea && !selPlace ? '' : ak, place: '' });
-      return;
-    }
-    if (dot && dot.type === 'place') {
-      var pk = dot.el.getAttribute('data-place'), pa = dot.el.getAttribute('data-area');
-      var prk = (LOMBOK_MAP.areas[pa] || {}).r || selRegion;
-      if (opts.onSelect) opts.onSelect({ region: prk, cluster: clusterOfArea(prk, pa), area: pa, place: pk === selPlace ? '' : pk });
-      return;
-    }
-    var region = e.target.closest('.lmap-region');
-    if (region && !region.classList.contains('lmap-region--empty')) {
-      var rk = region.getAttribute('data-region');
-      var deselect = rk === selRegion && !selCluster && !selArea;
-      if (opts.onSelect) opts.onSelect(deselect ? { region: '', cluster: '', area: '', place: '' } : { region: rk, cluster: '', area: '', place: '' });
-    }
-  });
+    });
+    Object.keys(lyr.amarks).forEach(function(ak) {
+      var a = LOMBOK_MAP.areas[ak];
+      var show = atCluster ? members.indexOf(ak) >= 0 : !!(selRegion && !clustered && a.r === selRegion);
+      setVisible(lyr.amarks[ak], show);
+      if (show) lyr.amarks[ak].setIcon(amarkIcon(ak, atCluster));
+    });
+    Object.keys(lyr.places).forEach(function(pk) {
+      var pl = LOMBOK_MAP.places[pk];
+      var show = atCluster && members.indexOf(pl.a) >= 0 && (!countsReady || (counts.places[pk] || 0) > 0);
+      setVisible(lyr.places[pk], show);
+      if (show) lyr.places[pk].setIcon(placeIcon(pk));
+    });
+  }
 
-  applySelection();
+  // Target bounds for the current selection (mirrors the old zoomTarget()).
+  function targetBounds() {
+    var clustered = regionHasClusters(selRegion), atCluster = clustered && !!selCluster;
+    var rg = LOMBOK_MAP.regions[selRegion];
+    if (atCluster && rg.clusters[selCluster]) return boxBounds(rg.clusters[selCluster].zoom);
+    if (selRegion && clustered && rg.clusterBox) return boxBounds(rg.clusterBox);
+    if (selRegion && rg) return boxBounds(rg.bbox);
+    return boxBounds(LOMBOK_MAP.island);
+  }
+  function flyTo(animate) {
+    if (!lmap) return;
+    try {
+      if (animate && !REDUCED_MOTION) lmap.flyToBounds(targetBounds(), Object.assign({ duration: 0.9 }, FIT_OPTS));
+      else lmap.fitBounds(targetBounds(), FIT_OPTS);
+    } catch (e) { /* container mid-layout — the settle watchdog re-fits */ }
+  }
+
+  // ---- init: deferred until the SPA attaches + sizes the container ----
+  function init() {
+    if (lmap) return;
+    if (typeof L === 'undefined') {
+      mapEl.innerHTML = '<p class="lmapl-fallback">' + t('map.unavailable', 'Map unavailable — use the Area filter above.') + '</p>';
+      return;
+    }
+    if (!mapEl.isConnected) return; // route changed away before the view attached
+    lmap = L.map(mapEl, {
+      zoomControl: false,
+      attributionControl: true,
+      fadeAnimation: false, // tile fade can stick at opacity:0 on deferred SPA init
+      minZoom: 8, // whole island fits at ~z9 on desktop, ~z8.5 on a narrow phone
+      maxZoom: 17,
+      maxBounds: boxBounds(LOMBOK_MAP.island).pad(0.4),
+      maxBoundsViscosity: 0.7,
+      zoomSnap: 0.5
+    });
+    lmap.attributionControl.setPrefix(false);
+    L.control.zoom({ position: 'topright' }).addTo(lmap); // top-left belongs to the back button
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 17,
+      attribution: 'Imagery &copy; Esri &mdash; Maxar, Earthstar Geographics'
+    }).addTo(lmap);
+    lmap.setView([-8.58, 116.27], 10); // a view must exist before layers land
+    createLombokMap._live = lmap;
+    buildLayers();
+    sync();
+    flyTo(false);
+    // Place-name labels read at cluster level or close zoom — gate via class
+    // (sync() applies the same rule on selection changes).
+    lmap.on('zoomend', function() {
+      var atCluster = regionHasClusters(selRegion) && !!selCluster;
+      mapEl.classList.toggle('lmapl-deep', atCluster || lmap.getZoom() >= 13.5);
+    });
+    // Re-measure on any container resize (layout settle, rotate, split resize).
+    if (typeof ResizeObserver !== 'undefined') {
+      var ro = new ResizeObserver(function() { if (lmap) { try { lmap.invalidateSize(); } catch (e) {} } });
+      ro.observe(mapEl);
+    }
+    // Watchdog: Leaflet caches a mid-layout container size on SPA init, which
+    // mis-fits the initial view. Poll briefly; whenever the cached size
+    // disagrees with the real one, invalidate + re-fit (same fix as zoning.js).
+    var tries = 0;
+    var iv = setInterval(function() {
+      if (!lmap || !mapEl.isConnected) { clearInterval(iv); return; }
+      var sz = lmap.getSize();
+      if (sz.x !== mapEl.clientWidth || sz.y !== mapEl.clientHeight) {
+        try { lmap.invalidateSize(); lmap.fitBounds(targetBounds(), FIT_OPTS); } catch (e) {}
+      }
+      if (++tries >= 28) clearInterval(iv); // ~7s safety window
+    }, 250);
+  }
+  (function defer(tries) {
+    // The router attaches the view only after the first data fetch resolves,
+    // so don't burn the timeout budget while detached — only count frames once
+    // the node is in the document but still zero-height. relayout() (called
+    // right after the initial refresh and on panel open) also rescues a
+    // not-yet-initialised map, so the hard cap here is just a leak stop.
+    if (mapEl.isConnected && mapEl.offsetHeight > 0) return init();
+    if (mapEl.isConnected && tries > 60) return init(); // ~1s attached — init anyway
+    if (tries > 1800) return; // ~30s: view was abandoned, stop polling
+    requestAnimationFrame(function() { defer(tries + 1); });
+  })(0);
 
   return {
     setCounts: function(c) {
       counts.regions = (c && c.regions) || {};
       counts.areas = (c && c.areas) || {};
       counts.places = (c && c.places) || {};
-      applyCounts();
+      countsReady = true;
+      sync();
     },
     relayout: function() {
-      // Re-fit to the live render aspect (initial render is detached → wrong
-      // aspect fallback; also handles panel-open and viewport resize).
-      if (svg.isConnected && svg.getBoundingClientRect().width) applyVB(zoomTarget());
-      applyCounts();
+      // Panel just opened / view just attached: re-measure + re-fit. If the
+      // deferred init gave up while the view was detached, revive it here —
+      // renderListings always calls relayout() right after the first refresh.
+      if (!lmap) { init(); return; }
+      try { lmap.invalidateSize(); } catch (e) {}
+      flyTo(false);
     },
     setSelection: function(region, cluster, area, place) {
+      var changed = (region || '') !== selRegion || (cluster || '') !== selCluster
+        || (area || '') !== selArea || (place || '') !== selPlace;
       selRegion = region || '';
       selCluster = cluster || '';
       selArea = area || '';
       selPlace = place || '';
-      applySelection();
+      sync();
+      if (changed) flyTo(true); // only a real change re-frames — never fights user panning
     }
   };
 }
@@ -3028,7 +3077,8 @@ async function renderListings(el, params = {}) {
     body.classList.toggle('open', open);
     tog.setAttribute('aria-expanded', open ? 'true' : 'false');
     tog.classList.toggle('open', open);
-    // Pills size via getBBox — re-measure once the panel is actually laid out.
+    // Leaflet initialised against the collapsed panel — re-measure + re-fit
+    // once the panel is actually laid out.
     if (open && map) requestAnimationFrame(function() { map.relayout(); });
   }
   el.querySelector('#lmap-toggle').addEventListener('click', function(e) {
@@ -3234,8 +3284,9 @@ async function renderListings(el, params = {}) {
 
   // ---- initial load ----
   await refresh();
-  // Cluster pills size via getBBox, which returns 0 while the view is still
-  // detached during the initial render — re-measure once it's in the document.
+  // The view is detached during the initial route render, so Leaflet measures
+  // a stale container size — re-measure once it's in the document (its own
+  // settle watchdog covers late layout shifts).
   requestAnimationFrame(function() { if (map) map.relayout(); });
   setTimeout(function() { if (map) map.relayout(); }, 120);
 }

@@ -316,6 +316,7 @@ window.I18N_EN = {
   'map.property': 'property',
   'map.properties': 'properties',
   'map.no_listings': 'No listings yet',
+  'map.unavailable': 'Map unavailable — use the Area filter above.',
 
   // Errors
   'empty.error_title': 'Something went wrong',

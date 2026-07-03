@@ -2,7 +2,10 @@
 
 ## Status
 
-accepted
+superseded by [0014](0014-listings-real-world-leaflet-map.md) — the listings
+map is now a real-world Leaflet satellite map. The geometry this ADR produced
+(coast, region splits, marker positions via `build_lombok_map.py`) lives on:
+0014 unprojects it back to lat/lng at runtime.
 
 ## Context
 

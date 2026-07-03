@@ -313,6 +313,7 @@ window.I18N_ID = {
   'map.property': 'properti',
   'map.properties': 'properti',
   'map.no_listings': 'Belum ada listing',
+  'map.unavailable': 'Peta tidak tersedia — gunakan filter Area di atas.',
 
   // Errors
   'empty.error_title': 'Terjadi kesalahan',

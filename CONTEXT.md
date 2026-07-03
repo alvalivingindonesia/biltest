@@ -99,8 +99,9 @@ and reveals the member Area markers. A Cluster is a *presentation* concept — i
 table, no listing column, and never changes how an Area or Place is stored or filtered;
 a listing belongs to a Cluster only by virtue of its Area being a member. Cluster names
 are distinct from Area names (the "Kuta–Mandalika" Cluster is not the "Kuta" Area).
-Membership and zoom boxes are curated, not data-driven (the map is a hand-traced SVG, no
-coordinates exist in the DB).
+Membership and zoom boxes are curated, not data-driven (listings still have no
+coordinates in the DB; the map's Area/Place marker positions are curated lat/lng in
+`LOMBOK_MAP.geo`, ADR 0014).
 _Avoid_: sub-region, kabupaten; do not give a Cluster the same name as a member Area.
 
 **Display Currency**:
@@ -438,10 +439,13 @@ Likewise the listings **Region/Area** geography is unrelated to either. _Resolut
 reserve bare "Zone" for DRAB; use **Land-Use Class** in the zoning tool; use
 Region/Area only for listings.
 
-**Two maps — do not conflate.** The hand-drawn **SVG region map** (ADR 0005) is for
-**property listings only** (possibly vendors later) and has no lat/lng projection. The
-**Leaflet map** (ADR 0013) is the Zoning & Land Check tool's own real-coordinate map.
-They share no code, data, or geometry.
+**Two maps — do not conflate.** Both are Leaflet satellite maps now, but they stay
+separate. The **listings map** (`createLombokMap` in app.js, ADR 0014 — formerly the
+hand-drawn SVG of ADR 0005) is a *location filter* for **property listings only**
+(possibly vendors later): market-region polygons + curated Area/Place markers, no
+per-listing pins (listings have no coordinates). The **zoning map** (`zoning.js`,
+ADR 0013) is the Zoning & Land Check tool's own map: land-use overlay, parcel WMS,
+pin-drop triage. They share no code, data, or geometry.
 
 **"Quote" is overloaded — three distinct meanings in this codebase:**
 1. A legacy manual *contact log* — a user pressed "WhatsApp this provider" and the site

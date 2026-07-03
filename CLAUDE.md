@@ -200,8 +200,8 @@ confidential personal data (PDP Law UU 27/2022); the notaris check is the only
 owner-grade route. Trust model reuses DRAB's **Indicative/Confirmed** + `source`/`date`;
 free never says "buildable/legal" as a guarantee (decision-support, not legal advice).
 Its own **Leaflet** map (Esri satellite, OSM/Photon geocoder, keyless-first, pin-drop +
-paste-coords) — **separate from the listings SVG map (ADR 0005)**, which stays
-listings-only. **No payment gateway** yet (subs are admin-granted): free = instant basic
+paste-coords) — **separate from the listings map** (also Leaflet since ADR 0014, which
+superseded the ADR 0005 SVG), which stays listings-only. **No payment gateway** yet (subs are admin-granted): free = instant basic
 per-plot info + watermarked preview; paid = detailed verified report via WhatsApp +
 generated invoice, with a gateway-ready status lifecycle. Cert upload is
 **attachment-only, no OCR**, hardened + PDP-aware. Report = one engine, free/premium

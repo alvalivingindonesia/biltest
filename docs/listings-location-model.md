@@ -117,12 +117,12 @@ and curated**, not keyword-guessed.
 **Not done — candidates for the map work:**
 1. **Place-level counts** in `listing_counts` (see 4b) — needed for any
    Place-aware map UI.
-2. **Area → Place drill-down** on the SVG map: the map already does
-   Region → Area zoom; Place is the natural third level (dots/labels inside an
-   Area when zoomed). Deferred by ADR 0010 — "ship data + filter + labels now,
-   map dots later." Places have **no coordinates** (Areas don't either — the map
-   is a hand-traced custom SVG, ADR 0005), so Place markers would be
-   hand-placed/curated, not data-driven.
+2. **Area → Place drill-down** on the map: shipped. The map is now a real-world
+   Leaflet satellite map (ADR 0014, superseding the hand-traced SVG of ADR
+   0005) and shows Place dots at cluster zoom. Area/Place markers use curated
+   lat/lng from `LOMBOK_MAP.geo` in app.js — still hand-placed, not
+   data-driven; **listings themselves still have no coordinates** (per-listing
+   pins need worker geo capture + a `listings.latitude/longitude` migration).
 3. **Place filter chips**: when an Area is selected, show its Places as
    sub-filter chips (`?place=`). Pure UI on top of the existing API.
 4. Optional: per-Place pages / SEO ("Land for sale in Torok") — `place_key` +
